@@ -48,6 +48,18 @@ session ids are stored only as SHA-256 hashes — plaintext is shown once.
 | GET    | `/api/v1/auth/whoami`  | any    | current principal                        |
 | GET    | `/api/v1/certs`        | any    | list tracked certs, soonest expiry first |
 | POST   | `/api/v1/scan`         | admin  | scan `{"target":"host:port","dry_run":false}` |
+| POST   | `/api/v1/certs`        | admin  | add a manual/file cert `{"name","expires_at",...}` |
+| DELETE | `/api/v1/certs/{id}`   | admin  | soft-delete a cert                       |
+
+### Web UI
+
+`serve` also hosts a browser UI at `/` (embedded in the binary via `go:embed`):
+a login page, a dashboard listing tracked certs with urgency colouring and
+trust badges, a "scan a live endpoint" form, and a drag-and-drop zone that
+parses `.pem/.cer/.crt/.p12/.pfx` files **entirely client-side** (vendored
+node-forge, no CDN) — the file never leaves the browser; only extracted metadata
+is sent to the API. Viewers see a read-only dashboard; admin controls are hidden
+from them (and enforced server-side).
 
 ## Configuration
 
@@ -78,6 +90,7 @@ internal/model             Cert + User/APIToken domain types
 internal/auth              password hashing, token/session secrets, roles
 internal/store             SQLite open + embedded migrations + CRUD
 internal/server            JSON API + auth middleware
+internal/server/web        embedded UI (go:embed): pages + static assets
 internal/config            env-based config
 ```
 
@@ -85,7 +98,7 @@ internal/config            env-based config
 
 - [x] **Phase 1** — active scanner, enriched model, SQLite + migrations, scan CLI, minimal API
 - [x] **Phase 2** — token + session auth, admin-provisioned users, roles, `user`/`token` CLI, auth tests
-- [ ] **Phase 3** — embedded web UI (keeps client-side drag-drop file parser)
+- [x] **Phase 3** — embedded web UI (dashboard, scan form, client-side drag-drop file parser), cert create/delete API
 - [ ] **Phase 4** — notifications (email + Slack/Discord/generic), per-user subscriptions + thresholds, scheduled auto-rescan
 - [ ] **Phase 5** — Postgres dialect, multi-stage `scratch` Docker image, goreleaser cross-builds, docs
 

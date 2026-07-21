@@ -164,6 +164,58 @@ func (s *Store) UpsertScan(name string, res *scanner.Result) (*model.Cert, error
 	return s.GetByID(id)
 }
 
+// AddCert inserts a manually-entered or file-parsed cert. Only Name and
+// ExpiresAt are required; the certificate-metadata fields are optional and used
+// when a dropped file was parsed client-side. Kind defaults to manual.
+func (s *Store) AddCert(c *model.Cert) (*model.Cert, error) {
+	if c.Kind == "" {
+		c.Kind = model.KindManual
+	}
+	dns, _ := json.Marshal(c.DNSNames)
+	now := time.Now().UTC()
+	res, err := s.db.Exec(`INSERT INTO certs
+		(name, kind, host, port, server_name, subject, issuer, serial, sha256,
+		 not_before, expires_at, dns_names, key_type, sig_alg,
+		 auto_rescan, last_error, notes, active, created_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		c.Name, string(c.Kind), c.Host, c.Port, c.ServerName,
+		c.Subject, c.Issuer, c.Serial, c.SHA256,
+		timeOrEmpty(c.NotBefore), c.ExpiresAt.UTC().Format(rfc3339),
+		string(dns), c.KeyType, c.SigAlg,
+		boolToInt(c.Kind == model.KindEndpoint), "", c.Notes, 1, now.Format(rfc3339))
+	if err != nil {
+		return nil, err
+	}
+	id, _ := res.LastInsertId()
+	return s.GetByID(id)
+}
+
+// SoftDelete marks a cert inactive so it drops out of listings and scans.
+func (s *Store) SoftDelete(id int64) error {
+	res, err := s.db.Exec(`UPDATE certs SET active=0 WHERE id=? AND active=1`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func timeOrEmpty(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(rfc3339)
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 func (s *Store) findByHostPort(host string, port int) (*model.Cert, error) {
 	row := s.db.QueryRow(selectCols+` WHERE host=? AND port=? AND active=1`, host, port)
 	c, err := scanRow(row)

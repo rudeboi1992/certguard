@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>certguard</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">certguard</span>
+    <span class="spacer"></span>
+    <span id="whoami" class="muted"></span>
+    <button id="logout" class="btn ghost">Sign out</button>
+  </header>
+
+  <main>
+    <section class="summary" id="summary"></section>
+
+    <div class="add-grid" id="adminControls" hidden>
+      <div class="card">
+        <h2>Scan a live endpoint</h2>
+        <p class="muted">Connect over TLS and read the certificate automatically.</p>
+        <form id="scanForm" class="row">
+          <input type="text" id="scanTarget" placeholder="example.com or host:8443" required>
+          <button type="submit" class="btn primary">Scan</button>
+        </form>
+        <p id="scanStatus" class="status" hidden></p>
+      </div>
+
+      <div class="card">
+        <h2>Add from file or manually</h2>
+        <div id="dropZone" class="drop-zone">
+          <p>Drag &amp; drop a <code>.pem .cer .crt .p12 .pfx</code> file</p>
+          <p class="muted small">Parsed in your browser — the file never leaves this page.</p>
+          <input type="file" id="fileInput" accept=".pem,.cer,.crt,.p12,.pfx" hidden>
+        </div>
+        <form id="manualForm" class="stack">
+          <label>Name
+            <input type="text" id="certName" required>
+          </label>
+          <label>Expiry date
+            <input type="date" id="certExpiry" required>
+          </label>
+          <input type="hidden" id="certKind" value="manual">
+          <input type="hidden" id="certSubject">
+          <input type="hidden" id="certIssuer">
+          <input type="hidden" id="certSha256">
+          <button type="submit" class="btn primary">Add certificate</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Tracked certificates</h2>
+      <table class="certs">
+        <thead>
+          <tr>
+            <th>Name</th><th>Source</th><th>Expires</th><th>Remaining</th>
+            <th>Trust</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="certRows"></tbody>
+      </table>
+      <p id="empty" class="muted" hidden>No certificates tracked yet.</p>
+    </div>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/static/vendor/forge.min.js"></script>
+  <script src="/static/cert-parser.js"></script>
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>

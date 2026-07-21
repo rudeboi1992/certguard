@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/bfalcher/certguard/internal/auth"
@@ -52,6 +53,11 @@ func (s *Server) routes() {
 
 	// Admin-only (writes).
 	s.mux.Handle("POST /api/v1/scan", s.adminOnly(s.handleScan))
+	s.mux.Handle("POST /api/v1/certs", s.adminOnly(s.handleCreateCert))
+	s.mux.Handle("DELETE /api/v1/certs/{id}", s.adminOnly(s.handleDeleteCert))
+
+	// Browser UI (static assets + pages).
+	s.registerUI()
 }
 
 // --- auth middleware ---
@@ -223,6 +229,94 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"scan": res, "saved": stored})
 }
+
+type createCertRequest struct {
+	Name      string   `json:"name"`
+	Kind      string   `json:"kind"`       // "manual" (default) or "file"
+	ExpiresAt string   `json:"expires_at"` // "YYYY-MM-DD" or RFC3339
+	Notes     string   `json:"notes"`
+	Subject   string   `json:"subject"`
+	Issuer    string   `json:"issuer"`
+	SHA256    string   `json:"sha256"`
+	NotBefore string   `json:"not_before"`
+	KeyType   string   `json:"key_type"`
+	DNSNames  []string `json:"dns_names"`
+}
+
+// handleCreateCert adds a manually-entered or client-side-parsed (dropped file)
+// certificate. Endpoint certs come through /scan instead.
+func (s *Server) handleCreateCert(w http.ResponseWriter, r *http.Request) {
+	var req createCertRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if req.Name == "" {
+		writeErr(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	expires, err := parseFlexDate(req.ExpiresAt)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "expires_at must be YYYY-MM-DD or RFC3339")
+		return
+	}
+	kind := model.Kind(req.Kind)
+	if kind != model.KindFile && kind != model.KindManual {
+		kind = model.KindManual
+	}
+	c := &model.Cert{
+		Name: req.Name, Kind: kind, ExpiresAt: expires, Notes: req.Notes,
+		Subject: req.Subject, Issuer: req.Issuer, SHA256: req.SHA256,
+		KeyType: req.KeyType, DNSNames: req.DNSNames,
+	}
+	if nb, err := parseFlexDate(req.NotBefore); err == nil {
+		c.NotBefore = nb
+	}
+	stored, err := s.store.AddCert(c)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, stored)
+}
+
+func (s *Server) handleDeleteCert(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if err := s.store.SoftDelete(id); err != nil {
+		if err == store.ErrNotFound {
+			writeErr(w, http.StatusNotFound, "cert not found")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// parseFlexDate accepts either a date-only "YYYY-MM-DD" (interpreted as UTC
+// midnight) or a full RFC3339 timestamp.
+func parseFlexDate(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, errBadDate
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t.UTC(), nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.UTC(), nil
+	}
+	return time.Time{}, errBadDate
+}
+
+var errBadDate = &dateError{}
+
+type dateError struct{}
+
+func (*dateError) Error() string { return "unrecognized date format" }
 
 // --- helpers ---
 

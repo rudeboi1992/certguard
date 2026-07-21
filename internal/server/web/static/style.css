@@ -1,0 +1,121 @@
+:root {
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --ink: #1c2128;
+  --muted: #6b7280;
+  --border: #e3e6ea;
+  --primary: #2563eb;
+  --primary-ink: #ffffff;
+  --ok: #16a34a;
+  --notice: #ca8a04;
+  --warn: #ea580c;
+  --urgent: #dc2626;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1216;
+    --card: #171b21;
+    --ink: #e6e9ee;
+    --muted: #9aa4b2;
+    --border: #262c34;
+    --primary: #3b82f6;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+body.centered {
+  display: flex; min-height: 100vh; align-items: center; justify-content: center;
+}
+h1, h2 { margin: 0 0 .5rem; }
+h2 { font-size: 1.05rem; }
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+code { background: rgba(127,127,127,.15); padding: .05em .35em; border-radius: 4px; }
+
+.brand { font-weight: 700; letter-spacing: -.02em; font-size: 1.15rem; }
+
+.topbar {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .75rem 1.25rem; background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.spacer { flex: 1; }
+
+main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1.25rem; display: grid; gap: 1.25rem; }
+
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.1rem 1.25rem;
+}
+
+.login-card { width: min(360px, 92vw); display: grid; gap: .8rem; }
+.login-card label { display: grid; gap: .3rem; font-size: .9rem; }
+
+input[type=text], input[type=email], input[type=password], input[type=date] {
+  width: 100%; padding: .55rem .7rem; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit;
+}
+
+.btn {
+  font: inherit; font-weight: 600; cursor: pointer; padding: .55rem .9rem;
+  border-radius: 8px; border: 1px solid transparent;
+}
+.btn.primary { background: var(--primary); color: var(--primary-ink); }
+.btn.ghost { background: transparent; border-color: var(--border); color: var(--ink); }
+.btn.link { background: none; border: none; color: var(--urgent); padding: .2rem .4rem; }
+.btn:hover { filter: brightness(1.05); }
+
+.row { display: flex; gap: .6rem; }
+.row input { flex: 1; }
+.stack { display: grid; gap: .7rem; margin-top: .8rem; }
+.stack label { display: grid; gap: .3rem; font-size: .9rem; }
+
+.add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+@media (max-width: 720px) { .add-grid { grid-template-columns: 1fr; } }
+
+.drop-zone {
+  border: 2px dashed var(--border); border-radius: 10px; padding: 1.1rem;
+  text-align: center; transition: border-color .15s, background .15s;
+}
+.drop-zone.dragover { border-color: var(--primary); background: rgba(37,99,235,.06); }
+.drop-zone.parsed { border-color: var(--ok); }
+
+.summary { display: flex; gap: 1rem; }
+.summary .stat {
+  flex: 1; background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: .9rem 1.1rem;
+}
+.summary .stat .n { font-size: 1.6rem; font-weight: 700; }
+
+table.certs { width: 100%; border-collapse: collapse; }
+table.certs th, table.certs td {
+  text-align: left; padding: .55rem .5rem; border-bottom: 1px solid var(--border);
+  font-size: .92rem;
+}
+table.certs th { color: var(--muted); font-weight: 600; }
+
+.pill { display: inline-block; padding: .1rem .55rem; border-radius: 999px;
+  font-size: .8rem; font-weight: 600; }
+.pill.ok { background: rgba(22,163,74,.15); color: var(--ok); }
+.pill.notice { background: rgba(202,138,4,.15); color: var(--notice); }
+.pill.warn { background: rgba(234,88,12,.15); color: var(--warn); }
+.pill.urgent { background: rgba(220,38,38,.15); color: var(--urgent); }
+.pill.untrusted { background: rgba(220,38,38,.15); color: var(--urgent); }
+
+.status { margin: .6rem 0 0; font-size: .9rem; }
+.status.err { color: var(--urgent); }
+.status.ok { color: var(--ok); }
+.error { color: var(--urgent); font-size: .9rem; margin: 0; }
+
+.toast {
+  position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--bg); padding: .6rem 1rem;
+  border-radius: 8px; font-size: .9rem; box-shadow: 0 6px 20px rgba(0,0,0,.25);
+}

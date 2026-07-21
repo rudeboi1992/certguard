@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>certguard — sign in</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="centered">
+  <form id="loginForm" class="card login-card" autocomplete="on">
+    <h1 class="brand">certguard</h1>
+    <p class="muted">Active TLS certificate monitor</p>
+    <label>Email
+      <input type="email" name="email" id="email" required autofocus>
+    </label>
+    <label>Password
+      <input type="password" name="password" id="password" required>
+    </label>
+    <button type="submit" class="btn primary">Sign in</button>
+    <p id="error" class="error" hidden></p>
+  </form>
+  <script src="/static/app.js"></script>
+</body>
+</html>
