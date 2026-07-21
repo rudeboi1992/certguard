@@ -26,9 +26,11 @@ async function api(method, path, body) {
   return res;
 }
 
-function urgency(days, trusted) {
-  if (!trusted) return 'untrusted';
-  if (days < 0 || days <= 3) return 'urgent';
+// expiryLevel classifies purely by days remaining (expired counts as urgent).
+// Trust is tracked separately so an expired cert is never miscounted just
+// because it also fails verification.
+function expiryLevel(days) {
+  if (days <= 3) return 'urgent'; // includes expired (days < 0)
   if (days <= 7) return 'warn';
   if (days <= 30) return 'notice';
   return 'ok';
@@ -68,7 +70,7 @@ async function loadCerts() {
     const c = it.cert;
     const days = it.days_remaining;
     const trusted = !c.last_error;
-    const level = urgency(days, trusted);
+    const level = expiryLevel(days);
     if (level === 'urgent') urgent++;
     else if (level === 'warn' || level === 'notice') soon++;
 
