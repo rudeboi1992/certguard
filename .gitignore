@@ -1,0 +1,12 @@
+# Binaries
+certguard
+certguard.exe
+/dist/
+
+# Local database + WAL sidecars
+*.db
+*.db-wal
+*.db-shm
+
+# Logs / scratch
+*.log
