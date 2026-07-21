@@ -20,15 +20,32 @@ type Config struct {
 	DBDSN string
 	// ScanTimeout bounds a single endpoint scan.
 	ScanTimeout time.Duration
+	// SessionTTL is how long a web login session stays valid.
+	SessionTTL time.Duration
+	// CookieSecure sets the Secure flag on the session cookie. Leave false for
+	// plain-HTTP local use; set true when served over HTTPS (e.g. behind a
+	// TLS-terminating reverse proxy).
+	CookieSecure bool
 }
 
 func Load() Config {
 	return Config{
-		Addr:        env("CERTGUARD_ADDR", ":8181"),
-		DBDriver:    env("CERTGUARD_DB_DRIVER", "sqlite"),
-		DBDSN:       env("CERTGUARD_DB_DSN", "certguard.db"),
-		ScanTimeout: envDuration("CERTGUARD_SCAN_TIMEOUT", 10*time.Second),
+		Addr:         env("CERTGUARD_ADDR", ":8181"),
+		DBDriver:     env("CERTGUARD_DB_DRIVER", "sqlite"),
+		DBDSN:        env("CERTGUARD_DB_DSN", "certguard.db"),
+		ScanTimeout:  envDuration("CERTGUARD_SCAN_TIMEOUT", 10*time.Second),
+		SessionTTL:   envDuration("CERTGUARD_SESSION_TTL", 720*time.Hour), // 30 days
+		CookieSecure: envBool("CERTGUARD_COOKIE_SECURE", false),
 	}
+}
+
+func envBool(key string, def bool) bool {
+	if v, ok := os.LookupEnv(key); ok && v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return def
 }
 
 func env(key, def string) string {

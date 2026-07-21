@@ -9,13 +9,16 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/bfalcher/certguard/internal/auth"
 	"github.com/bfalcher/certguard/internal/config"
 	"github.com/bfalcher/certguard/internal/scanner"
 	"github.com/bfalcher/certguard/internal/server"
@@ -34,6 +37,10 @@ func main() {
 		os.Exit(cmdServe())
 	case "scan":
 		os.Exit(cmdScan(os.Args[2:]))
+	case "user":
+		os.Exit(cmdUser(os.Args[2:]))
+	case "token":
+		os.Exit(cmdToken(os.Args[2:]))
 	case "version", "-v", "--version":
 		fmt.Println("certguard", version)
 	default:
@@ -46,10 +53,16 @@ func usage() {
 	fmt.Fprint(os.Stderr, `certguard - active TLS certificate expiry monitor
 
 Commands:
-  serve                 run the HTTP API server
-  scan <host[:port]>    scan an endpoint over TLS and store the result
-  scan --dry <target>   scan without storing
-  version               print version
+  serve                          run the HTTP API server
+  scan <host[:port]>             scan an endpoint over TLS and store the result
+  scan --dry <target>            scan without storing
+  user add <email> [--role admin|viewer] [--password PW]
+  user list
+  token create <email> [--name NAME]
+  token list <email>
+  version                        print version
+
+If --password is omitted, CERTGUARD_PASSWORD is used, else it is read from stdin.
 
 Environment:
   CERTGUARD_ADDR         listen address (default ":8181")
@@ -67,6 +80,11 @@ func cmdServe() int {
 		return 1
 	}
 	defer st.Close()
+
+	if n, err := st.CountUsers(); err == nil && n == 0 {
+		fmt.Println("NOTE: no users exist yet — the API is locked until you create one:")
+		fmt.Println("      certguard user add <email> --role admin")
+	}
 
 	srv := server.New(cfg, st)
 	httpSrv := &http.Server{
@@ -143,4 +161,189 @@ func cmdScan(args []string) int {
 
 	_ = json.Marshal // reserved for a future --json flag
 	return 0
+}
+
+// openStore is a small helper for CLI commands that touch the database.
+func openStore() (*store.Store, error) {
+	cfg := config.Load()
+	return store.Open(cfg.DBDriver, cfg.DBDSN)
+}
+
+// readPassword returns a password from --password, then CERTGUARD_PASSWORD, then
+// a single line of stdin.
+func readPassword(flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	if v := os.Getenv("CERTGUARD_PASSWORD"); v != "" {
+		return v
+	}
+	fmt.Fprint(os.Stderr, "Password: ")
+	sc := bufio.NewScanner(os.Stdin)
+	if sc.Scan() {
+		return strings.TrimSpace(sc.Text())
+	}
+	return ""
+}
+
+func cmdUser(args []string) int {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "usage: certguard user <add|list> ...")
+		return 2
+	}
+	st, err := openStore()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	defer st.Close()
+
+	switch args[0] {
+	case "add":
+		rest := args[1:]
+		role := string(auth.RoleViewer)
+		password := ""
+		var email string
+		for i := 0; i < len(rest); i++ {
+			switch rest[i] {
+			case "--role":
+				if i+1 < len(rest) {
+					i++
+					role = rest[i]
+				}
+			case "--password":
+				if i+1 < len(rest) {
+					i++
+					password = rest[i]
+				}
+			default:
+				email = rest[i]
+			}
+		}
+		if email == "" {
+			fmt.Fprintln(os.Stderr, "usage: certguard user add <email> [--role admin|viewer] [--password PW]")
+			return 2
+		}
+		if !auth.Role(role).Valid() {
+			fmt.Fprintf(os.Stderr, "invalid role %q (want admin or viewer)\n", role)
+			return 2
+		}
+		pw := readPassword(password)
+		hash, err := auth.HashPassword(pw)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		u, err := st.CreateUser(email, hash, role)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error creating user:", err)
+			return 1
+		}
+		fmt.Printf("created user %s (role=%s, id=%d)\n", u.Email, u.Role, u.ID)
+		return 0
+
+	case "list":
+		users, err := st.ListUsers()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		if len(users) == 0 {
+			fmt.Println("(no users yet — create one with: certguard user add <email> --role admin)")
+			return 0
+		}
+		for _, u := range users {
+			fmt.Printf("%-4d %-30s %-7s created %s\n", u.ID, u.Email, u.Role, u.CreatedAt.Format(time.RFC3339))
+		}
+		return 0
+
+	default:
+		fmt.Fprintln(os.Stderr, "usage: certguard user <add|list> ...")
+		return 2
+	}
+}
+
+func cmdToken(args []string) int {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "usage: certguard token <create|list> <email> ...")
+		return 2
+	}
+	st, err := openStore()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	defer st.Close()
+
+	switch args[0] {
+	case "create":
+		rest := args[1:]
+		name := ""
+		var email string
+		for i := 0; i < len(rest); i++ {
+			switch rest[i] {
+			case "--name":
+				if i+1 < len(rest) {
+					i++
+					name = rest[i]
+				}
+			default:
+				email = rest[i]
+			}
+		}
+		if email == "" {
+			fmt.Fprintln(os.Stderr, "usage: certguard token create <email> [--name NAME]")
+			return 2
+		}
+		u, err := st.GetUserByEmail(email)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "no such user:", email)
+			return 1
+		}
+		plaintext, err := auth.GenerateToken()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		if _, err := st.CreateToken(u.ID, name, auth.HashSecret(plaintext)); err != nil {
+			fmt.Fprintln(os.Stderr, "error creating token:", err)
+			return 1
+		}
+		fmt.Printf("token for %s (name=%q):\n\n    %s\n\n", u.Email, name, plaintext)
+		fmt.Println("This is shown once and cannot be recovered. Store it now.")
+		fmt.Println("Use it as:  Authorization: Bearer <token>")
+		return 0
+
+	case "list":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "usage: certguard token list <email>")
+			return 2
+		}
+		u, err := st.GetUserByEmail(args[1])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "no such user:", args[1])
+			return 1
+		}
+		tokens, err := st.ListTokens(u.ID)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		if len(tokens) == 0 {
+			fmt.Println("(no tokens)")
+			return 0
+		}
+		for _, t := range tokens {
+			last := "never"
+			if t.LastUsedAt != nil {
+				last = t.LastUsedAt.Format(time.RFC3339)
+			}
+			fmt.Printf("%-4d %-20s created %s  last used %s\n", t.ID, t.Name, t.CreatedAt.Format(time.RFC3339), last)
+		}
+		return 0
+
+	default:
+		fmt.Fprintln(os.Stderr, "usage: certguard token <create|list> <email> ...")
+		return 2
+	}
 }

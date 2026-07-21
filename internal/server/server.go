@@ -1,5 +1,10 @@
-// Package server exposes the JSON API. Phase 1 is intentionally minimal and
-// unauthenticated (localhost/self-hosted); Phase 2 adds token + session auth.
+// Package server exposes the JSON API.
+//
+// Auth (Phase 2): every /api/v1 route except login requires an authenticated
+// principal, resolved from either an "Authorization: Bearer <token>" header
+// (automation) or a session cookie (web UI). Write operations additionally
+// require the admin role. There is no public registration — users are
+// provisioned via the CLI.
 package server
 
 import (
@@ -8,10 +13,18 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/bfalcher/certguard/internal/auth"
 	"github.com/bfalcher/certguard/internal/config"
+	"github.com/bfalcher/certguard/internal/model"
 	"github.com/bfalcher/certguard/internal/scanner"
 	"github.com/bfalcher/certguard/internal/store"
 )
+
+const sessionCookie = "certguard_session"
+
+type ctxKey int
+
+const userKey ctxKey = 0
 
 type Server struct {
 	cfg   config.Config
@@ -28,13 +41,130 @@ func New(cfg config.Config, st *store.Store) *Server {
 func (s *Server) Handler() http.Handler { return s.mux }
 
 func (s *Server) routes() {
+	// Public.
 	s.mux.HandleFunc("GET /healthz", s.handleHealth)
-	s.mux.HandleFunc("GET /api/v1/certs", s.handleListCerts)
-	s.mux.HandleFunc("POST /api/v1/scan", s.handleScan)
+	s.mux.HandleFunc("POST /api/v1/auth/login", s.handleLogin)
+
+	// Authenticated (any role).
+	s.mux.Handle("POST /api/v1/auth/logout", s.authed(s.handleLogout))
+	s.mux.Handle("GET /api/v1/auth/whoami", s.authed(s.handleWhoami))
+	s.mux.Handle("GET /api/v1/certs", s.authed(s.handleListCerts))
+
+	// Admin-only (writes).
+	s.mux.Handle("POST /api/v1/scan", s.adminOnly(s.handleScan))
 }
+
+// --- auth middleware ---
+
+// authed resolves the caller from a bearer token or session cookie and rejects
+// unauthenticated requests with 401.
+func (s *Server) authed(next http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := s.resolveUser(r)
+		if user == nil {
+			writeErr(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		ctx := context.WithValue(r.Context(), userKey, user)
+		next(w, r.WithContext(ctx))
+	})
+}
+
+// adminOnly is authed plus a role check.
+func (s *Server) adminOnly(next http.HandlerFunc) http.Handler {
+	return s.authed(func(w http.ResponseWriter, r *http.Request) {
+		if u := userFrom(r.Context()); u == nil || !u.IsAdmin() {
+			writeErr(w, http.StatusForbidden, "admin role required")
+			return
+		}
+		next(w, r)
+	})
+}
+
+func (s *Server) resolveUser(r *http.Request) *model.User {
+	if tok := auth.BearerToken(r.Header.Get("Authorization")); tok != "" {
+		if u, err := s.store.UserByTokenHash(auth.HashSecret(tok)); err == nil {
+			return u
+		}
+		return nil
+	}
+	if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
+		if u, err := s.store.UserBySessionHash(auth.HashSecret(c.Value)); err == nil {
+			return u
+		}
+	}
+	return nil
+}
+
+func userFrom(ctx context.Context) *model.User {
+	u, _ := ctx.Value(userKey).(*model.User)
+	return u
+}
+
+// --- handlers ---
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+type loginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var req loginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	user, err := s.store.GetUserByEmail(req.Email)
+	if err != nil || !auth.CheckPassword(user.PasswordHash, req.Password) {
+		// Same response whether the email is unknown or the password is wrong.
+		writeErr(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+
+	sid, err := auth.GenerateSession()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not create session")
+		return
+	}
+	expires := time.Now().UTC().Add(s.cfg.SessionTTL)
+	if err := s.store.CreateSession(user.ID, auth.HashSecret(sid), expires); err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not persist session")
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    sid,
+		Path:     "/",
+		Expires:  expires,
+		HttpOnly: true,
+		Secure:   s.cfg.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"user": user})
+}
+
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
+		_ = s.store.DeleteSession(auth.HashSecret(c.Value))
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   s.cfg.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "logged out"})
+}
+
+func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"user": userFrom(r.Context())})
 }
 
 func (s *Server) handleListCerts(w http.ResponseWriter, r *http.Request) {
@@ -45,8 +175,8 @@ func (s *Server) handleListCerts(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().UTC()
 	type item struct {
-		Cert          any `json:"cert"`
-		DaysRemaining int `json:"days_remaining"`
+		Cert          *model.Cert `json:"cert"`
+		DaysRemaining int         `json:"days_remaining"`
 	}
 	out := make([]item, 0, len(certs))
 	for _, c := range certs {
@@ -93,6 +223,8 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"scan": res, "saved": stored})
 }
+
+// --- helpers ---
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
