@@ -114,6 +114,17 @@ table.certs th { color: var(--muted); font-weight: 600; }
 .status.ok { color: var(--ok); }
 .error { color: var(--urgent); font-size: .9rem; margin: 0; }
 
+.channel-row { display: flex; gap: .5rem; margin-bottom: .8rem; flex-wrap: wrap; }
+.channel-row select, .channel-row input { padding: .5rem .6rem; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+.channel-row #chTarget { flex: 1; min-width: 200px; }
+.channel-row .thresh { width: 90px; }
+table.channels { width: 100%; border-collapse: collapse; }
+table.channels td { padding: .45rem .5rem; border-bottom: 1px solid var(--border); font-size: .9rem; vertical-align: middle; }
+table.channels td.actions { text-align: right; white-space: nowrap; }
+.btn.small { padding: .3rem .6rem; font-size: .82rem; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; word-break: break-all; }
+
 .toast {
   position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%);
   background: var(--ink); color: var(--bg); padding: .6rem 1rem;

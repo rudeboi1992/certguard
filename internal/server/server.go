@@ -17,6 +17,7 @@ import (
 	"github.com/bfalcher/certguard/internal/auth"
 	"github.com/bfalcher/certguard/internal/config"
 	"github.com/bfalcher/certguard/internal/model"
+	"github.com/bfalcher/certguard/internal/notify"
 	"github.com/bfalcher/certguard/internal/scanner"
 	"github.com/bfalcher/certguard/internal/store"
 )
@@ -28,13 +29,14 @@ type ctxKey int
 const userKey ctxKey = 0
 
 type Server struct {
-	cfg   config.Config
-	store *store.Store
-	mux   *http.ServeMux
+	cfg    config.Config
+	store  *store.Store
+	sender notify.Sender
+	mux    *http.ServeMux
 }
 
-func New(cfg config.Config, st *store.Store) *Server {
-	s := &Server{cfg: cfg, store: st, mux: http.NewServeMux()}
+func New(cfg config.Config, st *store.Store, sender notify.Sender) *Server {
+	s := &Server{cfg: cfg, store: st, sender: sender, mux: http.NewServeMux()}
 	s.routes()
 	return s
 }
@@ -50,6 +52,12 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/v1/auth/logout", s.authed(s.handleLogout))
 	s.mux.Handle("GET /api/v1/auth/whoami", s.authed(s.handleWhoami))
 	s.mux.Handle("GET /api/v1/certs", s.authed(s.handleListCerts))
+
+	// Per-user notification channels (any authenticated user manages their own).
+	s.mux.Handle("GET /api/v1/channels", s.authed(s.handleListChannels))
+	s.mux.Handle("POST /api/v1/channels", s.authed(s.handleCreateChannel))
+	s.mux.Handle("DELETE /api/v1/channels/{id}", s.authed(s.handleDeleteChannel))
+	s.mux.Handle("POST /api/v1/channels/{id}/test", s.authed(s.handleTestChannel))
 
 	// Admin-only (writes).
 	s.mux.Handle("POST /api/v1/scan", s.adminOnly(s.handleScan))
@@ -295,6 +303,98 @@ func (s *Server) handleDeleteCert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- notification channels (scoped to the authenticated user) ---
+
+func (s *Server) handleListChannels(w http.ResponseWriter, r *http.Request) {
+	u := userFrom(r.Context())
+	chans, err := s.store.ListChannels(u.ID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := make([]model.Channel, 0, len(chans))
+	for _, c := range chans {
+		out = append(out, c.Redacted())
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+type createChannelRequest struct {
+	Type       string `json:"type"`
+	Target     string `json:"target"`
+	Thresholds string `json:"thresholds"`
+}
+
+func (s *Server) handleCreateChannel(w http.ResponseWriter, r *http.Request) {
+	u := userFrom(r.Context())
+	var req createChannelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	typ := model.ChannelType(req.Type)
+	if !model.ValidChannelType(typ) {
+		writeErr(w, http.StatusBadRequest, "type must be email, slack, discord, or webhook")
+		return
+	}
+	if req.Target == "" {
+		writeErr(w, http.StatusBadRequest, "target is required")
+		return
+	}
+	ch, err := s.store.CreateChannel(u.ID, typ, req.Target, req.Thresholds)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, ch.Redacted())
+}
+
+func (s *Server) handleDeleteChannel(w http.ResponseWriter, r *http.Request) {
+	u := userFrom(r.Context())
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if err := s.store.DeleteChannel(id, u.ID); err != nil {
+		if err == store.ErrNotFound {
+			writeErr(w, http.StatusNotFound, "channel not found")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleTestChannel sends a sample notification through one of the user's
+// channels so they can confirm it is wired up correctly.
+func (s *Server) handleTestChannel(w http.ResponseWriter, r *http.Request) {
+	u := userFrom(r.Context())
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	ch, err := s.store.GetChannel(id)
+	if err != nil || ch.UserID != u.ID {
+		writeErr(w, http.StatusNotFound, "channel not found")
+		return
+	}
+	if s.sender == nil {
+		writeErr(w, http.StatusServiceUnavailable, "notifications are not enabled on this server")
+		return
+	}
+	sample := &model.Cert{Name: "certguard-test.example.com", ExpiresAt: time.Now().UTC().AddDate(0, 0, 3)}
+	msg := notify.BuildMessage(sample, 3, time.Now().UTC())
+	msg.Subject = "[certguard] test notification"
+	if err := s.sender.Send(ch, msg); err != nil {
+		writeErr(w, http.StatusBadGateway, "send failed: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
 }
 
 // parseFlexDate accepts either a date-only "YYYY-MM-DD" (interpreted as UTC

@@ -25,7 +25,7 @@ func testServer(t *testing.T) (*httptest.Server, *store.Store) {
 	t.Cleanup(func() { st.Close() })
 
 	cfg := config.Config{SessionTTL: time.Hour, ScanTimeout: 5 * time.Second}
-	srv := New(cfg, st)
+	srv := New(cfg, st, nil)
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return hs, st

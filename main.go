@@ -20,7 +20,10 @@ import (
 
 	"github.com/bfalcher/certguard/internal/auth"
 	"github.com/bfalcher/certguard/internal/config"
+	"github.com/bfalcher/certguard/internal/model"
+	"github.com/bfalcher/certguard/internal/notify"
 	"github.com/bfalcher/certguard/internal/scanner"
+	"github.com/bfalcher/certguard/internal/scheduler"
 	"github.com/bfalcher/certguard/internal/server"
 	"github.com/bfalcher/certguard/internal/store"
 )
@@ -41,6 +44,8 @@ func main() {
 		os.Exit(cmdUser(os.Args[2:]))
 	case "token":
 		os.Exit(cmdToken(os.Args[2:]))
+	case "channel":
+		os.Exit(cmdChannel(os.Args[2:]))
 	case "version", "-v", "--version":
 		fmt.Println("certguard", version)
 	default:
@@ -60,6 +65,10 @@ Commands:
   user list
   token create <email> [--name NAME]
   token list <email>
+  channel add <email> --type email|slack|discord|webhook --target VAL [--thresholds 30,7,3]
+  channel list <email>
+  channel test <id>
+  channel rm <id>
   version                        print version
 
 If --password is omitted, CERTGUARD_PASSWORD is used, else it is read from stdin.
@@ -86,7 +95,17 @@ func cmdServe() int {
 		fmt.Println("      certguard user add <email> --role admin")
 	}
 
-	srv := server.New(cfg, st)
+	sender := notify.NewRealSender(cfg.Mail)
+	srv := server.New(cfg, st, sender)
+
+	// Background rescan + notification job.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if cfg.SchedulerEnabled {
+		scheduler.New(st, sender, cfg.CheckInterval, cfg.ScanTimeout, nil).Start(ctx)
+		fmt.Printf("scheduler on: rescan + notify every %s\n", cfg.CheckInterval)
+	}
+
 	httpSrv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           srv.Handler(),
@@ -344,6 +363,136 @@ func cmdToken(args []string) int {
 
 	default:
 		fmt.Fprintln(os.Stderr, "usage: certguard token <create|list> <email> ...")
+		return 2
+	}
+}
+
+func cmdChannel(args []string) int {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "usage: certguard channel <add|list|test|rm> ...")
+		return 2
+	}
+	st, err := openStore()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return 1
+	}
+	defer st.Close()
+
+	switch args[0] {
+	case "add":
+		rest := args[1:]
+		var email, typ, target, thresholds string
+		for i := 0; i < len(rest); i++ {
+			switch rest[i] {
+			case "--type":
+				if i+1 < len(rest) {
+					i++
+					typ = rest[i]
+				}
+			case "--target":
+				if i+1 < len(rest) {
+					i++
+					target = rest[i]
+				}
+			case "--thresholds":
+				if i+1 < len(rest) {
+					i++
+					thresholds = rest[i]
+				}
+			default:
+				email = rest[i]
+			}
+		}
+		if email == "" || typ == "" || target == "" {
+			fmt.Fprintln(os.Stderr, "usage: certguard channel add <email> --type TYPE --target VAL [--thresholds 30,7,3]")
+			return 2
+		}
+		if !model.ValidChannelType(model.ChannelType(typ)) {
+			fmt.Fprintf(os.Stderr, "invalid type %q (email|slack|discord|webhook)\n", typ)
+			return 2
+		}
+		u, err := st.GetUserByEmail(email)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "no such user:", email)
+			return 1
+		}
+		ch, err := st.CreateChannel(u.ID, model.ChannelType(typ), target, thresholds)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		fmt.Printf("created channel %d (%s) for %s\n", ch.ID, ch.Type, u.Email)
+		return 0
+
+	case "list":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "usage: certguard channel list <email>")
+			return 2
+		}
+		u, err := st.GetUserByEmail(args[1])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "no such user:", args[1])
+			return 1
+		}
+		chans, err := st.ListChannels(u.ID)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		if len(chans) == 0 {
+			fmt.Println("(no channels)")
+			return 0
+		}
+		for _, c := range chans {
+			th := c.Thresholds
+			if th == "" {
+				th = "30,7,3"
+			}
+			fmt.Printf("%-4d %-8s %-45s thresholds=%s\n", c.ID, c.Type, c.Target, th)
+		}
+		return 0
+
+	case "test":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "usage: certguard channel test <id>")
+			return 2
+		}
+		var id int64
+		fmt.Sscanf(args[1], "%d", &id)
+		ch, err := st.GetChannel(id)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "no such channel:", args[1])
+			return 1
+		}
+		cfg := config.Load()
+		sender := notify.NewRealSender(cfg.Mail)
+		sample := &model.Cert{Name: "certguard-test.example.com", ExpiresAt: time.Now().UTC().AddDate(0, 0, 3)}
+		msg := notify.BuildMessage(sample, 3, time.Now().UTC())
+		msg.Subject = "[certguard] test notification"
+		if err := sender.Send(ch, msg); err != nil {
+			fmt.Fprintln(os.Stderr, "send failed:", err)
+			return 1
+		}
+		fmt.Printf("test notification sent via channel %d (%s)\n", ch.ID, ch.Type)
+		return 0
+
+	case "rm":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "usage: certguard channel rm <id>")
+			return 2
+		}
+		var id int64
+		fmt.Sscanf(args[1], "%d", &id)
+		if err := st.DeleteChannel(id, 0); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		fmt.Printf("deleted channel %d\n", id)
+		return 0
+
+	default:
+		fmt.Fprintln(os.Stderr, "usage: certguard channel <add|list|test|rm> ...")
 		return 2
 	}
 }

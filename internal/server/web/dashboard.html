@@ -52,6 +52,26 @@
       </div>
     </div>
 
+    <div class="card" id="notifyCard">
+      <h2>Notifications</h2>
+      <p class="muted">Get alerted as your certificates approach expiry (at 30, 7, and 3 days). Channels are yours; alerts cover the whole shared inventory.</p>
+      <form id="channelForm" class="channel-row">
+        <select id="chType">
+          <option value="email">Email</option>
+          <option value="slack">Slack</option>
+          <option value="discord">Discord</option>
+          <option value="webhook">Webhook</option>
+        </select>
+        <input type="text" id="chTarget" placeholder="email address or webhook URL" required>
+        <input type="text" id="chThresholds" class="thresh" placeholder="30,7,3" title="Comma-separated day thresholds (blank = all)">
+        <button type="submit" class="btn primary">Add</button>
+      </form>
+      <table class="channels">
+        <tbody id="channelRows"></tbody>
+      </table>
+      <p id="noChannels" class="muted small" hidden>No channels yet — add one above.</p>
+    </div>
+
     <div class="card">
       <h2>Tracked certificates</h2>
       <table class="certs">

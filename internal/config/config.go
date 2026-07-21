@@ -26,6 +26,25 @@ type Config struct {
 	// plain-HTTP local use; set true when served over HTTPS (e.g. behind a
 	// TLS-terminating reverse proxy).
 	CookieSecure bool
+
+	// CheckInterval is how often the background scheduler re-scans endpoints and
+	// evaluates notification thresholds.
+	CheckInterval time.Duration
+	// SchedulerEnabled toggles the background job (set false to run serve as a
+	// pure API/UI with no outbound scanning or notifications).
+	SchedulerEnabled bool
+
+	// Mail holds SMTP settings for email notifications. If Host or User is
+	// empty, email channels are treated as unconfigured and skipped.
+	Mail MailConfig
+}
+
+type MailConfig struct {
+	Host string
+	Port int
+	User string
+	Pass string
+	From string // defaults to User when empty
 }
 
 func Load() Config {
@@ -36,7 +55,26 @@ func Load() Config {
 		ScanTimeout:  envDuration("CERTGUARD_SCAN_TIMEOUT", 10*time.Second),
 		SessionTTL:   envDuration("CERTGUARD_SESSION_TTL", 720*time.Hour), // 30 days
 		CookieSecure: envBool("CERTGUARD_COOKIE_SECURE", false),
+
+		CheckInterval:    envDuration("CERTGUARD_CHECK_INTERVAL", 6*time.Hour),
+		SchedulerEnabled: envBool("CERTGUARD_SCHEDULER_ENABLED", true),
+		Mail: MailConfig{
+			Host: env("CERTGUARD_MAIL_HOST", ""),
+			Port: envInt("CERTGUARD_MAIL_PORT", 587),
+			User: env("CERTGUARD_MAIL_USER", ""),
+			Pass: env("CERTGUARD_MAIL_PASS", ""),
+			From: env("CERTGUARD_MAIL_FROM", ""),
+		},
 	}
+}
+
+func envInt(key string, def int) int {
+	if v, ok := os.LookupEnv(key); ok && v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
 }
 
 func envBool(key string, def bool) bool {

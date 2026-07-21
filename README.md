@@ -50,6 +50,29 @@ session ids are stored only as SHA-256 hashes — plaintext is shown once.
 | POST   | `/api/v1/scan`         | admin  | scan `{"target":"host:port","dry_run":false}` |
 | POST   | `/api/v1/certs`        | admin  | add a manual/file cert `{"name","expires_at",...}` |
 | DELETE | `/api/v1/certs/{id}`   | admin  | soft-delete a cert                       |
+| GET    | `/api/v1/channels`     | any    | list your notification channels          |
+| POST   | `/api/v1/channels`     | any    | add a channel `{"type","target","thresholds"}` |
+| DELETE | `/api/v1/channels/{id}`| any    | remove your channel                      |
+| POST   | `/api/v1/channels/{id}/test` | any | send a test notification            |
+
+### Notifications & scheduling
+
+`serve` runs a background job (default every 6h) that **re-scans auto-rescan
+endpoints** to refresh expiry, then evaluates notification thresholds. Alerts
+fire at **30, 7, and 3 days** using a state machine that escalates but never
+repeats a level, so frequent runs never spam. Certificate rotation (a new
+fingerprint) resets the state so the new cert is tracked fresh.
+
+Channels are **per-user** but alert on the whole shared inventory. Supported
+types: `email` (SMTP), `slack`, `discord`, and generic `webhook` (JSON POST).
+Each channel can restrict which thresholds it wants (e.g. only `3`).
+
+```
+certguard channel add you@example.com --type slack --target https://hooks.slack.com/... 
+certguard channel add you@example.com --type webhook --target https://my/hook --thresholds 7,3
+certguard channel list you@example.com
+certguard channel test 1
+```
 
 ### Web UI
 
@@ -73,6 +96,11 @@ All optional; defaults give a working SQLite-backed service with no setup.
 | `CERTGUARD_SCAN_TIMEOUT` | `10s`           | per-scan dial + handshake budget |
 | `CERTGUARD_SESSION_TTL`  | `720h`          | web session lifetime             |
 | `CERTGUARD_COOKIE_SECURE`| `false`         | set `true` when served over HTTPS|
+| `CERTGUARD_CHECK_INTERVAL`| `6h`           | scheduler rescan + notify period |
+| `CERTGUARD_SCHEDULER_ENABLED`| `true`      | run the background job           |
+| `CERTGUARD_MAIL_HOST`    | _(unset)_       | SMTP host (email channels)       |
+| `CERTGUARD_MAIL_PORT`    | `587`           | SMTP port (STARTTLS)             |
+| `CERTGUARD_MAIL_USER` / `_PASS` / `_FROM` | _(unset)_ | SMTP auth + From address |
 
 ## Build
 
@@ -86,8 +114,10 @@ go test ./...
 ```
 main.go                    CLI dispatch (serve | scan | user | token | version)
 internal/scanner           active TLS scan → Result (the core)
-internal/model             Cert + User/APIToken domain types
+internal/model             Cert + User/APIToken + Channel domain types
 internal/auth              password hashing, token/session secrets, roles
+internal/notify            threshold state machine + email/webhook senders
+internal/scheduler         background rescan + notification job
 internal/store             SQLite open + embedded migrations + CRUD
 internal/server            JSON API + auth middleware
 internal/server/web        embedded UI (go:embed): pages + static assets
@@ -99,7 +129,7 @@ internal/config            env-based config
 - [x] **Phase 1** — active scanner, enriched model, SQLite + migrations, scan CLI, minimal API
 - [x] **Phase 2** — token + session auth, admin-provisioned users, roles, `user`/`token` CLI, auth tests
 - [x] **Phase 3** — embedded web UI (dashboard, scan form, client-side drag-drop file parser), cert create/delete API
-- [ ] **Phase 4** — notifications (email + Slack/Discord/generic), per-user subscriptions + thresholds, scheduled auto-rescan
+- [x] **Phase 4** — notifications (email + Slack/Discord/generic webhook), per-user channels + thresholds, scheduled rescan + notify job, escalation state machine
 - [ ] **Phase 5** — Postgres dialect, multi-stage `scratch` Docker image, goreleaser cross-builds, docs
 
 > Postgres was originally slated for Phase 2 but deferred: auth was the higher

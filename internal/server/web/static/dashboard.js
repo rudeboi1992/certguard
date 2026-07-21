@@ -185,6 +185,66 @@ async function handleFile(file) {
   }
 }
 
+// --- notification channels ---
+async function loadChannels() {
+  const res = await api('GET', '/api/v1/channels');
+  const chans = await res.json();
+  const rows = $('channelRows');
+  rows.innerHTML = '';
+  for (const c of chans) {
+    const th = c.thresholds && c.thresholds.trim() ? c.thresholds : '30,7,3';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="pill notice">${c.type}</span></td>
+      <td class="mono">${escapeHtml(c.target)}</td>
+      <td class="muted small">${escapeHtml(th)}</td>
+      <td class="actions">
+        <button class="btn ghost small" data-test="${c.id}">Test</button>
+        <button class="btn link" data-delch="${c.id}">Remove</button>
+      </td>`;
+    rows.appendChild(tr);
+  }
+  $('noChannels').hidden = chans.length !== 0;
+  rows.querySelectorAll('[data-test]').forEach((b) =>
+    b.addEventListener('click', () => testChannel(b.dataset.test)));
+  rows.querySelectorAll('[data-delch]').forEach((b) =>
+    b.addEventListener('click', () => deleteChannel(b.dataset.delch)));
+}
+
+$('channelForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const body = {
+    type: $('chType').value,
+    target: $('chTarget').value.trim(),
+    thresholds: $('chThresholds').value.trim(),
+  };
+  const res = await api('POST', '/api/v1/channels', body);
+  if (res.status === 201) {
+    toast('Channel added');
+    e.target.reset();
+    loadChannels();
+  } else {
+    const d = await res.json().catch(() => ({}));
+    toast(d.error || 'Could not add channel', true);
+  }
+});
+
+async function testChannel(id) {
+  toast('Sending test…');
+  const res = await api('POST', `/api/v1/channels/${id}/test`);
+  if (res.ok) toast('Test notification sent ✓');
+  else {
+    const d = await res.json().catch(() => ({}));
+    toast(d.error || 'Test failed', true);
+  }
+}
+
+async function deleteChannel(id) {
+  const res = await api('DELETE', `/api/v1/channels/${id}`);
+  if (res.status === 204) { toast('Channel removed'); loadChannels(); }
+  else toast('Remove failed', true);
+}
+
 // --- logout ---
 $('logout').addEventListener('click', async () => {
   await api('POST', '/api/v1/auth/logout');
@@ -197,4 +257,4 @@ function escapeHtml(s) {
 }
 
 // initial load
-loadWhoami().then(loadCerts).catch(() => {});
+loadWhoami().then(() => { loadCerts(); loadChannels(); }).catch(() => {});
