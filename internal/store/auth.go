@@ -16,35 +16,34 @@ var ErrNotFound = errors.New("not found")
 // CreateUser inserts a user. passwordHash must already be bcrypt-hashed.
 func (s *Store) CreateUser(email, passwordHash, role string) (*model.User, error) {
 	now := time.Now().UTC()
-	res, err := s.db.Exec(
+	id, err := s.insertReturningID(
 		`INSERT INTO users (email, password_hash, role, created_at) VALUES (?,?,?,?)`,
 		email, passwordHash, role, now.Format(rfc3339))
 	if err != nil {
 		return nil, err
 	}
-	id, _ := res.LastInsertId()
 	return s.GetUserByID(id)
 }
 
 // CountUsers reports how many users exist (used for first-run bootstrap hints).
 func (s *Store) CountUsers() (int, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&n)
+	err := s.queryRow(`SELECT COUNT(*) FROM users`).Scan(&n)
 	return n, err
 }
 
 const userCols = `SELECT id, email, password_hash, role, created_at FROM users`
 
 func (s *Store) GetUserByID(id int64) (*model.User, error) {
-	return scanUser(s.db.QueryRow(userCols+` WHERE id=?`, id))
+	return scanUser(s.queryRow(userCols+` WHERE id=?`, id))
 }
 
 func (s *Store) GetUserByEmail(email string) (*model.User, error) {
-	return scanUser(s.db.QueryRow(userCols+` WHERE email=?`, email))
+	return scanUser(s.queryRow(userCols+` WHERE email=?`, email))
 }
 
 func (s *Store) ListUsers() ([]*model.User, error) {
-	rows, err := s.db.Query(userCols + ` ORDER BY created_at ASC`)
+	rows, err := s.query(userCols + ` ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, err
 	}
@@ -80,34 +79,33 @@ func scanUser(r rowScanner) (*model.User, error) {
 // caller (via auth.GenerateToken) and never persisted.
 func (s *Store) CreateToken(userID int64, name, tokenHash string) (*model.APIToken, error) {
 	now := time.Now().UTC()
-	res, err := s.db.Exec(
+	id, err := s.insertReturningID(
 		`INSERT INTO api_tokens (user_id, name, token_hash, created_at) VALUES (?,?,?,?)`,
 		userID, name, tokenHash, now.Format(rfc3339))
 	if err != nil {
 		return nil, err
 	}
-	id, _ := res.LastInsertId()
 	return &model.APIToken{ID: id, UserID: userID, Name: name, CreatedAt: now}, nil
 }
 
 // UserByTokenHash resolves a token hash to its owner and stamps last_used_at.
 func (s *Store) UserByTokenHash(tokenHash string) (*model.User, error) {
 	var userID int64
-	err := s.db.QueryRow(`SELECT user_id FROM api_tokens WHERE token_hash=?`, tokenHash).Scan(&userID)
+	err := s.queryRow(`SELECT user_id FROM api_tokens WHERE token_hash=?`, tokenHash).Scan(&userID)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	_, _ = s.db.Exec(`UPDATE api_tokens SET last_used_at=? WHERE token_hash=?`,
+	_, _ = s.exec(`UPDATE api_tokens SET last_used_at=? WHERE token_hash=?`,
 		time.Now().UTC().Format(rfc3339), tokenHash)
 	return s.GetUserByID(userID)
 }
 
 // ListTokens returns all tokens for a user (without plaintext, which is gone).
 func (s *Store) ListTokens(userID int64) ([]*model.APIToken, error) {
-	rows, err := s.db.Query(
+	rows, err := s.query(
 		`SELECT id, user_id, name, created_at, last_used_at FROM api_tokens WHERE user_id=? ORDER BY created_at ASC`,
 		userID)
 	if err != nil {
@@ -136,7 +134,7 @@ func (s *Store) ListTokens(userID int64) ([]*model.APIToken, error) {
 
 // CreateSession stores a session hash with an expiry.
 func (s *Store) CreateSession(userID int64, sessionHash string, expiresAt time.Time) error {
-	_, err := s.db.Exec(
+	_, err := s.exec(
 		`INSERT INTO sessions (user_id, session_hash, created_at, expires_at) VALUES (?,?,?,?)`,
 		userID, sessionHash, time.Now().UTC().Format(rfc3339), expiresAt.UTC().Format(rfc3339))
 	return err
@@ -147,7 +145,7 @@ func (s *Store) CreateSession(userID int64, sessionHash string, expiresAt time.T
 func (s *Store) UserBySessionHash(sessionHash string) (*model.User, error) {
 	var userID int64
 	var expiresAt string
-	err := s.db.QueryRow(`SELECT user_id, expires_at FROM sessions WHERE session_hash=?`, sessionHash).
+	err := s.queryRow(`SELECT user_id, expires_at FROM sessions WHERE session_hash=?`, sessionHash).
 		Scan(&userID, &expiresAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
@@ -156,7 +154,7 @@ func (s *Store) UserBySessionHash(sessionHash string) (*model.User, error) {
 		return nil, err
 	}
 	if time.Now().UTC().After(parseTime(expiresAt)) {
-		_, _ = s.db.Exec(`DELETE FROM sessions WHERE session_hash=?`, sessionHash)
+		_, _ = s.exec(`DELETE FROM sessions WHERE session_hash=?`, sessionHash)
 		return nil, ErrNotFound
 	}
 	return s.GetUserByID(userID)
@@ -164,6 +162,6 @@ func (s *Store) UserBySessionHash(sessionHash string) (*model.User, error) {
 
 // DeleteSession removes a session (logout).
 func (s *Store) DeleteSession(sessionHash string) error {
-	_, err := s.db.Exec(`DELETE FROM sessions WHERE session_hash=?`, sessionHash)
+	_, err := s.exec(`DELETE FROM sessions WHERE session_hash=?`, sessionHash)
 	return err
 }

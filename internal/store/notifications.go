@@ -11,14 +11,13 @@ import (
 
 func (s *Store) CreateChannel(userID int64, typ model.ChannelType, target, thresholds string) (*model.Channel, error) {
 	now := time.Now().UTC()
-	res, err := s.db.Exec(
+	id, err := s.insertReturningID(
 		`INSERT INTO notification_channels (user_id, type, target, thresholds, enabled, created_at)
 		 VALUES (?,?,?,?,1,?)`,
 		userID, string(typ), target, thresholds, now.Format(rfc3339))
 	if err != nil {
 		return nil, err
 	}
-	id, _ := res.LastInsertId()
 	return s.GetChannel(id)
 }
 
@@ -26,7 +25,7 @@ const channelCols = `SELECT id, user_id, type, target, thresholds, enabled, crea
 	FROM notification_channels`
 
 func (s *Store) GetChannel(id int64) (*model.Channel, error) {
-	return scanChannel(s.db.QueryRow(channelCols+` WHERE id=?`, id))
+	return scanChannel(s.queryRow(channelCols+` WHERE id=?`, id))
 }
 
 // ListChannels returns a single user's channels.
@@ -41,7 +40,7 @@ func (s *Store) AllEnabledChannels() ([]*model.Channel, error) {
 }
 
 func (s *Store) queryChannels(q string, args ...any) ([]*model.Channel, error) {
-	rows, err := s.db.Query(q, args...)
+	rows, err := s.query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -65,9 +64,9 @@ func (s *Store) DeleteChannel(id, userID int64) error {
 		err error
 	)
 	if userID != 0 {
-		res, err = s.db.Exec(`DELETE FROM notification_channels WHERE id=? AND user_id=?`, id, userID)
+		res, err = s.exec(`DELETE FROM notification_channels WHERE id=? AND user_id=?`, id, userID)
 	} else {
-		res, err = s.db.Exec(`DELETE FROM notification_channels WHERE id=?`, id)
+		res, err = s.exec(`DELETE FROM notification_channels WHERE id=?`, id)
 	}
 	if err != nil {
 		return err
@@ -103,7 +102,7 @@ func scanChannel(r rowScanner) (*model.Channel, error) {
 // MarkNotified records that a cert was notified at the given threshold, so the
 // escalation state machine won't re-notify at the same or less urgent level.
 func (s *Store) MarkNotified(certID int64, threshold int) error {
-	_, err := s.db.Exec(
+	_, err := s.exec(
 		`UPDATE certs SET last_notified_threshold=?, last_notified_on=? WHERE id=?`,
 		threshold, time.Now().UTC().Format(rfc3339), certID)
 	return err
@@ -111,7 +110,7 @@ func (s *Store) MarkNotified(certID int64, threshold int) error {
 
 // EndpointsForRescan returns active endpoint certs that have auto-rescan on.
 func (s *Store) EndpointsForRescan() ([]*model.Cert, error) {
-	rows, err := s.db.Query(selectCols +
+	rows, err := s.query(selectCols +
 		` WHERE active=1 AND kind='endpoint' AND auto_rescan=1 AND host!='' ORDER BY id ASC`)
 	if err != nil {
 		return nil, err

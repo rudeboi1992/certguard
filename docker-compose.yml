@@ -1,0 +1,57 @@
+# certguard — self-hosting compose file.
+#
+# Default: SQLite, zero external dependencies. Data persists in the named
+# volume `certguard_data`. Just run:
+#
+#     docker compose up -d
+#     docker compose exec certguard /certguard user add you@example.com --role admin
+#
+# To use Postgres instead, uncomment the two CERTGUARD_DB_* lines below and
+# start with the postgres profile:
+#
+#     docker compose --profile postgres up -d
+services:
+  certguard:
+    build: .
+    image: certguard:latest
+    ports:
+      - "8181:8181"
+    environment:
+      # --- SQLite (default) ---
+      CERTGUARD_DB_DSN: /data/certguard.db
+      # --- Postgres (uncomment these + start with --profile postgres) ---
+      # CERTGUARD_DB_DRIVER: postgres
+      # CERTGUARD_DB_DSN: postgres://certguard:certguard@postgres:5432/certguard?sslmode=disable
+
+      # Scheduler + notifications (optional).
+      CERTGUARD_CHECK_INTERVAL: ${CERTGUARD_CHECK_INTERVAL:-6h}
+      CERTGUARD_MAIL_HOST: ${CERTGUARD_MAIL_HOST:-}
+      CERTGUARD_MAIL_PORT: ${CERTGUARD_MAIL_PORT:-587}
+      CERTGUARD_MAIL_USER: ${CERTGUARD_MAIL_USER:-}
+      CERTGUARD_MAIL_PASS: ${CERTGUARD_MAIL_PASS:-}
+      CERTGUARD_MAIL_FROM: ${CERTGUARD_MAIL_FROM:-}
+      # Set true when serving over HTTPS (e.g. behind a reverse proxy).
+      CERTGUARD_COOKIE_SECURE: ${CERTGUARD_COOKIE_SECURE:-false}
+    volumes:
+      - certguard_data:/data
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    profiles: [postgres]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-certguard}
+      POSTGRES_USER: ${POSTGRES_USER:-certguard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-certguard}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-certguard}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  certguard_data:
+  postgres_data:

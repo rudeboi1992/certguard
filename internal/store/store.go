@@ -14,26 +14,36 @@ import (
 	"github.com/bfalcher/certguard/internal/model"
 	"github.com/bfalcher/certguard/internal/scanner"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/jackc/pgx/v5/stdlib" // registers "pgx"
+	_ "modernc.org/sqlite"             // registers "sqlite"
 )
 
-//go:embed migrations/*.sql
+//go:embed all:migrations
 var migrationFS embed.FS
 
 const rfc3339 = time.RFC3339
 
 // Store wraps a *sql.DB with cert-aware helpers.
 type Store struct {
-	db *sql.DB
+	db            *sql.DB
+	driver        string // "sqlite" or "postgres"
+	migrationsDir string // embedded path holding this dialect's migrations
 }
 
 // Open connects using the given driver ("sqlite" or "postgres") and DSN, then
 // applies any pending migrations. For sqlite, sensible pragmas are appended.
 func Open(driver, dsn string) (*Store, error) {
-	sqlDriver := driver
-	if driver == "sqlite" {
+	var sqlDriver, migrationsDir string
+	switch driver {
+	case "sqlite":
 		sqlDriver = "sqlite" // modernc.org/sqlite registers as "sqlite"
 		dsn = sqliteDSN(dsn)
+		migrationsDir = "migrations/sqlite"
+	case "postgres":
+		sqlDriver = "pgx" // github.com/jackc/pgx/v5/stdlib registers as "pgx"
+		migrationsDir = "migrations/postgres"
+	default:
+		return nil, fmt.Errorf("unsupported db driver %q (want sqlite or postgres)", driver)
 	}
 	db, err := sql.Open(sqlDriver, dsn)
 	if err != nil {
@@ -42,7 +52,7 @@ func Open(driver, dsn string) (*Store, error) {
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("ping db: %w", err)
 	}
-	s := &Store{db: db}
+	s := &Store{db: db, driver: driver, migrationsDir: migrationsDir}
 	if err := s.migrate(); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -63,14 +73,14 @@ func (s *Store) Close() error { return s.db.Close() }
 // migrate applies embedded migrations in filename order, tracked in a
 // schema_migrations table. Each file runs at most once.
 func (s *Store) migrate() error {
-	if _, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+	if _, err := s.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 		version TEXT PRIMARY KEY,
 		applied_at TEXT NOT NULL
 	)`); err != nil {
 		return err
 	}
 
-	entries, err := migrationFS.ReadDir("migrations")
+	entries, err := migrationFS.ReadDir(s.migrationsDir)
 	if err != nil {
 		return err
 	}
@@ -84,21 +94,21 @@ func (s *Store) migrate() error {
 
 	for _, name := range names {
 		var exists string
-		err := s.db.QueryRow(`SELECT version FROM schema_migrations WHERE version = ?`, name).Scan(&exists)
+		err := s.queryRow(`SELECT version FROM schema_migrations WHERE version = ?`, name).Scan(&exists)
 		if err == nil {
 			continue // already applied
 		}
 		if err != sql.ErrNoRows {
 			return err
 		}
-		body, err := migrationFS.ReadFile("migrations/" + name)
+		body, err := migrationFS.ReadFile(s.migrationsDir + "/" + name)
 		if err != nil {
 			return err
 		}
-		if _, err := s.db.Exec(string(body)); err != nil {
+		if _, err := s.exec(string(body)); err != nil {
 			return fmt.Errorf("apply %s: %w", name, err)
 		}
-		if _, err := s.db.Exec(`INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`,
+		if _, err := s.exec(`INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`,
 			name, time.Now().UTC().Format(rfc3339)); err != nil {
 			return err
 		}
@@ -126,7 +136,7 @@ func (s *Store) UpsertScan(name string, res *scanner.Result) (*model.Cert, error
 			existing.LastNotifiedThreshold = 0
 			existing.LastNotifiedOn = nil
 		}
-		_, err := s.db.Exec(`UPDATE certs SET
+		_, err := s.exec(`UPDATE certs SET
 			subject=?, issuer=?, serial=?, sha256=?, not_before=?, expires_at=?,
 			dns_names=?, key_type=?, sig_alg=?, server_name=?,
 			last_scanned_at=?, last_error=?,
@@ -147,7 +157,7 @@ func (s *Store) UpsertScan(name string, res *scanner.Result) (*model.Cert, error
 	if name == "" {
 		name = res.Host
 	}
-	result, err := s.db.Exec(`INSERT INTO certs
+	id, err := s.insertReturningID(`INSERT INTO certs
 		(name, kind, host, port, server_name, subject, issuer, serial, sha256,
 		 not_before, expires_at, dns_names, key_type, sig_alg,
 		 auto_rescan, last_scanned_at, last_error, active, created_at)
@@ -160,7 +170,6 @@ func (s *Store) UpsertScan(name string, res *scanner.Result) (*model.Cert, error
 	if err != nil {
 		return nil, err
 	}
-	id, _ := result.LastInsertId()
 	return s.GetByID(id)
 }
 
@@ -173,7 +182,7 @@ func (s *Store) AddCert(c *model.Cert) (*model.Cert, error) {
 	}
 	dns, _ := json.Marshal(c.DNSNames)
 	now := time.Now().UTC()
-	res, err := s.db.Exec(`INSERT INTO certs
+	id, err := s.insertReturningID(`INSERT INTO certs
 		(name, kind, host, port, server_name, subject, issuer, serial, sha256,
 		 not_before, expires_at, dns_names, key_type, sig_alg,
 		 auto_rescan, last_error, notes, active, created_at)
@@ -186,13 +195,12 @@ func (s *Store) AddCert(c *model.Cert) (*model.Cert, error) {
 	if err != nil {
 		return nil, err
 	}
-	id, _ := res.LastInsertId()
 	return s.GetByID(id)
 }
 
 // SoftDelete marks a cert inactive so it drops out of listings and scans.
 func (s *Store) SoftDelete(id int64) error {
-	res, err := s.db.Exec(`UPDATE certs SET active=0 WHERE id=? AND active=1`, id)
+	res, err := s.exec(`UPDATE certs SET active=0 WHERE id=? AND active=1`, id)
 	if err != nil {
 		return err
 	}
@@ -217,7 +225,7 @@ func boolToInt(b bool) int {
 }
 
 func (s *Store) findByHostPort(host string, port int) (*model.Cert, error) {
-	row := s.db.QueryRow(selectCols+` WHERE host=? AND port=? AND active=1`, host, port)
+	row := s.queryRow(selectCols+` WHERE host=? AND port=? AND active=1`, host, port)
 	c, err := scanRow(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -227,13 +235,13 @@ func (s *Store) findByHostPort(host string, port int) (*model.Cert, error) {
 
 // GetByID fetches a single cert.
 func (s *Store) GetByID(id int64) (*model.Cert, error) {
-	row := s.db.QueryRow(selectCols+` WHERE id=?`, id)
+	row := s.queryRow(selectCols+` WHERE id=?`, id)
 	return scanRow(row)
 }
 
 // List returns active certs ordered by soonest expiry.
 func (s *Store) List() ([]*model.Cert, error) {
-	rows, err := s.db.Query(selectCols + ` WHERE active=1 ORDER BY expires_at ASC`)
+	rows, err := s.query(selectCols + ` WHERE active=1 ORDER BY expires_at ASC`)
 	if err != nil {
 		return nil, err
 	}

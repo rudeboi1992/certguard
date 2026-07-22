@@ -91,8 +91,8 @@ All optional; defaults give a working SQLite-backed service with no setup.
 | Env var                  | Default         | Meaning                          |
 |--------------------------|-----------------|----------------------------------|
 | `CERTGUARD_ADDR`         | `:8181`         | HTTP listen address              |
-| `CERTGUARD_DB_DRIVER`    | `sqlite`        | `sqlite` (postgres: later)       |
-| `CERTGUARD_DB_DSN`       | `certguard.db`  | sqlite file path                 |
+| `CERTGUARD_DB_DRIVER`    | `sqlite`        | `sqlite` or `postgres`           |
+| `CERTGUARD_DB_DSN`       | `certguard.db`  | sqlite file path / postgres URL  |
 | `CERTGUARD_SCAN_TIMEOUT` | `10s`           | per-scan dial + handshake budget |
 | `CERTGUARD_SESSION_TTL`  | `720h`          | web session lifetime             |
 | `CERTGUARD_COOKIE_SECURE`| `false`         | set `true` when served over HTTPS|
@@ -102,12 +102,27 @@ All optional; defaults give a working SQLite-backed service with no setup.
 | `CERTGUARD_MAIL_PORT`    | `587`           | SMTP port (STARTTLS)             |
 | `CERTGUARD_MAIL_USER` / `_PASS` / `_FROM` | _(unset)_ | SMTP auth + From address |
 
-## Build
+## Build & run
 
 ```
 go build -o certguard .     # pure Go, no CGO (modernc.org/sqlite)
 go test ./...
 ```
+
+### Docker
+
+The image is ~17MB (distroless static) and includes CA certificates for TLS
+scanning:
+
+```
+docker compose up -d
+docker compose exec certguard /certguard user add you@example.com --role admin
+```
+
+SQLite by default; Postgres is a one-line switch. See
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for native, Docker, Postgres, reverse
+proxy, and backup guidance. Release binaries for linux/macOS/windows ×
+amd64/arm64 are built with [goreleaser](.goreleaser.yaml).
 
 ## Architecture
 
@@ -118,7 +133,7 @@ internal/model             Cert + User/APIToken + Channel domain types
 internal/auth              password hashing, token/session secrets, roles
 internal/notify            threshold state machine + email/webhook senders
 internal/scheduler         background rescan + notification job
-internal/store             SQLite open + embedded migrations + CRUD
+internal/store             SQLite/Postgres dialect layer + migrations + CRUD
 internal/server            JSON API + auth middleware
 internal/server/web        embedded UI (go:embed): pages + static assets
 internal/config            env-based config
@@ -130,7 +145,7 @@ internal/config            env-based config
 - [x] **Phase 2** — token + session auth, admin-provisioned users, roles, `user`/`token` CLI, auth tests
 - [x] **Phase 3** — embedded web UI (dashboard, scan form, client-side drag-drop file parser), cert create/delete API
 - [x] **Phase 4** — notifications (email + Slack/Discord/generic webhook), per-user channels + thresholds, scheduled rescan + notify job, escalation state machine
-- [ ] **Phase 5** — Postgres dialect, multi-stage `scratch` Docker image, goreleaser cross-builds, docs
+- [x] **Phase 5** — Postgres dialect (dialect layer + per-dialect migrations), distroless Docker image (~17MB), goreleaser cross-builds, deployment docs
 
-> Postgres was originally slated for Phase 2 but deferred: auth was the higher
-> priority (painful to retrofit), and SQLite covers the default self-host case.
+The roadmap is complete: certguard actively scans, authenticates, has a web UI,
+notifies, and self-hosts on SQLite or Postgres via binary or Docker.

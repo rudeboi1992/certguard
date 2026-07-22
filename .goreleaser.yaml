@@ -1,0 +1,55 @@
+# goreleaser configuration — cross-platform release builds + archives.
+# Verified locally: linux/amd64, linux/arm64, darwin/arm64, windows/amd64 all
+# cross-compile with CGO disabled (modernc.org/sqlite is pure Go).
+#
+#   goreleaser release --clean          # tagged release
+#   goreleaser build --snapshot --clean # local test build, no publish
+version: 2
+
+project_name: certguard
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: certguard
+    main: .
+    binary: certguard
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+      - docs/**/*
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  draft: true
