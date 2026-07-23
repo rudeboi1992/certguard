@@ -48,6 +48,42 @@ function fmtRemaining(days) {
   return `${days} days`;
 }
 
+function daysUntil(iso) {
+  return Math.round((new Date(iso) - new Date()) / 86400000);
+}
+
+// Pull one RDN value (e.g. "CN") out of a DN string like "CN=foo,O=bar,C=US".
+function dnField(dn, key) {
+  for (const part of (dn || '').split(',')) {
+    const [k, ...rest] = part.split('=');
+    if (k.trim() === key) return rest.join('=').trim();
+  }
+  return '';
+}
+
+// Render the full certificate readout under the scan form.
+function renderScanDetail(s) {
+  const el = $('scanDetail');
+  const rows = [];
+  const add = (k, v) => { if (v) rows.push(`<div class="sd-row"><span class="sd-k">${k}</span><span class="sd-v">${v}</span></div>`); };
+
+  add('Subject', escapeHtml(dnField(s.subject, 'CN') || s.subject || ''));
+  add('Issuer', escapeHtml(dnField(s.issuer, 'O') || dnField(s.issuer, 'CN') || s.issuer || ''));
+  add('Valid from', fmtDate(s.not_before));
+  add('Expires', `${fmtDate(s.not_after)} <span class="muted">(${fmtRemaining(daysUntil(s.not_after))})</span>`);
+  if (s.dns_names && s.dns_names.length) add('Covers', s.dns_names.map(escapeHtml).join(', '));
+  add('Key', escapeHtml([s.key_type, s.signature_algorithm].filter(Boolean).join(' · ')));
+  add('Chain', `${s.chain_length} certificate${s.chain_length === 1 ? '' : 's'}`);
+  add('SHA-256', `<span class="mono sd-fp">${escapeHtml(s.sha256)}</span>`);
+  const trust = s.trust_error
+    ? `<span class="pill untrusted" title="${escapeHtml(s.trust_error)}">untrusted</span> <span class="muted small">${escapeHtml(s.trust_error)}</span>`
+    : '<span class="pill ok">ok</span>';
+  rows.push(`<div class="sd-row"><span class="sd-k">Trust</span><span class="sd-v">${trust}</span></div>`);
+
+  el.innerHTML = `<div class="sd-title">${escapeHtml(s.host)}:${s.port}</div>` + rows.join('');
+  el.hidden = false;
+}
+
 let isAdmin = false;
 let currentItems = [];
 
@@ -188,6 +224,7 @@ $('scanForm').addEventListener('submit', async (e) => {
   const target = $('scanTarget').value.trim();
   const name = $('scanName').value.trim();
   const status = $('scanStatus');
+  $('scanDetail').hidden = true;
   status.hidden = false;
   status.className = 'status';
   status.textContent = `Scanning ${target}…`;
@@ -197,6 +234,7 @@ $('scanForm').addEventListener('submit', async (e) => {
     if (res.ok) {
       status.className = 'status ok';
       status.textContent = `Saved: expires ${fmtDate(data.scan.not_after)}${data.scan.trust_error ? ' (untrusted)' : ''}`;
+      renderScanDetail(data.scan);
       $('scanTarget').value = '';
       $('scanName').value = '';
       loadCerts();
