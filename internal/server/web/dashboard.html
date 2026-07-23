@@ -48,7 +48,7 @@
               <option value="api-key">API key</option>
               <option value="subscription">Subscription</option>
               <option value="domain">Domain</option>
-              <option value="service">Service</option>
+              <option value="service">Service/Contract</option>
               <option value="other">Other</option>
             </select>
           </label>
@@ -68,15 +68,16 @@
       <div class="cal-head">
         <h2>Calendar</h2>
         <div class="cal-nav">
-          <button id="calPrev" class="btn ghost small" title="Previous month">‹</button>
+          <button id="calYearBtn" class="btn ghost small" title="Back to year" hidden>◱ Year</button>
+          <button id="calPrev" class="btn ghost small" title="Previous">‹</button>
           <span id="calLabel" class="cal-label"></span>
-          <button id="calNext" class="btn ghost small" title="Next month">›</button>
+          <button id="calNext" class="btn ghost small" title="Next">›</button>
         </div>
       </div>
-      <div class="cal-weekdays">
+      <div id="calWeekdays" class="cal-weekdays" hidden>
         <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
       </div>
-      <div id="calGrid" class="cal-grid"></div>
+      <div id="calGrid" class="cal-year"></div>
     </div>
 
     <div class="card" id="notifyCard">

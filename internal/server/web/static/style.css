@@ -24,6 +24,9 @@
 }
 
 * { box-sizing: border-box; }
+/* Ensure the `hidden` attribute wins even on elements we give a display value
+   (e.g. display:grid), which would otherwise override it. */
+[hidden] { display: none !important; }
 body {
   margin: 0;
   font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -76,6 +79,11 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .row input { flex: 1; }
 .stack { display: grid; gap: .7rem; margin-top: .8rem; }
 .stack label { display: grid; gap: .3rem; font-size: .9rem; }
+/* Match the Type <select> to the text/date inputs in the same form. */
+.stack select {
+  width: 100%; padding: .55rem .7rem; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit;
+}
 
 .add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
 @media (max-width: 720px) { .add-grid { grid-template-columns: 1fr; } }
@@ -138,6 +146,26 @@ table.certs th { color: var(--muted); font-weight: 600; }
 .cal-ev.urgent { background: rgba(220,38,38,.16); color: var(--urgent); }
 .cal-more { font-size: .7rem; color: var(--muted); }
 @media (max-width: 620px) { .cal-cell { min-height: 56px; } .cal-ev { font-size: .65rem; } }
+
+/* calendar — year overview */
+.cal-year { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+@media (max-width: 900px) { .cal-year { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 620px) { .cal-year { grid-template-columns: repeat(2, 1fr); } }
+.mini-month { border: 1px solid var(--border); border-radius: 8px; padding: 8px 8px 10px;
+  cursor: pointer; transition: border-color .15s, background .15s; }
+.mini-month:hover { border-color: var(--primary); background: rgba(37,99,235,.05); }
+.mini-title { font-size: .82rem; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: .4rem; }
+.mini-count { background: var(--primary); color: #fff; border-radius: 999px; font-size: .65rem; padding: 0 .4rem; font-weight: 600; }
+.mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.mini-cell { font-size: .6rem; text-align: center; color: var(--muted); aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center; border-radius: 3px; }
+.mini-cell.empty { visibility: hidden; }
+.mini-cell.has { color: var(--ink); font-weight: 700; }
+.mini-cell.has.ok { background: rgba(22,163,74,.28); }
+.mini-cell.has.notice { background: rgba(202,138,4,.32); }
+.mini-cell.has.warn { background: rgba(234,88,12,.32); }
+.mini-cell.has.urgent { background: rgba(220,38,38,.32); }
+.mini-cell.today { outline: 1.5px solid var(--primary); outline-offset: -1px; }
 
 .sub-input { width: 100%; margin-top: .6rem; }
 .status { margin: .6rem 0 0; font-size: .9rem; }

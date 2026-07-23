@@ -38,10 +38,8 @@ func buildICS(certs []*model.Cert, now time.Time) string {
 		day := c.ExpiresAt.UTC().Format("20060102")
 		next := c.ExpiresAt.UTC().AddDate(0, 0, 1).Format("20060102")
 
+		// Use the entry's (friendly) name only — no type prefix.
 		summary := icsEscape(c.Name) + " expires"
-		if c.Category != "" {
-			summary = "[" + icsEscape(c.Category) + "] " + summary
-		}
 		desc := "Tracked by certguard."
 		if c.Host != "" {
 			desc = icsEscape(fmt.Sprintf("%s:%d", c.Host, c.Port)) + " — " + desc

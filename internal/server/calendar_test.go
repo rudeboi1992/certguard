@@ -26,8 +26,11 @@ func TestBuildICS(t *testing.T) {
 	if !strings.Contains(out, "DTSTART;VALUE=DATE:20260915") {
 		t.Error("expected all-day event on the expiry date")
 	}
-	if !strings.Contains(out, "SUMMARY:[service] Karakeep expires") {
-		t.Error("expected category-prefixed summary")
+	if !strings.Contains(out, "SUMMARY:Karakeep expires") {
+		t.Error("expected friendly-name summary with no type prefix")
+	}
+	if strings.Contains(out, "[service]") {
+		t.Error("type prefix should not appear in the calendar summary")
 	}
 	// comma in a name must be escaped per RFC 5545
 	if !strings.Contains(out, `API key\, prod`) {

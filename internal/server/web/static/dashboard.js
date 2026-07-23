@@ -54,7 +54,7 @@ let currentItems = [];
 const CATEGORIES = [
   ['certificate', 'Certificate'], ['api-key', 'API key'],
   ['subscription', 'Subscription'], ['domain', 'Domain'],
-  ['service', 'Service'], ['other', 'Other'],
+  ['service', 'Service/Contract'], ['other', 'Other'],
 ];
 function categoryLabel(v) {
   const f = CATEGORIES.find((c) => c[0] === v);
@@ -307,9 +307,10 @@ async function deleteChannel(id) {
   else toast('Remove failed', true);
 }
 
-// --- calendar month view ---
-// Bucket by the UTC date of expiry so it matches the dates shown in the table
-// (avoids off-by-one-day shifts in timezones behind UTC).
+// --- calendar (year overview → click a month to zoom in) ---
+// Dates are bucketed by the UTC day of expiry so the calendar matches the dates
+// shown in the table (avoids off-by-one shifts in timezones behind UTC).
+let calView = 'year'; // 'year' | 'month'
 let calYear, calMonth;
 (function initCal() {
   const n = new Date();
@@ -321,24 +322,79 @@ function utcKey(iso) {
   const d = new Date(iso);
   return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
 }
-
-function renderCalendar() {
-  const grid = $('calGrid');
-  if (!grid) return;
-  grid.innerHTML = '';
-  $('calLabel').textContent = new Date(Date.UTC(calYear, calMonth, 1))
-    .toLocaleString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
-
+function bucketByDay() {
   const byDay = {};
   for (const it of currentItems) {
     if (!it.cert.expires_at) continue;
     (byDay[utcKey(it.cert.expires_at)] ||= []).push(it);
   }
+  return byDay;
+}
+const LEVEL_RANK = { urgent: 0, warn: 1, notice: 2, ok: 3 };
+function mostUrgent(list) {
+  return list.map((x) => expiryLevel(x.days_remaining))
+    .sort((a, b) => LEVEL_RANK[a] - LEVEL_RANK[b])[0];
+}
+function todayKey() {
+  const n = new Date();
+  return `${n.getUTCFullYear()}-${n.getUTCMonth()}-${n.getUTCDate()}`;
+}
 
+function renderCalendar() {
+  if (!$('calGrid')) return;
+  if (calView === 'year') renderYear();
+  else renderMonth();
+}
+
+function renderYear() {
+  const grid = $('calGrid');
+  grid.className = 'cal-year';
+  grid.innerHTML = '';
+  $('calWeekdays').hidden = true;
+  $('calYearBtn').hidden = true;
+  $('calLabel').textContent = String(calYear);
+
+  const byDay = bucketByDay();
+  const tKey = todayKey();
+  for (let m = 0; m < 12; m++) {
+    const mini = document.createElement('div');
+    mini.className = 'mini-month';
+    const title = new Date(Date.UTC(calYear, m, 1))
+      .toLocaleString(undefined, { month: 'short', timeZone: 'UTC' });
+    const firstDow = new Date(Date.UTC(calYear, m, 1)).getUTCDay();
+    const dim = new Date(Date.UTC(calYear, m + 1, 0)).getUTCDate();
+    let cells = '';
+    let count = 0;
+    for (let i = 0; i < firstDow; i++) cells += '<span class="mini-cell empty"></span>';
+    for (let d = 1; d <= dim; d++) {
+      const key = `${calYear}-${m}-${d}`;
+      const list = byDay[key];
+      let cls = 'mini-cell';
+      if (list) { count += list.length; cls += ' has ' + mostUrgent(list); }
+      if (key === tKey) cls += ' today';
+      cells += `<span class="${cls}">${d}</span>`;
+    }
+    mini.innerHTML =
+      `<div class="mini-title">${title}${count ? ` <span class="mini-count">${count}</span>` : ''}</div>` +
+      `<div class="mini-grid">${cells}</div>`;
+    mini.addEventListener('click', () => { calView = 'month'; calMonth = m; renderCalendar(); });
+    grid.appendChild(mini);
+  }
+}
+
+function renderMonth() {
+  const grid = $('calGrid');
+  grid.className = 'cal-grid';
+  grid.innerHTML = '';
+  $('calWeekdays').hidden = false;
+  $('calYearBtn').hidden = false;
+  $('calLabel').textContent = new Date(Date.UTC(calYear, calMonth, 1))
+    .toLocaleString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+  const byDay = bucketByDay();
   const firstDow = new Date(Date.UTC(calYear, calMonth, 1)).getUTCDay();
   const daysInMonth = new Date(Date.UTC(calYear, calMonth + 1, 0)).getUTCDate();
-  const now = new Date();
-  const todayKey = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
+  const tKey = todayKey();
 
   for (let i = 0; i < firstDow; i++) {
     const c = document.createElement('div');
@@ -348,7 +404,7 @@ function renderCalendar() {
   for (let day = 1; day <= daysInMonth; day++) {
     const key = `${calYear}-${calMonth}-${day}`;
     const cell = document.createElement('div');
-    cell.className = 'cal-cell' + (key === todayKey ? ' today' : '');
+    cell.className = 'cal-cell' + (key === tKey ? ' today' : '');
     let html = `<div class="cal-day">${day}</div>`;
     const list = byDay[key];
     if (list) {
@@ -366,13 +422,16 @@ function renderCalendar() {
 }
 
 $('calPrev').addEventListener('click', () => {
-  if (--calMonth < 0) { calMonth = 11; calYear--; }
+  if (calView === 'year') calYear--;
+  else if (--calMonth < 0) { calMonth = 11; calYear--; }
   renderCalendar();
 });
 $('calNext').addEventListener('click', () => {
-  if (++calMonth > 11) { calMonth = 0; calYear++; }
+  if (calView === 'year') calYear++;
+  else if (++calMonth > 11) { calMonth = 0; calYear++; }
   renderCalendar();
 });
+$('calYearBtn').addEventListener('click', () => { calView = 'year'; renderCalendar(); });
 
 // --- logout ---
 $('logout').addEventListener('click', async () => {
