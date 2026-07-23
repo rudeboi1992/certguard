@@ -433,6 +433,24 @@ $('calNext').addEventListener('click', () => {
 });
 $('calYearBtn').addEventListener('click', () => { calView = 'year'; renderCalendar(); });
 
+// --- light / dark theme toggle ---
+function effectiveTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+function updateThemeIcon() {
+  // Show the mode you'd switch TO.
+  $('themeToggle').textContent = effectiveTheme() === 'dark' ? '☀️' : '🌙';
+}
+$('themeToggle').addEventListener('click', () => {
+  const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('certguard-theme', next); } catch (e) {}
+  updateThemeIcon();
+});
+updateThemeIcon();
+
 // --- logout ---
 $('logout').addEventListener('click', async () => {
   await api('POST', '/api/v1/auth/logout');

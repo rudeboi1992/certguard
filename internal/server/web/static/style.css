@@ -12,8 +12,10 @@
   --urgent: #dc2626;
   --radius: 10px;
 }
+/* Dark palette, shared by the OS-preference default (when the user hasn't
+   chosen) and by an explicit data-theme="dark" choice. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #0f1216;
     --card: #171b21;
     --ink: #e6e9ee;
@@ -22,6 +24,17 @@
     --primary: #3b82f6;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #0f1216;
+  --card: #171b21;
+  --ink: #e6e9ee;
+  --muted: #9aa4b2;
+  --border: #262c34;
+  --primary: #3b82f6;
+}
+/* data-theme="light" needs no block — it simply keeps the :root light values,
+   overriding the OS-dark default because the media query above excludes any
+   element that has an explicit data-theme. */
 
 * { box-sizing: border-box; }
 /* Ensure the `hidden` attribute wins even on elements we give a display value
