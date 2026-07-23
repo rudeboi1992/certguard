@@ -158,11 +158,11 @@ func (s *Store) UpsertScan(name string, res *scanner.Result) (*model.Cert, error
 		name = res.Host
 	}
 	id, err := s.insertReturningID(`INSERT INTO certs
-		(name, kind, host, port, server_name, subject, issuer, serial, sha256,
+		(name, kind, category, host, port, server_name, subject, issuer, serial, sha256,
 		 not_before, expires_at, dns_names, key_type, sig_alg,
 		 auto_rescan, last_scanned_at, last_error, active, created_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		name, string(model.KindEndpoint), res.Host, res.Port, res.ServerName,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		name, string(model.KindEndpoint), "certificate", res.Host, res.Port, res.ServerName,
 		res.Subject, res.Issuer, res.Serial, res.SHA256,
 		res.NotBefore.Format(rfc3339), res.NotAfter.Format(rfc3339),
 		string(dns), res.KeyType, res.SigAlg,
@@ -183,11 +183,11 @@ func (s *Store) AddCert(c *model.Cert) (*model.Cert, error) {
 	dns, _ := json.Marshal(c.DNSNames)
 	now := time.Now().UTC()
 	id, err := s.insertReturningID(`INSERT INTO certs
-		(name, kind, host, port, server_name, subject, issuer, serial, sha256,
+		(name, kind, category, host, port, server_name, subject, issuer, serial, sha256,
 		 not_before, expires_at, dns_names, key_type, sig_alg,
 		 auto_rescan, last_error, notes, active, created_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		c.Name, string(c.Kind), c.Host, c.Port, c.ServerName,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		c.Name, string(c.Kind), c.Category, c.Host, c.Port, c.ServerName,
 		c.Subject, c.Issuer, c.Serial, c.SHA256,
 		timeOrEmpty(c.NotBefore), c.ExpiresAt.UTC().Format(rfc3339),
 		string(dns), c.KeyType, c.SigAlg,
@@ -196,6 +196,20 @@ func (s *Store) AddCert(c *model.Cert) (*model.Cert, error) {
 		return nil, err
 	}
 	return s.GetByID(id)
+}
+
+// UpdateEntry renames/re-labels an entry. Empty strings clear the field, so the
+// caller should pass the current value for fields it doesn't intend to change.
+func (s *Store) UpdateEntry(id int64, name, category, notes string) error {
+	res, err := s.exec(`UPDATE certs SET name=?, category=?, notes=? WHERE id=? AND active=1`,
+		name, category, notes, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // SoftDelete marks a cert inactive so it drops out of listings and scans.
@@ -257,7 +271,7 @@ func (s *Store) List() ([]*model.Cert, error) {
 	return out, rows.Err()
 }
 
-const selectCols = `SELECT id, name, kind, host, port, server_name, subject, issuer,
+const selectCols = `SELECT id, name, kind, category, host, port, server_name, subject, issuer,
 	serial, sha256, not_before, expires_at, dns_names, key_type, sig_alg,
 	auto_rescan, last_scanned_at, last_error, notes, active, created_at,
 	last_notified_threshold, last_notified_on FROM certs`
@@ -278,7 +292,7 @@ func scanRowValues(r rowScanner) (*model.Cert, error) {
 		lastNotifiedThreshold int
 		lastNotifiedOn sql.NullString
 	)
-	err := r.Scan(&c.ID, &c.Name, &c.Kind, &c.Host, &c.Port, &c.ServerName,
+	err := r.Scan(&c.ID, &c.Name, &c.Kind, &c.Category, &c.Host, &c.Port, &c.ServerName,
 		&c.Subject, &c.Issuer, &c.Serial, &c.SHA256, &notBefore, &expiresAt,
 		&dnsJSON, &c.KeyType, &c.SigAlg, &autoRescan, &lastScanned, &c.LastError,
 		&c.Notes, &active, &createdAt, &lastNotifiedThreshold, &lastNotifiedOn)

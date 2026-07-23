@@ -21,17 +21,18 @@
     <div class="add-grid" id="adminControls" hidden>
       <div class="card">
         <h2>Scan a live endpoint</h2>
-        <p class="muted">Connect over TLS and read the certificate automatically.</p>
+        <p class="muted">Connect over TLS and read a certificate automatically.</p>
         <form id="scanForm" class="row">
           <input type="text" id="scanTarget" placeholder="example.com or host:8443" required>
           <button type="submit" class="btn primary">Scan</button>
         </form>
-        <input type="text" id="scanSni" class="sni-input" placeholder="Server name (optional) — e.g. watarr.home, if scanning by IP">
+        <input type="text" id="scanName" class="sub-input" placeholder="Name (optional) — e.g. Karakeep">
         <p id="scanStatus" class="status" hidden></p>
       </div>
 
       <div class="card">
-        <h2>Add from file or manually</h2>
+        <h2>Add an entry</h2>
+        <p class="muted small">A certificate, API key, subscription, domain — anything with an expiry date.</p>
         <div id="dropZone" class="drop-zone">
           <p>Drag &amp; drop a <code>.pem .cer .crt .p12 .pfx</code> file</p>
           <p class="muted small">Parsed in your browser — the file never leaves this page.</p>
@@ -41,6 +42,16 @@
           <label>Name
             <input type="text" id="certName" required>
           </label>
+          <label>Type
+            <select id="certCategory">
+              <option value="certificate">Certificate</option>
+              <option value="api-key">API key</option>
+              <option value="subscription">Subscription</option>
+              <option value="domain">Domain</option>
+              <option value="service">Service</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
           <label>Expiry date
             <input type="date" id="certExpiry" required>
           </label>
@@ -48,14 +59,29 @@
           <input type="hidden" id="certSubject">
           <input type="hidden" id="certIssuer">
           <input type="hidden" id="certSha256">
-          <button type="submit" class="btn primary">Add certificate</button>
+          <button type="submit" class="btn primary">Add entry</button>
         </form>
       </div>
     </div>
 
+    <div class="card">
+      <div class="cal-head">
+        <h2>Calendar</h2>
+        <div class="cal-nav">
+          <button id="calPrev" class="btn ghost small" title="Previous month">‹</button>
+          <span id="calLabel" class="cal-label"></span>
+          <button id="calNext" class="btn ghost small" title="Next month">›</button>
+        </div>
+      </div>
+      <div class="cal-weekdays">
+        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+      </div>
+      <div id="calGrid" class="cal-grid"></div>
+    </div>
+
     <div class="card" id="notifyCard">
       <h2>Notifications</h2>
-      <p class="muted">Get alerted as your certificates approach expiry (at 30, 7, and 3 days). Channels are yours; alerts cover the whole shared inventory.</p>
+      <p class="muted">Get alerted as your entries approach expiry (at 30, 7, and 3 days). Channels are yours; alerts cover the whole shared inventory.</p>
       <form id="channelForm" class="channel-row">
         <select id="chType">
           <option value="email">Email</option>
@@ -74,17 +100,20 @@
     </div>
 
     <div class="card">
-      <h2>Tracked certificates</h2>
+      <div class="cal-head">
+        <h2>Tracked expirations</h2>
+        <a id="downloadCal" class="btn ghost small" href="/api/v1/calendar.ics">📅 Download calendar</a>
+      </div>
       <table class="certs">
         <thead>
           <tr>
-            <th>Name</th><th>Source</th><th>Expires</th><th>Remaining</th>
+            <th>Name</th><th>Type</th><th>Expires</th><th>Remaining</th>
             <th>Trust</th><th></th>
           </tr>
         </thead>
         <tbody id="certRows"></tbody>
       </table>
-      <p id="empty" class="muted" hidden>No certificates tracked yet.</p>
+      <p id="empty" class="muted" hidden>Nothing tracked yet.</p>
     </div>
   </main>
 

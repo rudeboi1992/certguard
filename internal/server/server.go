@@ -52,6 +52,8 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/v1/auth/logout", s.authed(s.handleLogout))
 	s.mux.Handle("GET /api/v1/auth/whoami", s.authed(s.handleWhoami))
 	s.mux.Handle("GET /api/v1/certs", s.authed(s.handleListCerts))
+	s.mux.Handle("GET /api/v1/calendar.ics", s.authed(s.handleCalendar))
+	s.mux.Handle("GET /api/v1/certs/{id}/calendar.ics", s.authed(s.handleCalendarOne))
 
 	// Per-user notification channels (any authenticated user manages their own).
 	s.mux.Handle("GET /api/v1/channels", s.authed(s.handleListChannels))
@@ -62,6 +64,7 @@ func (s *Server) routes() {
 	// Admin-only (writes).
 	s.mux.Handle("POST /api/v1/scan", s.adminOnly(s.handleScan))
 	s.mux.Handle("POST /api/v1/certs", s.adminOnly(s.handleCreateCert))
+	s.mux.Handle("PATCH /api/v1/certs/{id}", s.adminOnly(s.handleUpdateCert))
 	s.mux.Handle("DELETE /api/v1/certs/{id}", s.adminOnly(s.handleDeleteCert))
 
 	// Browser UI (static assets + pages).
@@ -248,6 +251,7 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 type createCertRequest struct {
 	Name      string   `json:"name"`
 	Kind      string   `json:"kind"`       // "manual" (default) or "file"
+	Category  string   `json:"category"`   // certificate | api-key | subscription | ...
 	ExpiresAt string   `json:"expires_at"` // "YYYY-MM-DD" or RFC3339
 	Notes     string   `json:"notes"`
 	Subject   string   `json:"subject"`
@@ -280,7 +284,7 @@ func (s *Server) handleCreateCert(w http.ResponseWriter, r *http.Request) {
 		kind = model.KindManual
 	}
 	c := &model.Cert{
-		Name: req.Name, Kind: kind, ExpiresAt: expires, Notes: req.Notes,
+		Name: req.Name, Kind: kind, Category: req.Category, ExpiresAt: expires, Notes: req.Notes,
 		Subject: req.Subject, Issuer: req.Issuer, SHA256: req.SHA256,
 		KeyType: req.KeyType, DNSNames: req.DNSNames,
 	}
@@ -293,6 +297,65 @@ func (s *Server) handleCreateCert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, stored)
+}
+
+type updateCertRequest struct {
+	Name     string `json:"name"`
+	Category string `json:"category"`
+	Notes    string `json:"notes"`
+}
+
+// handleUpdateCert renames / re-labels an existing entry.
+func (s *Server) handleUpdateCert(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var req updateCertRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if req.Name == "" {
+		writeErr(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if err := s.store.UpdateEntry(id, req.Name, req.Category, req.Notes); err != nil {
+		if err == store.ErrNotFound {
+			writeErr(w, http.StatusNotFound, "entry not found")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	updated, _ := s.store.GetByID(id)
+	writeJSON(w, http.StatusOK, updated)
+}
+
+// handleCalendar returns all active entries as an .ics calendar file.
+func (s *Server) handleCalendar(w http.ResponseWriter, r *http.Request) {
+	certs, err := s.store.List()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeICS(w, "certguard.ics", certs)
+}
+
+// handleCalendarOne returns a single entry as an .ics file.
+func (s *Server) handleCalendarOne(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	c, err := s.store.GetByID(id)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "entry not found")
+		return
+	}
+	writeICS(w, "certguard-"+strconv.FormatInt(id, 10)+".ics", []*model.Cert{c})
 }
 
 func (s *Server) handleDeleteCert(w http.ResponseWriter, r *http.Request) {

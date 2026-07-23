@@ -22,6 +22,9 @@ type Cert struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
 	Kind Kind   `json:"kind"`
+	// Category is a free "type" label — certificate, api-key, subscription,
+	// domain, service, etc. Blank for older/unlabeled entries.
+	Category string `json:"category"`
 
 	// Endpoint coordinates (KindEndpoint only).
 	Host       string `json:"host,omitempty"`

@@ -49,6 +49,21 @@ function fmtRemaining(days) {
 }
 
 let isAdmin = false;
+let currentItems = [];
+
+const CATEGORIES = [
+  ['certificate', 'Certificate'], ['api-key', 'API key'],
+  ['subscription', 'Subscription'], ['domain', 'Domain'],
+  ['service', 'Service'], ['other', 'Other'],
+];
+function categoryLabel(v) {
+  const f = CATEGORIES.find((c) => c[0] === v);
+  return f ? f[1] : (v || '');
+}
+function categoryOptions(selected) {
+  return CATEGORIES.map(([v, l]) =>
+    `<option value="${v}"${v === selected ? ' selected' : ''}>${l}</option>`).join('');
+}
 
 async function loadWhoami() {
   const res = await api('GET', '/api/v1/auth/whoami');
@@ -61,12 +76,12 @@ async function loadWhoami() {
 
 async function loadCerts() {
   const res = await api('GET', '/api/v1/certs');
-  const items = await res.json();
+  currentItems = await res.json();
   const rows = $('certRows');
   rows.innerHTML = '';
 
   let urgent = 0, soon = 0;
-  for (const it of items) {
+  for (const it of currentItems) {
     const c = it.cert;
     const days = it.days_remaining;
     const trusted = !c.last_error;
@@ -74,22 +89,65 @@ async function loadCerts() {
     if (level === 'urgent') urgent++;
     else if (level === 'warn' || level === 'notice') soon++;
 
+    const typeCell = c.category
+      ? `<span class="pill cat">${escapeHtml(categoryLabel(c.category))}</span>`
+      : `<span class="muted small">${c.kind}</span>`;
+    const actions = [
+      `<a class="btn ghost small" href="/api/v1/certs/${c.id}/calendar.ics" title="Add to calendar">📅</a>`,
+      isAdmin ? `<button class="btn ghost small" data-edit="${c.id}">Edit</button>` : '',
+      isAdmin ? `<button class="btn link" data-del="${c.id}">Delete</button>` : '',
+    ].join(' ');
+
     const tr = document.createElement('tr');
+    tr.dataset.row = c.id;
     tr.innerHTML = `
       <td><strong>${escapeHtml(c.name)}</strong>${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}</td>
-      <td><span class="muted small">${c.kind}</span></td>
+      <td>${typeCell}</td>
       <td>${fmtDate(c.expires_at)}</td>
       <td><span class="pill ${level}">${fmtRemaining(days)}</span></td>
       <td>${trusted ? '<span class="pill ok">ok</span>' : `<span class="pill untrusted" title="${escapeHtml(c.last_error)}">untrusted</span>`}</td>
-      <td>${isAdmin ? `<button class="btn link" data-del="${c.id}">Delete</button>` : ''}</td>`;
+      <td class="actions">${actions}</td>`;
     rows.appendChild(tr);
   }
-  $('empty').hidden = items.length !== 0;
+  $('empty').hidden = currentItems.length !== 0;
 
-  renderSummary(items.length, soon, urgent);
+  renderSummary(currentItems.length, soon, urgent);
+  renderCalendar();
 
   rows.querySelectorAll('[data-del]').forEach((b) =>
     b.addEventListener('click', () => deleteCert(b.dataset.del)));
+  rows.querySelectorAll('[data-edit]').forEach((b) =>
+    b.addEventListener('click', () => startEdit(b.dataset.edit)));
+}
+
+// Inline rename / re-label a row.
+function startEdit(id) {
+  const it = currentItems.find((x) => String(x.cert.id) === String(id));
+  if (!it) return;
+  const tr = document.querySelector(`tr[data-row="${id}"]`);
+  if (!tr) return;
+  const c = it.cert;
+  tr.innerHTML = `
+    <td colspan="6">
+      <div class="edit-row">
+        <input type="text" class="edit-name" value="${escapeHtml(c.name)}">
+        <select class="edit-cat">${categoryOptions(c.category || 'certificate')}</select>
+        <button class="btn primary small" data-save>Save</button>
+        <button class="btn ghost small" data-cancel>Cancel</button>
+      </div>
+    </td>`;
+  tr.querySelector('[data-save]').addEventListener('click', () => saveEdit(id, tr));
+  tr.querySelector('[data-cancel]').addEventListener('click', () => loadCerts());
+  tr.querySelector('.edit-name').focus();
+}
+
+async function saveEdit(id, tr) {
+  const name = tr.querySelector('.edit-name').value.trim();
+  const category = tr.querySelector('.edit-cat').value;
+  if (!name) { toast('Name is required', true); return; }
+  const res = await api('PATCH', `/api/v1/certs/${id}`, { name, category });
+  if (res.ok) { toast('Saved'); loadCerts(); }
+  else { const d = await res.json().catch(() => ({})); toast(d.error || 'Save failed', true); }
 }
 
 function renderSummary(total, soon, urgent) {
@@ -109,19 +167,19 @@ async function deleteCert(id) {
 $('scanForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const target = $('scanTarget').value.trim();
-  const serverName = $('scanSni').value.trim();
+  const name = $('scanName').value.trim();
   const status = $('scanStatus');
   status.hidden = false;
   status.className = 'status';
   status.textContent = `Scanning ${target}…`;
   try {
-    const res = await api('POST', '/api/v1/scan', { target, server_name: serverName });
+    const res = await api('POST', '/api/v1/scan', { target, name });
     const data = await res.json();
     if (res.ok) {
       status.className = 'status ok';
       status.textContent = `Saved: expires ${fmtDate(data.scan.not_after)}${data.scan.trust_error ? ' (untrusted)' : ''}`;
       $('scanTarget').value = '';
-      $('scanSni').value = '';
+      $('scanName').value = '';
       loadCerts();
     } else {
       status.className = 'status err';
@@ -139,6 +197,7 @@ $('manualForm').addEventListener('submit', async (e) => {
   const body = {
     name: $('certName').value.trim(),
     kind: $('certKind').value,
+    category: $('certCategory').value,
     expires_at: $('certExpiry').value, // YYYY-MM-DD
     subject: $('certSubject').value,
     issuer: $('certIssuer').value,
@@ -146,7 +205,7 @@ $('manualForm').addEventListener('submit', async (e) => {
   };
   const res = await api('POST', '/api/v1/certs', body);
   if (res.status === 201) {
-    toast('Certificate added');
+    toast('Entry added');
     e.target.reset();
     $('certKind').value = 'manual';
     $('dropZone').classList.remove('parsed');
@@ -180,6 +239,7 @@ async function handleFile(file) {
     $('certIssuer').value = meta.issuer || '';
     $('certSha256').value = meta.sha256 || '';
     $('certKind').value = 'file';
+    $('certCategory').value = 'certificate';
     dz.classList.add('parsed');
     toast(`Parsed ${meta.name} — review and click Add`);
   } catch (err) {
@@ -246,6 +306,73 @@ async function deleteChannel(id) {
   if (res.status === 204) { toast('Channel removed'); loadChannels(); }
   else toast('Remove failed', true);
 }
+
+// --- calendar month view ---
+// Bucket by the UTC date of expiry so it matches the dates shown in the table
+// (avoids off-by-one-day shifts in timezones behind UTC).
+let calYear, calMonth;
+(function initCal() {
+  const n = new Date();
+  calYear = n.getUTCFullYear();
+  calMonth = n.getUTCMonth();
+})();
+
+function utcKey(iso) {
+  const d = new Date(iso);
+  return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+}
+
+function renderCalendar() {
+  const grid = $('calGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  $('calLabel').textContent = new Date(Date.UTC(calYear, calMonth, 1))
+    .toLocaleString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+  const byDay = {};
+  for (const it of currentItems) {
+    if (!it.cert.expires_at) continue;
+    (byDay[utcKey(it.cert.expires_at)] ||= []).push(it);
+  }
+
+  const firstDow = new Date(Date.UTC(calYear, calMonth, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(calYear, calMonth + 1, 0)).getUTCDate();
+  const now = new Date();
+  const todayKey = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
+
+  for (let i = 0; i < firstDow; i++) {
+    const c = document.createElement('div');
+    c.className = 'cal-cell empty';
+    grid.appendChild(c);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${calYear}-${calMonth}-${day}`;
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell' + (key === todayKey ? ' today' : '');
+    let html = `<div class="cal-day">${day}</div>`;
+    const list = byDay[key];
+    if (list) {
+      html += '<div class="cal-events">';
+      for (const it of list.slice(0, 3)) {
+        const lvl = expiryLevel(it.days_remaining);
+        html += `<div class="cal-ev ${lvl}" title="${escapeHtml(it.cert.name)} — ${fmtRemaining(it.days_remaining)}">${escapeHtml(it.cert.name)}</div>`;
+      }
+      if (list.length > 3) html += `<div class="cal-more">+${list.length - 3} more</div>`;
+      html += '</div>';
+    }
+    cell.innerHTML = html;
+    grid.appendChild(cell);
+  }
+}
+
+$('calPrev').addEventListener('click', () => {
+  if (--calMonth < 0) { calMonth = 11; calYear--; }
+  renderCalendar();
+});
+$('calNext').addEventListener('click', () => {
+  if (++calMonth > 11) { calMonth = 0; calYear++; }
+  renderCalendar();
+});
 
 // --- logout ---
 $('logout').addEventListener('click', async () => {
