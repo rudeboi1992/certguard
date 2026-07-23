@@ -109,17 +109,19 @@ async function deleteCert(id) {
 $('scanForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const target = $('scanTarget').value.trim();
+  const serverName = $('scanSni').value.trim();
   const status = $('scanStatus');
   status.hidden = false;
   status.className = 'status';
   status.textContent = `Scanning ${target}…`;
   try {
-    const res = await api('POST', '/api/v1/scan', { target });
+    const res = await api('POST', '/api/v1/scan', { target, server_name: serverName });
     const data = await res.json();
     if (res.ok) {
       status.className = 'status ok';
       status.textContent = `Saved: expires ${fmtDate(data.scan.not_after)}${data.scan.trust_error ? ' (untrusted)' : ''}`;
       $('scanTarget').value = '';
+      $('scanSni').value = '';
       loadCerts();
     } else {
       status.className = 'status err';

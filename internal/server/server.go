@@ -202,7 +202,11 @@ func (s *Server) handleListCerts(w http.ResponseWriter, r *http.Request) {
 type scanRequest struct {
 	Target string `json:"target"` // "host", "host:port", or URL
 	Name   string `json:"name"`
-	DryRun bool   `json:"dry_run"` // scan but do not persist
+	// ServerName overrides the SNI hostname sent in the handshake. Useful when
+	// scanning a bare IP whose server routes by hostname (reverse proxies):
+	// dial the IP but present this name. Empty means use the dialed host.
+	ServerName string `json:"server_name"`
+	DryRun     bool   `json:"dry_run"` // scan but do not persist
 }
 
 func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
@@ -220,7 +224,10 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ScanTimeout+2*time.Second)
 	defer cancel()
 
-	res, err := scanner.Scan(ctx, host, port, scanner.Options{Timeout: s.cfg.ScanTimeout})
+	res, err := scanner.Scan(ctx, host, port, scanner.Options{
+		Timeout:    s.cfg.ScanTimeout,
+		ServerName: req.ServerName,
+	})
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
