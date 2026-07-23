@@ -141,6 +141,15 @@ table.certs th { color: var(--muted); font-weight: 600; }
 .pill.untrusted { background: rgba(220,38,38,.15); color: var(--urgent); }
 .pill.cat { background: rgba(37,99,235,.14); color: var(--primary); }
 
+/* expandable "covers N domains" list on a tracked entry */
+.cover-toggle { background: none; border: none; padding: 0; margin-top: .2rem;
+  color: var(--primary); font: inherit; font-size: .78rem; cursor: pointer; }
+.cover-toggle:hover { text-decoration: underline; }
+.cover-row td { background: rgba(127,127,127,.05); padding: .5rem .5rem .7rem; }
+.cover-list { display: flex; flex-wrap: wrap; gap: .35rem; }
+.cover-chip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem;
+  background: rgba(127,127,127,.14); padding: .18rem .5rem; border-radius: 5px; word-break: break-all; }
+
 /* inline row editing */
 .edit-row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
 .edit-row .edit-name { flex: 1; min-width: 180px; padding: .45rem .6rem;

@@ -195,6 +195,10 @@ async function loadCerts() {
     const typeCell = c.category
       ? `<span class="pill" style="background:${hexA(catCol, 0.15)};color:${catCol}">${escapeHtml(categoryLabel(c.category))}</span>`
       : `<span class="muted small">${c.kind}</span>`;
+    const sans = c.dns_names || [];
+    const coverToggle = sans.length > 1
+      ? `<br><button class="cover-toggle" data-cover="${c.id}" aria-expanded="false">▸ covers ${sans.length} domains</button>`
+      : '';
     const actions = [
       `<a class="btn ghost small" href="/api/v1/certs/${c.id}/calendar.ics" title="Add to calendar">📅</a>`,
       isAdmin ? `<button class="btn ghost small" data-edit="${c.id}">Edit</button>` : '',
@@ -204,7 +208,7 @@ async function loadCerts() {
     const tr = document.createElement('tr');
     tr.dataset.row = c.id;
     tr.innerHTML = `
-      <td><strong>${escapeHtml(c.name)}</strong>${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}</td>
+      <td><strong>${escapeHtml(c.name)}</strong>${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}${coverToggle}</td>
       <td>${typeCell}</td>
       <td>${fmtDate(c.expires_at)}</td>
       <td><span class="pill ${level}">${fmtRemaining(days)}</span></td>
@@ -221,6 +225,31 @@ async function loadCerts() {
     b.addEventListener('click', () => deleteCert(b.dataset.del)));
   rows.querySelectorAll('[data-edit]').forEach((b) =>
     b.addEventListener('click', () => startEdit(b.dataset.edit)));
+  rows.querySelectorAll('[data-cover]').forEach((b) =>
+    b.addEventListener('click', () => toggleCover(b)));
+}
+
+// Expand/collapse the full list of domains (SANs) a cert covers.
+function toggleCover(btn) {
+  const id = btn.dataset.cover;
+  const it = currentItems.find((x) => String(x.cert.id) === String(id));
+  const sans = (it && it.cert.dns_names) || [];
+  const tr = document.querySelector(`tr[data-row="${id}"]`);
+  const next = tr && tr.nextElementSibling;
+  if (next && next.classList.contains('cover-row')) {
+    next.remove();
+    btn.setAttribute('aria-expanded', 'false');
+    btn.textContent = `▸ covers ${sans.length} domains`;
+    return;
+  }
+  const cr = document.createElement('tr');
+  cr.className = 'cover-row';
+  cr.innerHTML = `<td colspan="6"><div class="cover-list">${
+    sans.map((s) => `<span class="cover-chip">${escapeHtml(s)}</span>`).join('')
+  }</div></td>`;
+  tr.after(cr);
+  btn.setAttribute('aria-expanded', 'true');
+  btn.textContent = `▾ covers ${sans.length} domains`;
 }
 
 // Inline rename / re-label a row.
