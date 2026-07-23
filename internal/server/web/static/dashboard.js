@@ -182,6 +182,13 @@ async function loadCerts() {
   const rows = $('certRows');
   rows.innerHTML = '';
 
+  // Group entries by fingerprint so we can flag ones that are the same cert.
+  const fpGroups = {};
+  for (const it of currentItems) {
+    const fp = it.cert.sha256;
+    if (fp) (fpGroups[fp] ||= []).push({ id: it.cert.id, name: it.cert.name });
+  }
+
   let urgent = 0, soon = 0;
   for (const it of currentItems) {
     const c = it.cert;
@@ -199,6 +206,14 @@ async function loadCerts() {
     const coverToggle = sans.length > 1
       ? `<br><button class="cover-toggle" data-cover="${c.id}" aria-expanded="false">▸ covers ${sans.length} domains</button>`
       : '';
+    let fpLine = '';
+    if (c.sha256) {
+      const others = (fpGroups[c.sha256] || []).filter((g) => g.id !== c.id).map((g) => g.name);
+      const dup = others.length
+        ? ` <span class="pill dup" title="Same certificate as: ${escapeHtml(others.join(', '))}">duplicate</span>`
+        : '';
+      fpLine = `<br><span class="mono muted small" title="SHA-256: ${escapeHtml(c.sha256)}">${c.sha256.slice(0, 12)}…</span>${dup}`;
+    }
     const actions = [
       `<a class="btn ghost small" href="/api/v1/certs/${c.id}/calendar.ics" title="Add to calendar">📅</a>`,
       isAdmin ? `<button class="btn ghost small" data-edit="${c.id}">Edit</button>` : '',
@@ -208,7 +223,7 @@ async function loadCerts() {
     const tr = document.createElement('tr');
     tr.dataset.row = c.id;
     tr.innerHTML = `
-      <td><strong>${escapeHtml(c.name)}</strong>${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}${coverToggle}</td>
+      <td><strong>${escapeHtml(c.name)}</strong>${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}${fpLine}${coverToggle}</td>
       <td>${typeCell}</td>
       <td>${fmtDate(c.expires_at)}</td>
       <td><span class="pill ${level}">${fmtRemaining(days)}</span></td>
