@@ -47,6 +47,10 @@ func (s *Server) routes() {
 	// Public.
 	s.mux.HandleFunc("GET /healthz", s.handleHealth)
 	s.mux.HandleFunc("POST /api/v1/auth/login", s.handleLogin)
+	// First-run: create the initial admin from the browser, but only while no
+	// users exist. Once one does, setup locks and there is no public sign-up.
+	s.mux.HandleFunc("GET /api/v1/setup/status", s.handleSetupStatus)
+	s.mux.HandleFunc("POST /api/v1/setup", s.handleSetup)
 
 	// Authenticated (any role).
 	s.mux.Handle("POST /api/v1/auth/logout", s.authed(s.handleLogout))
@@ -60,6 +64,11 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/v1/channels", s.authed(s.handleCreateChannel))
 	s.mux.Handle("DELETE /api/v1/channels/{id}", s.authed(s.handleDeleteChannel))
 	s.mux.Handle("POST /api/v1/channels/{id}/test", s.authed(s.handleTestChannel))
+
+	// User management (admin) — so accounts can be created without the CLI.
+	s.mux.Handle("GET /api/v1/users", s.adminOnly(s.handleListUsers))
+	s.mux.Handle("POST /api/v1/users", s.adminOnly(s.handleCreateUser))
+	s.mux.Handle("DELETE /api/v1/users/{id}", s.adminOnly(s.handleDeleteUser))
 
 	// Admin-only (writes).
 	s.mux.Handle("POST /api/v1/scan", s.adminOnly(s.handleScan))
@@ -141,16 +150,22 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
+	if err := s.startSession(w, user); err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not start session")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": user})
+}
 
+// startSession creates a persisted session for user and sets the cookie.
+func (s *Server) startSession(w http.ResponseWriter, user *model.User) error {
 	sid, err := auth.GenerateSession()
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "could not create session")
-		return
+		return err
 	}
 	expires := time.Now().UTC().Add(s.cfg.SessionTTL)
 	if err := s.store.CreateSession(user.ID, auth.HashSecret(sid), expires); err != nil {
-		writeErr(w, http.StatusInternalServerError, "could not persist session")
-		return
+		return err
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookie,
@@ -161,7 +176,122 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Secure:   s.cfg.CookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
+	return nil
+}
+
+// handleSetupStatus reports whether the instance still needs its first account.
+func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
+	n, err := s.store.CountUsers()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"needs_setup": n == 0})
+}
+
+// handleSetup creates the first admin account — only while none exists — and
+// signs them in. Afterwards it is permanently locked (no public registration).
+func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
+	n, err := s.store.CountUsers()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if n > 0 {
+		writeErr(w, http.StatusConflict, "setup already completed — ask an admin to add your account")
+		return
+	}
+	var req loginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if req.Email == "" {
+		writeErr(w, http.StatusBadRequest, "email is required")
+		return
+	}
+	hash, err := auth.HashPassword(req.Password)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error()) // e.g. password too short
+		return
+	}
+	user, err := s.store.CreateUser(req.Email, hash, string(auth.RoleAdmin))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not create account")
+		return
+	}
+	if err := s.startSession(w, user); err != nil {
+		writeErr(w, http.StatusInternalServerError, "account created but session failed; try signing in")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": user})
+}
+
+func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := s.store.ListUsers()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, users) // PasswordHash is json:"-"
+}
+
+type createUserRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Role     string `json:"role"`
+}
+
+func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
+	var req createUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if req.Email == "" {
+		writeErr(w, http.StatusBadRequest, "email is required")
+		return
+	}
+	role := req.Role
+	if role == "" {
+		role = string(auth.RoleViewer)
+	}
+	if !auth.Role(role).Valid() {
+		writeErr(w, http.StatusBadRequest, "role must be admin or viewer")
+		return
+	}
+	hash, err := auth.HashPassword(req.Password)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	user, err := s.store.CreateUser(req.Email, hash, role)
+	if err != nil {
+		writeErr(w, http.StatusConflict, "could not create user (email may already exist)")
+		return
+	}
+	writeJSON(w, http.StatusCreated, user)
+}
+
+func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if me := userFrom(r.Context()); me != nil && me.ID == id {
+		writeErr(w, http.StatusBadRequest, "you can't delete your own account")
+		return
+	}
+	if err := s.store.DeleteUser(id); err != nil {
+		if err == store.ErrNotFound {
+			writeErr(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {

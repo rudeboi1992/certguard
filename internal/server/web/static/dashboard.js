@@ -85,6 +85,7 @@ function renderScanDetail(s) {
 }
 
 let isAdmin = false;
+let currentUserId = null;
 let currentItems = [];
 
 const CATEGORIES = [
@@ -124,8 +125,55 @@ async function loadWhoami() {
   const data = await res.json();
   const u = data.user;
   isAdmin = u && u.role === 'admin';
+  currentUserId = u && u.id;
   $('whoami').textContent = `${u.email} · ${u.role}`;
   $('adminControls').hidden = !isAdmin;
+  $('usersCard').hidden = !isAdmin;
+}
+
+// --- users (admin) ---
+async function loadUsers() {
+  if (!isAdmin) return;
+  const res = await api('GET', '/api/v1/users');
+  const users = await res.json();
+  const rows = $('userRows');
+  rows.innerHTML = '';
+  for (const u of users) {
+    const isSelf = u.id === currentUserId;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(u.email)}${isSelf ? ' <span class="muted small">(you)</span>' : ''}</td>
+      <td><span class="pill ${u.role === 'admin' ? 'notice' : 'ok'}">${u.role}</span></td>
+      <td class="muted small">joined ${fmtDate(u.created_at)}</td>
+      <td class="actions">${isSelf ? '' : `<button class="btn link" data-deluser="${u.id}">Remove</button>`}</td>`;
+    rows.appendChild(tr);
+  }
+  rows.querySelectorAll('[data-deluser]').forEach((b) =>
+    b.addEventListener('click', () => deleteUser(b.dataset.deluser)));
+}
+
+$('userForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const body = {
+    email: $('uEmail').value.trim(),
+    password: $('uPassword').value,
+    role: $('uRole').value,
+  };
+  const res = await api('POST', '/api/v1/users', body);
+  if (res.status === 201) {
+    toast('User added');
+    e.target.reset();
+    loadUsers();
+  } else {
+    const d = await res.json().catch(() => ({}));
+    toast(d.error || 'Could not add user', true);
+  }
+});
+
+async function deleteUser(id) {
+  const res = await api('DELETE', `/api/v1/users/${id}`);
+  if (res.status === 204) { toast('User removed'); loadUsers(); }
+  else { const d = await res.json().catch(() => ({})); toast(d.error || 'Remove failed', true); }
 }
 
 async function loadCerts() {
@@ -524,4 +572,4 @@ function escapeHtml(s) {
 }
 
 // initial load
-loadWhoami().then(() => { loadCerts(); loadChannels(); }).catch(() => {});
+loadWhoami().then(() => { loadCerts(); loadChannels(); loadUsers(); }).catch(() => {});

@@ -13,14 +13,15 @@
 <body class="centered">
   <form id="loginForm" class="card login-card" autocomplete="on">
     <h1 class="brand">certguard</h1>
-    <p class="muted">Active TLS certificate monitor</p>
+    <p class="muted" id="loginSubtitle">Active TLS certificate monitor</p>
     <label>Email
       <input type="email" name="email" id="email" required autofocus>
     </label>
     <label>Password
       <input type="password" name="password" id="password" required>
     </label>
-    <button type="submit" class="btn primary">Sign in</button>
+    <button type="submit" class="btn primary" id="loginBtn">Sign in</button>
+    <p id="hint" class="muted small" hidden></p>
     <p id="error" class="error" hidden></p>
   </form>
   <script src="/static/app.js"></script>

@@ -59,6 +59,18 @@ func (s *Store) ListUsers() ([]*model.User, error) {
 	return out, rows.Err()
 }
 
+// DeleteUser removes a user; their sessions, tokens, and channels cascade.
+func (s *Store) DeleteUser(id int64) error {
+	res, err := s.exec(`DELETE FROM users WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func scanUser(r rowScanner) (*model.User, error) {
 	var u model.User
 	var createdAt string

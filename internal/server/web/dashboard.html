@@ -109,6 +109,23 @@
       <p id="noChannels" class="muted small" hidden>No channels yet — add one above.</p>
     </div>
 
+    <div class="card" id="usersCard" hidden>
+      <h2>Users</h2>
+      <p class="muted">People who can sign in. Accounts are created here — there is no public sign-up. Admins can manage everything; viewers are read-only.</p>
+      <form id="userForm" class="channel-row">
+        <input type="email" id="uEmail" placeholder="email" required>
+        <input type="password" id="uPassword" placeholder="password (8+ chars)" required>
+        <select id="uRole">
+          <option value="viewer">Viewer</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button type="submit" class="btn primary">Add user</button>
+      </form>
+      <table class="channels">
+        <tbody id="userRows"></tbody>
+      </table>
+    </div>
+
     <div class="card">
       <div class="cal-head">
         <h2>Tracked expirations</h2>
