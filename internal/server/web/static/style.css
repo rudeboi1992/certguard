@@ -57,12 +57,16 @@ code { background: rgba(127,127,127,.15); padding: .05em .35em; border-radius: 4
 
 .brand { font-weight: 700; letter-spacing: -.02em; font-size: 1.15rem; }
 
-.topbar {
+.topbar { padding: .75rem 0; background: var(--card); border-bottom: 1px solid var(--border); }
+/* Constrain header content to the same width as <main> so the logo and
+   Sign-out line up with the cards below instead of hugging the window edges. */
+.topbar-inner {
+  max-width: 1000px; margin: 0 auto; padding: 0 1.25rem;
   display: flex; align-items: center; gap: .75rem;
-  padding: .75rem 1.25rem; background: var(--card);
-  border-bottom: 1px solid var(--border);
 }
 .spacer { flex: 1; }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: .45rem .5rem; }
+.icon-btn svg { width: 18px; height: 18px; display: block; }
 
 main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1.25rem; display: grid; gap: 1.25rem; }
 
@@ -92,10 +96,16 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .row input { flex: 1; }
 .stack { display: grid; gap: .7rem; margin-top: .8rem; }
 .stack label { display: grid; gap: .3rem; font-size: .9rem; }
-/* Match the Type <select> to the text/date inputs in the same form. */
+/* Match the Type <select> to the text/date inputs exactly. We strip native
+   appearance (Safari renders native selects shorter than inputs) and draw our
+   own chevron, so the box metrics are identical to the inputs. */
 .stack select {
-  width: 100%; padding: .55rem .7rem; border: 1px solid var(--border);
-  border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit;
+  width: 100%; padding: .55rem .7rem; padding-right: 2rem; line-height: 1.5;
+  border: 1px solid var(--border); border-radius: 8px;
+  background-color: var(--bg); color: var(--ink); font: inherit;
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%239aa4b2' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right .65rem center;
 }
 
 .add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
@@ -139,6 +149,9 @@ table.certs th { color: var(--muted); font-weight: 600; }
   border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
 
 /* calendar */
+.cal-legend { display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: center; margin: 0 0 1rem; }
+.cal-legend .leg { display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; color: var(--muted); }
+.cal-legend .leg i { width: 11px; height: 11px; border-radius: 3px; }
 .cal-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .8rem; }
 .cal-head h2 { margin: 0; }
 .cal-nav { display: flex; align-items: center; gap: .6rem; }

@@ -13,11 +13,13 @@
 </head>
 <body>
   <header class="topbar">
-    <span class="brand">certguard</span>
-    <span class="spacer"></span>
-    <span id="whoami" class="muted"></span>
-    <button id="themeToggle" class="btn ghost" title="Toggle light / dark" aria-label="Toggle light or dark theme">🌙</button>
-    <button id="logout" class="btn ghost">Sign out</button>
+    <div class="topbar-inner">
+      <span class="brand">certguard</span>
+      <span class="spacer"></span>
+      <span id="whoami" class="muted"></span>
+      <button id="themeToggle" class="btn ghost icon-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
+      <button id="logout" class="btn ghost">Sign out</button>
+    </div>
   </header>
 
   <main>
@@ -79,6 +81,7 @@
           <button id="calNext" class="btn ghost small" title="Next">›</button>
         </div>
       </div>
+      <div id="calLegend" class="cal-legend"></div>
       <div id="calWeekdays" class="cal-weekdays" hidden>
         <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
       </div>

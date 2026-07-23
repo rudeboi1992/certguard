@@ -52,17 +52,35 @@ let isAdmin = false;
 let currentItems = [];
 
 const CATEGORIES = [
-  ['certificate', 'Certificate'], ['api-key', 'API key'],
-  ['subscription', 'Subscription'], ['domain', 'Domain'],
-  ['service', 'Service/Contract'], ['other', 'Other'],
+  ['certificate', 'Certificate', '#3b82f6'],
+  ['api-key', 'API key', '#8b5cf6'],
+  ['subscription', 'Subscription', '#14b8a6'],
+  ['domain', 'Domain', '#f59e0b'],
+  ['service', 'Service/Contract', '#ec4899'],
+  ['other', 'Other', '#94a3b8'],
 ];
 function categoryLabel(v) {
   const f = CATEGORIES.find((c) => c[0] === v);
   return f ? f[1] : (v || '');
 }
+function categoryColor(v) {
+  const f = CATEGORIES.find((c) => c[0] === v);
+  return f ? f[2] : '#94a3b8'; // unlabeled → "other" grey
+}
 function categoryOptions(selected) {
   return CATEGORIES.map(([v, l]) =>
     `<option value="${v}"${v === selected ? ' selected' : ''}>${l}</option>`).join('');
+}
+// hex "#rrggbb" → "rgba(r,g,b,a)" for tinted backgrounds.
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+function renderLegend() {
+  const el = $('calLegend');
+  if (!el) return;
+  el.innerHTML = CATEGORIES.map(([v, l, c]) =>
+    `<span class="leg"><i style="background:${c}"></i>${escapeHtml(l)}</span>`).join('');
 }
 
 async function loadWhoami() {
@@ -89,8 +107,9 @@ async function loadCerts() {
     if (level === 'urgent') urgent++;
     else if (level === 'warn' || level === 'notice') soon++;
 
+    const catCol = categoryColor(c.category);
     const typeCell = c.category
-      ? `<span class="pill cat">${escapeHtml(categoryLabel(c.category))}</span>`
+      ? `<span class="pill" style="background:${hexA(catCol, 0.15)};color:${catCol}">${escapeHtml(categoryLabel(c.category))}</span>`
       : `<span class="muted small">${c.kind}</span>`;
     const actions = [
       `<a class="btn ghost small" href="/api/v1/certs/${c.id}/calendar.ics" title="Add to calendar">📅</a>`,
@@ -330,11 +349,6 @@ function bucketByDay() {
   }
   return byDay;
 }
-const LEVEL_RANK = { urgent: 0, warn: 1, notice: 2, ok: 3 };
-function mostUrgent(list) {
-  return list.map((x) => expiryLevel(x.days_remaining))
-    .sort((a, b) => LEVEL_RANK[a] - LEVEL_RANK[b])[0];
-}
 function todayKey() {
   const n = new Date();
   return `${n.getUTCFullYear()}-${n.getUTCMonth()}-${n.getUTCDate()}`;
@@ -370,9 +384,14 @@ function renderYear() {
       const key = `${calYear}-${m}-${d}`;
       const list = byDay[key];
       let cls = 'mini-cell';
-      if (list) { count += list.length; cls += ' has ' + mostUrgent(list); }
+      let style = '';
+      if (list) {
+        count += list.length;
+        cls += ' has';
+        style = ` style="background:${hexA(categoryColor(list[0].cert.category), 0.42)}"`;
+      }
       if (key === tKey) cls += ' today';
-      cells += `<span class="${cls}">${d}</span>`;
+      cells += `<span class="${cls}"${style}>${d}</span>`;
     }
     mini.innerHTML =
       `<div class="mini-title">${title}${count ? ` <span class="mini-count">${count}</span>` : ''}</div>` +
@@ -410,8 +429,8 @@ function renderMonth() {
     if (list) {
       html += '<div class="cal-events">';
       for (const it of list.slice(0, 3)) {
-        const lvl = expiryLevel(it.days_remaining);
-        html += `<div class="cal-ev ${lvl}" title="${escapeHtml(it.cert.name)} — ${fmtRemaining(it.days_remaining)}">${escapeHtml(it.cert.name)}</div>`;
+        const col = categoryColor(it.cert.category);
+        html += `<div class="cal-ev" style="background:${hexA(col, 0.2)};border-left:3px solid ${col}" title="${escapeHtml(it.cert.name)} — ${fmtRemaining(it.days_remaining)}">${escapeHtml(it.cert.name)}</div>`;
       }
       if (list.length > 3) html += `<div class="cal-more">+${list.length - 3} more</div>`;
       html += '</div>';
@@ -434,6 +453,9 @@ $('calNext').addEventListener('click', () => {
 $('calYearBtn').addEventListener('click', () => { calView = 'year'; renderCalendar(); });
 
 // --- light / dark theme toggle ---
+// Flat, single-colour icons (currentColor) — no emoji.
+const ICON_MOON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>';
+const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 3v1.6M12 19.4V21M3 12h1.6M19.4 12H21M5.6 5.6l1.1 1.1M17.3 17.3l1.1 1.1M18.4 5.6l-1.1 1.1M6.7 17.3l-1.1 1.1"/></svg>';
 function effectiveTheme() {
   const explicit = document.documentElement.getAttribute('data-theme');
   if (explicit) return explicit;
@@ -441,7 +463,7 @@ function effectiveTheme() {
 }
 function updateThemeIcon() {
   // Show the mode you'd switch TO.
-  $('themeToggle').textContent = effectiveTheme() === 'dark' ? '☀️' : '🌙';
+  $('themeToggle').innerHTML = effectiveTheme() === 'dark' ? ICON_SUN : ICON_MOON;
 }
 $('themeToggle').addEventListener('click', () => {
   const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
@@ -450,6 +472,7 @@ $('themeToggle').addEventListener('click', () => {
   updateThemeIcon();
 });
 updateThemeIcon();
+renderLegend();
 
 // --- logout ---
 $('logout').addEventListener('click', async () => {
