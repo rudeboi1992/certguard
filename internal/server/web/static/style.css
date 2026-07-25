@@ -285,11 +285,9 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .cal-legend { display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: center; margin: 0 0 1rem; }
 .cal-legend .leg { display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; color: var(--muted); }
 .cal-legend .leg i { width: 11px; height: 11px; border-radius: 3px; }
-.cal-toolbar { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .8rem; }
-.cal-toolbar .spacer { flex: 1; }
-.cal-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .8rem; }
-.cal-head h2 { margin: 0; }
-.cal-nav { display: flex; align-items: center; gap: .6rem; }
+/* the month/year range sits on its own line under the title bar */
+.cal-range { display: flex; align-items: center; gap: .5rem; margin-bottom: .8rem; }
+.cal-add { white-space: nowrap; }
 .cal-label { min-width: 9rem; text-align: center; font-weight: 600; }
 .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
 .cal-weekdays span { text-align: center; font-size: .75rem; color: var(--muted); font-weight: 600; }
@@ -390,7 +388,6 @@ table.channels td.actions { text-align: right; white-space: nowrap; }
   .cal-cell { min-height: 52px; }
   .cal-ev { font-size: .62rem; padding: 1px 4px; }
   .cal-day { font-size: .72rem; }
-  .cal-nav { flex-wrap: wrap; justify-content: flex-end; }
   .cal-label { min-width: 0; }
 }
 /* Too narrow for readable event text — swap the bars for colored dots. Days
