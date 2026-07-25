@@ -404,7 +404,11 @@ table.channels td.actions { text-align: right; white-space: nowrap; }
    proper aligned table grid with a sticky header. */
 @container (min-width: 640px) {
   .trow-head, .trow-surface {
-    grid-template-columns: minmax(0, 1fr) 96px 92px 84px 84px auto;
+    /* All non-name tracks are FIXED so the header (empty actions cell) and the
+       rows (Edit/Delete buttons) resolve the 1fr name column identically —
+       otherwise an `auto` actions column differs between them and every column
+       drifts out of alignment. */
+    grid-template-columns: minmax(0, 1fr) 130px 96px 92px 92px 118px;
     grid-template-areas: none;
     gap: .5rem; align-items: center;
   }
