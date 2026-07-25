@@ -109,8 +109,10 @@ main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1.25rem; display: grid
 }
 .widget-grid.ready .widget { transition: top .18s ease, left .18s ease; }
 .widget-off { display: none !important; }
-/* The bar stays put; only the body scrolls when a card would grow too tall. */
-.widget-body { flex: 1 1 auto; overflow: auto; min-height: 0; }
+/* The bar stays put; only the body scrolls (vertically) when a card grows too
+   tall. Horizontal scroll is disabled — content reflows to fit the card. */
+.widget-body { flex: 1 1 auto; overflow-x: hidden; overflow-y: auto; min-height: 0; }
+.widget-body > * { max-width: 100%; }
 .widget-bar { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; flex-wrap: wrap; flex: 0 0 auto; }
 .widget-bar .spacer { flex: 1; }
 .widget-drag { display: inline-flex; align-items: center; gap: .5rem; cursor: grab; user-select: none; touch-action: none; }
@@ -131,12 +133,9 @@ body.dragging-widget { cursor: grabbing; user-select: none; }
 }
 .widget-resize:hover { background: linear-gradient(to right, transparent, rgba(127,127,127,.14)); }
 
-/* The widget body scrolls vertically; tables just need a min-width so their
-   columns don't crush (they scroll horizontally within the body). The tracked
-   table also drops columns as its card narrows (see @container). */
-.certs { min-width: 440px; }
+/* Settings channel/user tables keep a comfortable min-width on wide cards but
+   drop it on narrow ones (see @container) so they never scroll sideways. */
 .channels { min-width: 420px; }
-.certs thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
 
 /* merged Add-entry card: tabs */
 .add-tabs { display: flex; gap: .2rem; margin-bottom: .9rem; border-bottom: 1px solid var(--border); }
@@ -222,12 +221,36 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 }
 .summary .stat .n { font-size: 1.6rem; font-weight: 700; }
 
-table.certs { width: 100%; border-collapse: collapse; }
-table.certs th, table.certs td {
-  text-align: left; padding: .55rem .5rem; border-bottom: 1px solid var(--border);
-  font-size: .92rem;
+/* Tracked-entries list. Mobile-first: each row is a card whose surface can be
+   swiped left to reveal Edit/Delete. At >=640px card width it becomes a table-
+   like grid (see the @container block near the end of the file). */
+.tracked-list { font-size: .92rem; }
+.trow-head { display: none; }
+.trow { position: relative; overflow: hidden; border-bottom: 1px solid var(--border); }
+.trow-actions { position: absolute; top: 0; right: 0; bottom: 0; display: flex; }
+.swipe-act {
+  border: none; font: inherit; font-weight: 600; width: 78px; cursor: pointer;
+  color: #fff; display: flex; align-items: center; justify-content: center;
 }
-table.certs th { color: var(--muted); font-weight: 600; }
+.swipe-act.edit { background: var(--primary); }
+.swipe-act.del { background: var(--urgent); }
+.trow-surface {
+  position: relative; z-index: 1; background: var(--card);
+  display: grid; grid-template-columns: 1fr auto;
+  grid-template-areas: "name rem" "meta meta";
+  gap: .25rem .6rem; padding: .75rem;
+  transform: translateX(var(--sx, 0px)); transition: transform .22s ease;
+  touch-action: pan-y;
+}
+.trow.dragging .trow-surface { transition: none; }
+.trow.editing { padding: .7rem .75rem; }
+.tc-name { grid-area: name; min-width: 0; word-break: break-word; }
+.tc-rem { grid-area: rem; justify-self: end; align-self: start; }
+.tc-meta { grid-area: meta; display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; }
+.tc-meta .tc-exp { color: var(--muted); }
+.tc-actions { display: none; }
+.swipe-hint { display: block; margin: .6rem 0 0; }
+.cover-row { background: rgba(127,127,127,.05); padding: .5rem .75rem .7rem; }
 
 .pill { display: inline-block; padding: .1rem .55rem; border-radius: 999px;
   font-size: .8rem; font-weight: 600; }
@@ -243,7 +266,6 @@ table.certs th { color: var(--muted); font-weight: 600; }
 .cover-toggle { background: none; border: none; padding: 0; margin-top: .2rem;
   color: var(--primary); font: inherit; font-size: .78rem; cursor: pointer; }
 .cover-toggle:hover { text-decoration: underline; }
-.cover-row td { background: rgba(127,127,127,.05); padding: .5rem .5rem .7rem; }
 .cover-list { display: flex; flex-wrap: wrap; gap: .35rem; }
 .cover-chip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem;
   background: rgba(127,127,127,.14); padding: .18rem .5rem; border-radius: 5px; word-break: break-all; }
@@ -333,8 +355,8 @@ table.certs th { color: var(--muted); font-weight: 600; }
   border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
 .channel-row #chTarget { flex: 1; min-width: 200px; }
 .channel-row .thresh { width: 90px; }
-table.channels { width: 100%; border-collapse: collapse; }
-table.channels td { padding: .45rem .5rem; border-bottom: 1px solid var(--border); font-size: .9rem; vertical-align: middle; }
+table.channels { width: 100%; border-collapse: collapse; table-layout: fixed; }
+table.channels td { padding: .45rem .5rem; border-bottom: 1px solid var(--border); font-size: .9rem; vertical-align: middle; overflow-wrap: anywhere; }
 table.channels td.actions { text-align: right; white-space: nowrap; }
 .btn.small { padding: .3rem .6rem; font-size: .82rem; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; word-break: break-all; }
@@ -366,12 +388,33 @@ table.channels td.actions { text-align: right; white-space: nowrap; }
 @container (max-width: 330px) {
   .sd-row { grid-template-columns: 1fr; gap: .05rem; padding: .3rem 0; }
 }
-/* Tracked table sheds less-essential columns as its card narrows, so it stays
-   readable instead of scrolling. (2 = Type, 5 = Trust.) */
-@container (max-width: 500px) {
-  .certs { min-width: 0; }
-  .certs :is(th, td):nth-child(2) { display: none; }
+/* Once the tracked card is wide enough, drop the swipe-card layout for a
+   proper aligned table grid with a sticky header. */
+@container (min-width: 640px) {
+  .trow-head, .trow-surface {
+    grid-template-columns: minmax(0, 1fr) 96px 92px 84px 84px auto;
+    grid-template-areas: none;
+    gap: .5rem; align-items: center;
+  }
+  .trow-head {
+    display: grid; padding: .25rem .5rem .5rem; margin-bottom: .1rem;
+    color: var(--muted); font-weight: 600; font-size: .88rem;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--card); z-index: 1;
+  }
+  .trow { overflow: visible; }
+  .trow-surface { transform: none; transition: none; background: transparent; padding: .6rem .5rem; }
+  .trow-actions { display: none; }
+  .tc-meta { display: contents; }
+  /* Pin every cell to row 1 — otherwise sparse auto-placement can't backfill an
+     earlier column once a later one is taken, and cells spill to a 2nd row. */
+  .tc-name { grid-column: 1; grid-row: 1; }
+  .tc-type { grid-column: 2; grid-row: 1; }
+  .tc-exp { grid-column: 3; grid-row: 1; color: inherit; }
+  .tc-rem { grid-column: 4; grid-row: 1; justify-self: start; align-self: center; }
+  .tc-trust { grid-column: 5; grid-row: 1; }
+  .tc-actions { grid-column: 6; grid-row: 1; display: block; text-align: right; white-space: nowrap; }
+  .swipe-hint { display: none; }
 }
-@container (max-width: 320px) {
-  .certs :is(th, td):nth-child(5) { display: none; }
-}
+/* Settings tables: drop the min-width on narrow cards so they never scroll. */
+@container (max-width: 460px) { .channels { min-width: 0; } }

@@ -121,18 +121,14 @@
           <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
         </div>
         <div class="widget-body">
-        <div class="table-wrap">
-          <table class="certs">
-            <thead>
-              <tr>
-                <th>Name</th><th>Type</th><th>Expires</th><th>Remaining</th>
-                <th>Trust</th><th></th>
-              </tr>
-            </thead>
-            <tbody id="certRows"></tbody>
-          </table>
+        <div class="tracked-list">
+          <div class="trow-head">
+            <div>Name</div><div>Type</div><div>Expires</div><div>Remaining</div><div>Trust</div><div></div>
+          </div>
+          <div id="certRows"></div>
         </div>
         <p id="empty" class="muted" hidden>Nothing tracked yet.</p>
+        <p class="muted small swipe-hint">Tip: swipe a row left to edit or delete it.</p>
         </div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>

@@ -124,54 +124,137 @@ async function loadCerts() {
         : '';
       fpLine = `<br><span class="mono muted small" title="SHA-256: ${escapeHtml(c.sha256)}">${c.sha256.slice(0, 12)}…</span>${dup}`;
     }
-    const actions = [
+    const inlineActions = [
       isAdmin ? `<button class="btn ghost small" data-edit="${c.id}">Edit</button>` : '',
       isAdmin ? `<button class="btn link" data-del="${c.id}">Delete</button>` : '',
     ].join(' ');
+    const swipeActions = isAdmin
+      ? `<button class="swipe-act edit" data-edit="${c.id}">Edit</button>` +
+        `<button class="swipe-act del" data-del="${c.id}">Delete</button>`
+      : '';
+    const trustCell = trusted
+      ? '<span class="pill ok">ok</span>'
+      : `<span class="pill untrusted" title="${escapeHtml(c.last_error)}">untrusted</span>`;
 
-    const tr = document.createElement('tr');
-    tr.dataset.row = c.id;
-    tr.innerHTML = `
-      <td><strong>${escapeHtml(c.name)}</strong>${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}${fpLine}${coverToggle}</td>
-      <td>${typeCell}</td>
-      <td>${fmtDate(c.expires_at)}</td>
-      <td><span class="pill ${level}">${fmtRemaining(days)}</span></td>
-      <td>${trusted ? '<span class="pill ok">ok</span>' : `<span class="pill untrusted" title="${escapeHtml(c.last_error)}">untrusted</span>`}</td>
-      <td class="actions">${actions}</td>`;
-    rows.appendChild(tr);
+    const row = document.createElement('div');
+    row.className = 'trow';
+    row.dataset.row = c.id;
+    row.innerHTML = `
+      <div class="trow-actions" aria-hidden="true">${swipeActions}</div>
+      <div class="trow-surface">
+        <div class="tcol tc-name"><strong>${escapeHtml(c.name)}</strong>${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}${fpLine}${coverToggle}</div>
+        <div class="tcol tc-meta">
+          <span class="tc-type">${typeCell}</span>
+          <span class="tc-exp">${fmtDate(c.expires_at)}</span>
+          <span class="tc-trust">${trustCell}</span>
+        </div>
+        <div class="tcol tc-rem"><span class="pill ${level}">${fmtRemaining(days)}</span></div>
+        <div class="tcol tc-actions">${inlineActions}</div>
+      </div>`;
+    rows.appendChild(row);
   }
   $('empty').hidden = currentItems.length !== 0;
+  $('empty').closest('.widget-body').querySelector('.swipe-hint').hidden =
+    currentItems.length === 0 || !isAdmin;
 
   renderSummary(currentItems.length, soon, urgent);
   renderCalendar();
 
+  openRow = null;
   rows.querySelectorAll('[data-del]').forEach((b) =>
     b.addEventListener('click', () => deleteCert(b.dataset.del)));
   rows.querySelectorAll('[data-edit]').forEach((b) =>
     b.addEventListener('click', () => startEdit(b.dataset.edit)));
   rows.querySelectorAll('[data-cover]').forEach((b) =>
     b.addEventListener('click', () => toggleCover(b)));
+  rows.querySelectorAll('.trow').forEach(attachSwipe);
 }
+
+// --- swipe-to-reveal Edit/Delete on entry rows (mobile card layout) ---
+let openRow = null;
+function swipeReveal(row) {
+  const a = row.querySelector('.trow-actions');
+  return (a && a.offsetWidth) || 0;
+}
+function closeSwipe(row) {
+  if (!row) return;
+  row.classList.remove('open', 'dragging');
+  const s = row.querySelector('.trow-surface');
+  if (s) s.style.setProperty('--sx', '0px');
+  if (openRow === row) openRow = null;
+}
+function openSwipe(row) {
+  const s = row.querySelector('.trow-surface');
+  const reveal = swipeReveal(row);
+  if (!s || !reveal) return;
+  if (openRow && openRow !== row) closeSwipe(openRow);
+  row.classList.add('open');
+  s.style.setProperty('--sx', `-${reveal}px`);
+  openRow = row;
+}
+function attachSwipe(row) {
+  const surface = row.querySelector('.trow-surface');
+  const actions = row.querySelector('.trow-actions');
+  if (!surface || !actions) return;
+  let x0 = 0, y0 = 0, base = 0, active = false, decided = false, horiz = false, pid = null;
+  // Swipe only applies in the mobile card layout (actions hidden on desktop grid).
+  const enabled = () => getComputedStyle(actions).display !== 'none' && actions.children.length > 0;
+  surface.addEventListener('pointerdown', (e) => {
+    if (!enabled()) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    x0 = e.clientX; y0 = e.clientY; pid = e.pointerId;
+    base = row.classList.contains('open') ? -swipeReveal(row) : 0;
+    active = true; decided = false; horiz = false;
+  });
+  surface.addEventListener('pointermove', (e) => {
+    if (!active) return;
+    const dx = e.clientX - x0, dy = e.clientY - y0;
+    if (!decided) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      decided = true; horiz = Math.abs(dx) > Math.abs(dy);
+      if (horiz) { row.classList.add('dragging'); try { surface.setPointerCapture(pid); } catch (_) {} }
+    }
+    if (!horiz) return;
+    e.preventDefault();
+    const t = Math.max(-swipeReveal(row), Math.min(0, base + dx));
+    surface.style.setProperty('--sx', t + 'px');
+  });
+  const finish = (e) => {
+    if (!active) return;
+    active = false;
+    row.classList.remove('dragging');
+    if (!horiz) return;
+    const t = base + (e.clientX - x0);
+    if (t < -swipeReveal(row) / 2) openSwipe(row);
+    else closeSwipe(row);
+  };
+  surface.addEventListener('pointerup', finish);
+  surface.addEventListener('pointercancel', finish);
+}
+// Tapping anywhere outside the open row closes it.
+document.addEventListener('pointerdown', (e) => {
+  if (openRow && !openRow.contains(e.target)) closeSwipe(openRow);
+}, true);
 
 // Expand/collapse the full list of domains (SANs) a cert covers.
 function toggleCover(btn) {
   const id = btn.dataset.cover;
   const it = currentItems.find((x) => String(x.cert.id) === String(id));
   const sans = (it && it.cert.dns_names) || [];
-  const tr = document.querySelector(`tr[data-row="${id}"]`);
-  const next = tr && tr.nextElementSibling;
+  const row = document.querySelector(`.trow[data-row="${id}"]`);
+  const next = row && row.nextElementSibling;
   if (next && next.classList.contains('cover-row')) {
     next.remove();
     btn.setAttribute('aria-expanded', 'false');
     btn.textContent = `▸ covers ${sans.length} domains`;
     return;
   }
-  const cr = document.createElement('tr');
+  const cr = document.createElement('div');
   cr.className = 'cover-row';
-  cr.innerHTML = `<td colspan="6"><div class="cover-list">${
+  cr.innerHTML = `<div class="cover-list">${
     sans.map((s) => `<span class="cover-chip">${escapeHtml(s)}</span>`).join('')
-  }</div></td>`;
-  tr.after(cr);
+  }</div>`;
+  row.after(cr);
   btn.setAttribute('aria-expanded', 'true');
   btn.textContent = `▾ covers ${sans.length} domains`;
 }
@@ -180,21 +263,21 @@ function toggleCover(btn) {
 function startEdit(id) {
   const it = currentItems.find((x) => String(x.cert.id) === String(id));
   if (!it) return;
-  const tr = document.querySelector(`tr[data-row="${id}"]`);
-  if (!tr) return;
+  const row = document.querySelector(`.trow[data-row="${id}"]`);
+  if (!row) return;
+  closeSwipe(row);
   const c = it.cert;
-  tr.innerHTML = `
-    <td colspan="6">
-      <div class="edit-row">
-        <input type="text" class="edit-name" value="${escapeHtml(c.name)}">
-        <select class="edit-cat">${categoryOptions(c.category || 'certificate')}</select>
-        <button class="btn primary small" data-save>Save</button>
-        <button class="btn ghost small" data-cancel>Cancel</button>
-      </div>
-    </td>`;
-  tr.querySelector('[data-save]').addEventListener('click', () => saveEdit(id, tr));
-  tr.querySelector('[data-cancel]').addEventListener('click', () => loadCerts());
-  tr.querySelector('.edit-name').focus();
+  row.classList.add('editing');
+  row.innerHTML = `
+    <div class="edit-row">
+      <input type="text" class="edit-name" value="${escapeHtml(c.name)}">
+      <select class="edit-cat">${categoryOptions(c.category || 'certificate')}</select>
+      <button class="btn primary small" data-save>Save</button>
+      <button class="btn ghost small" data-cancel>Cancel</button>
+    </div>`;
+  row.querySelector('[data-save]').addEventListener('click', () => saveEdit(id, row));
+  row.querySelector('[data-cancel]').addEventListener('click', () => loadCerts());
+  row.querySelector('.edit-name').focus();
 }
 
 async function saveEdit(id, tr) {
