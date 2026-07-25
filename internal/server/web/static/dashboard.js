@@ -1,45 +1,15 @@
-// Dashboard: fetches data from the JSON API and renders it. All mutations go
-// through the same API the CLI and automation use.
+// Dashboard: scan endpoints, add/track expirations, and the calendar. Shared
+// helpers ($, api, toast, escapeHtml, fmtDate, isAdmin, loadWhoami, theme,
+// sign-out) live in common.js, loaded first.
 
-const $ = (id) => document.getElementById(id);
-
-function toast(msg, isError) {
-  const t = $('toast');
-  t.textContent = msg;
-  t.hidden = false;
-  t.style.background = isError ? 'var(--urgent)' : '';
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => (t.hidden = true), 3200);
-}
-
-async function api(method, path, body) {
-  const opts = { method, headers: {} };
-  if (body !== undefined) {
-    opts.headers['Content-Type'] = 'application/json';
-    opts.body = JSON.stringify(body);
-  }
-  const res = await fetch(path, opts);
-  if (res.status === 401) {
-    window.location.href = '/login';
-    throw new Error('unauthenticated');
-  }
-  return res;
-}
+let currentItems = [];
 
 // expiryLevel classifies purely by days remaining (expired counts as urgent).
-// Trust is tracked separately so an expired cert is never miscounted just
-// because it also fails verification.
 function expiryLevel(days) {
   if (days <= 3) return 'urgent'; // includes expired (days < 0)
   if (days <= 7) return 'warn';
   if (days <= 30) return 'notice';
   return 'ok';
-}
-
-function fmtDate(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toISOString().slice(0, 10);
 }
 
 function fmtRemaining(days) {
@@ -84,10 +54,6 @@ function renderScanDetail(s) {
   el.hidden = false;
 }
 
-let isAdmin = false;
-let currentUserId = null;
-let currentItems = [];
-
 const CATEGORIES = [
   ['certificate', 'Certificate', '#3b82f6'],
   ['api-key', 'API key', '#8b5cf6'],
@@ -118,62 +84,6 @@ function renderLegend() {
   if (!el) return;
   el.innerHTML = CATEGORIES.map(([v, l, c]) =>
     `<span class="leg"><i style="background:${c}"></i>${escapeHtml(l)}</span>`).join('');
-}
-
-async function loadWhoami() {
-  const res = await api('GET', '/api/v1/auth/whoami');
-  const data = await res.json();
-  const u = data.user;
-  isAdmin = u && u.role === 'admin';
-  currentUserId = u && u.id;
-  $('whoami').textContent = `${u.email} · ${u.role}`;
-  $('adminControls').hidden = !isAdmin;
-  $('usersCard').hidden = !isAdmin;
-}
-
-// --- users (admin) ---
-async function loadUsers() {
-  if (!isAdmin) return;
-  const res = await api('GET', '/api/v1/users');
-  const users = await res.json();
-  const rows = $('userRows');
-  rows.innerHTML = '';
-  for (const u of users) {
-    const isSelf = u.id === currentUserId;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${escapeHtml(u.email)}${isSelf ? ' <span class="muted small">(you)</span>' : ''}</td>
-      <td><span class="pill ${u.role === 'admin' ? 'notice' : 'ok'}">${u.role}</span></td>
-      <td class="muted small">joined ${fmtDate(u.created_at)}</td>
-      <td class="actions">${isSelf ? '' : `<button class="btn link" data-deluser="${u.id}">Remove</button>`}</td>`;
-    rows.appendChild(tr);
-  }
-  rows.querySelectorAll('[data-deluser]').forEach((b) =>
-    b.addEventListener('click', () => deleteUser(b.dataset.deluser)));
-}
-
-$('userForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const body = {
-    email: $('uEmail').value.trim(),
-    password: $('uPassword').value,
-    role: $('uRole').value,
-  };
-  const res = await api('POST', '/api/v1/users', body);
-  if (res.status === 201) {
-    toast('User added');
-    e.target.reset();
-    loadUsers();
-  } else {
-    const d = await res.json().catch(() => ({}));
-    toast(d.error || 'Could not add user', true);
-  }
-});
-
-async function deleteUser(id) {
-  const res = await api('DELETE', `/api/v1/users/${id}`);
-  if (res.status === 204) { toast('User removed'); loadUsers(); }
-  else { const d = await res.json().catch(() => ({})); toast(d.error || 'Remove failed', true); }
 }
 
 async function loadCerts() {
@@ -396,66 +306,6 @@ async function handleFile(file) {
   }
 }
 
-// --- notification channels ---
-async function loadChannels() {
-  const res = await api('GET', '/api/v1/channels');
-  const chans = await res.json();
-  const rows = $('channelRows');
-  rows.innerHTML = '';
-  for (const c of chans) {
-    const th = c.thresholds && c.thresholds.trim() ? c.thresholds : '30,7,3';
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><span class="pill notice">${c.type}</span></td>
-      <td class="mono">${escapeHtml(c.target)}</td>
-      <td class="muted small">${escapeHtml(th)}</td>
-      <td class="actions">
-        <button class="btn ghost small" data-test="${c.id}">Test</button>
-        <button class="btn link" data-delch="${c.id}">Remove</button>
-      </td>`;
-    rows.appendChild(tr);
-  }
-  $('noChannels').hidden = chans.length !== 0;
-  rows.querySelectorAll('[data-test]').forEach((b) =>
-    b.addEventListener('click', () => testChannel(b.dataset.test)));
-  rows.querySelectorAll('[data-delch]').forEach((b) =>
-    b.addEventListener('click', () => deleteChannel(b.dataset.delch)));
-}
-
-$('channelForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const body = {
-    type: $('chType').value,
-    target: $('chTarget').value.trim(),
-    thresholds: $('chThresholds').value.trim(),
-  };
-  const res = await api('POST', '/api/v1/channels', body);
-  if (res.status === 201) {
-    toast('Channel added');
-    e.target.reset();
-    loadChannels();
-  } else {
-    const d = await res.json().catch(() => ({}));
-    toast(d.error || 'Could not add channel', true);
-  }
-});
-
-async function testChannel(id) {
-  toast('Sending test…');
-  const res = await api('POST', `/api/v1/channels/${id}/test`);
-  if (res.ok) toast('Test notification sent ✓');
-  else {
-    const d = await res.json().catch(() => ({}));
-    toast(d.error || 'Test failed', true);
-  }
-}
-
-async function deleteChannel(id) {
-  const res = await api('DELETE', `/api/v1/channels/${id}`);
-  if (res.status === 204) { toast('Channel removed'); loadChannels(); }
-  else toast('Remove failed', true);
-}
-
 // --- calendar (year overview → click a month to zoom in) ---
 // Dates are bucketed by the UTC day of expiry so the calendar matches the dates
 // shown in the table (avoids off-by-one shifts in timezones behind UTC).
@@ -582,38 +432,9 @@ $('calNext').addEventListener('click', () => {
 });
 $('calYearBtn').addEventListener('click', () => { calView = 'year'; renderCalendar(); });
 
-// --- light / dark theme toggle ---
-// Flat, single-colour icons (currentColor) — no emoji.
-const ICON_MOON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>';
-const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 3v1.6M12 19.4V21M3 12h1.6M19.4 12H21M5.6 5.6l1.1 1.1M17.3 17.3l1.1 1.1M18.4 5.6l-1.1 1.1M6.7 17.3l-1.1 1.1"/></svg>';
-function effectiveTheme() {
-  const explicit = document.documentElement.getAttribute('data-theme');
-  if (explicit) return explicit;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-function updateThemeIcon() {
-  // Show the mode you'd switch TO.
-  $('themeToggle').innerHTML = effectiveTheme() === 'dark' ? ICON_SUN : ICON_MOON;
-}
-$('themeToggle').addEventListener('click', () => {
-  const next = effectiveTheme() === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', next);
-  try { localStorage.setItem('certguard-theme', next); } catch (e) {}
-  updateThemeIcon();
-});
-updateThemeIcon();
-renderLegend();
-
-// --- logout ---
-$('logout').addEventListener('click', async () => {
-  await api('POST', '/api/v1/auth/logout');
-  window.location.href = '/login';
-});
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
 // initial load
-loadWhoami().then(() => { loadCerts(); loadChannels(); loadUsers(); }).catch(() => {});
+loadWhoami().then(() => {
+  $('adminControls').hidden = !isAdmin;
+  renderLegend();
+  loadCerts();
+}).catch(() => {});

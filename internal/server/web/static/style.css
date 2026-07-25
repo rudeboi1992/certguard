@@ -69,6 +69,7 @@ code { background: rgba(127,127,127,.15); padding: .05em .35em; border-radius: 4
 .icon-btn svg { width: 18px; height: 18px; display: block; }
 
 main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1.25rem; display: grid; gap: 1.25rem; }
+.page-title { font-size: 1.35rem; margin: 0; }
 
 .card {
   background: var(--card); border: 1px solid var(--border);

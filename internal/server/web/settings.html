@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>certguard — settings</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛡️</text></svg>">
+  <script>
+    try { var t = localStorage.getItem('certguard-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <span class="brand">certguard</span>
+      <span class="spacer"></span>
+      <a href="/" class="btn ghost">← Dashboard</a>
+      <span id="whoami" class="muted"></span>
+      <button id="themeToggle" class="btn ghost icon-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
+      <button id="logout" class="btn ghost">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <h1 class="page-title">Settings</h1>
+
+    <div class="card">
+      <h2>Notifications</h2>
+      <p class="muted">Get alerted as your entries approach expiry (at 30, 7, and 3 days). Channels are yours; alerts cover the whole shared inventory.</p>
+      <form id="channelForm" class="channel-row">
+        <select id="chType">
+          <option value="email">Email</option>
+          <option value="slack">Slack</option>
+          <option value="discord">Discord</option>
+          <option value="webhook">Webhook</option>
+        </select>
+        <input type="text" id="chTarget" placeholder="email address or webhook URL" required>
+        <input type="text" id="chThresholds" class="thresh" placeholder="30,7,3" title="Comma-separated day thresholds (blank = all)">
+        <button type="submit" class="btn primary">Add</button>
+      </form>
+      <table class="channels">
+        <tbody id="channelRows"></tbody>
+      </table>
+      <p id="noChannels" class="muted small" hidden>No channels yet — add one above.</p>
+    </div>
+
+    <div class="card" id="usersCard" hidden>
+      <h2>Users</h2>
+      <p class="muted">People who can sign in. Accounts are created here — there is no public sign-up. Admins can manage everything; viewers are read-only.</p>
+      <form id="userForm" class="channel-row">
+        <input type="email" id="uEmail" placeholder="email" required>
+        <input type="password" id="uPassword" placeholder="password (8+ chars)" required>
+        <select id="uRole">
+          <option value="viewer">Viewer</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button type="submit" class="btn primary">Add user</button>
+      </form>
+      <table class="channels">
+        <tbody id="userRows"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/static/common.js"></script>
+  <script src="/static/settings.js"></script>
+</body>
+</html>

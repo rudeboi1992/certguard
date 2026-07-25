@@ -23,7 +23,17 @@ func (s *Server) registerUI() {
 	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(static))))
 
 	s.mux.HandleFunc("GET /login", s.handleLoginPage)
+	s.mux.HandleFunc("GET /settings", s.handleSettingsPage)
 	s.mux.HandleFunc("GET /{$}", s.handleDashboardPage)
+}
+
+// handleSettingsPage serves the settings page to authenticated users.
+func (s *Server) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
+	if s.resolveUser(r) == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	s.serveEmbedded(w, "web/settings.html")
 }
 
 // handleDashboardPage serves the dashboard to authenticated users and redirects
