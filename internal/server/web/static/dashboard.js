@@ -316,13 +316,21 @@ async function handleFile(file) {
 // --- calendar (year overview → click a month to zoom in) ---
 // Dates are bucketed by the UTC day of expiry so the calendar matches the dates
 // shown in the table (avoids off-by-one shifts in timezones behind UTC).
-let calView = 'year'; // 'year' | 'month'
-let calYear, calMonth;
+let calView = 'year'; // 'year' | 'month' | 'day'
+let calYear, calMonth, calDay;
 (function initCal() {
   const n = new Date();
   calYear = n.getUTCFullYear();
   calMonth = n.getUTCMonth();
+  calDay = n.getUTCDate();
 })();
+// Move the focused day by a number of days, rolling over months/years.
+function shiftDay(delta) {
+  const d = new Date(Date.UTC(calYear, calMonth, calDay + delta));
+  calYear = d.getUTCFullYear();
+  calMonth = d.getUTCMonth();
+  calDay = d.getUTCDate();
+}
 
 function utcKey(iso) {
   const d = new Date(iso);
@@ -344,7 +352,8 @@ function todayKey() {
 function renderCalendar() {
   if (!$('calGrid')) return;
   if (calView === 'year') renderYear();
-  else renderMonth();
+  else if (calView === 'month') renderMonth();
+  else renderDay();
 }
 
 function renderYear() {
@@ -394,6 +403,7 @@ function renderMonth() {
   grid.innerHTML = '';
   $('calWeekdays').hidden = false;
   $('calYearBtn').hidden = false;
+  $('calYearBtn').textContent = '◱ Year';
   $('calLabel').textContent = new Date(Date.UTC(calYear, calMonth, 1))
     .toLocaleString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
@@ -414,6 +424,13 @@ function renderMonth() {
     let html = `<div class="cal-day">${day}</div>`;
     const list = byDay[key];
     if (list) {
+      cell.classList.add('has');
+      // Compact dots (shown on narrow screens where the text bars don't fit).
+      html += '<div class="cal-dots">';
+      const cats = [...new Set(list.map((it) => it.cert.category))].slice(0, 4);
+      for (const c of cats) html += `<span class="cal-dot" style="background:${categoryColor(c)}"></span>`;
+      html += '</div>';
+      // Text bars (shown when the cell is wide enough).
       html += '<div class="cal-events">';
       for (const it of list.slice(0, 3)) {
         const col = categoryColor(it.cert.category);
@@ -423,21 +440,63 @@ function renderMonth() {
       html += '</div>';
     }
     cell.innerHTML = html;
+    const d = day;
+    cell.addEventListener('click', () => { calView = 'day'; calDay = d; renderCalendar(); });
     grid.appendChild(cell);
+  }
+}
+
+function renderDay() {
+  const grid = $('calGrid');
+  grid.className = 'cal-day-view';
+  grid.innerHTML = '';
+  $('calWeekdays').hidden = true;
+  $('calYearBtn').hidden = false;
+  $('calYearBtn').textContent = '‹ Month';
+  const dObj = new Date(Date.UTC(calYear, calMonth, calDay));
+  $('calLabel').textContent = dObj.toLocaleDateString(undefined,
+    { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+
+  const list = bucketByDay()[`${calYear}-${calMonth}-${calDay}`] || [];
+  if (!list.length) {
+    grid.innerHTML = '<p class="muted cal-empty-day">Nothing expires on this day.</p>';
+    return;
+  }
+  for (const it of list) {
+    const col = categoryColor(it.cert.category);
+    const row = document.createElement('div');
+    row.className = 'day-item';
+    row.style.borderLeftColor = col;
+    row.innerHTML =
+      `<div class="day-item-main">` +
+        `<div class="day-item-name">${escapeHtml(it.cert.name)}</div>` +
+        `<div class="day-item-sub">` +
+          `<span class="pill" style="background:${hexA(col, 0.15)};color:${col}">${escapeHtml(categoryLabel(it.cert.category))}</span>` +
+          ` <span class="muted">${escapeHtml(fmtRemaining(it.days_remaining))}</span>` +
+        `</div>` +
+      `</div>` +
+      `<a class="btn ghost small" href="/api/v1/certs/${it.cert.id}/calendar.ics" title="Add this to your calendar">📅</a>`;
+    grid.appendChild(row);
   }
 }
 
 $('calPrev').addEventListener('click', () => {
   if (calView === 'year') calYear--;
+  else if (calView === 'day') shiftDay(-1);
   else if (--calMonth < 0) { calMonth = 11; calYear--; }
   renderCalendar();
 });
 $('calNext').addEventListener('click', () => {
   if (calView === 'year') calYear++;
+  else if (calView === 'day') shiftDay(1);
   else if (++calMonth > 11) { calMonth = 0; calYear++; }
   renderCalendar();
 });
-$('calYearBtn').addEventListener('click', () => { calView = 'year'; renderCalendar(); });
+// Zoom back out one level: day → month → year.
+$('calYearBtn').addEventListener('click', () => {
+  calView = calView === 'day' ? 'month' : 'year';
+  renderCalendar();
+});
 
 // initial load
 loadWhoami().then(() => {
