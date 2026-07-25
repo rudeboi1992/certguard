@@ -74,30 +74,49 @@ function initWidgetGrid(grid, storageKey, opts) {
     location.reload();
   });
 
-  // drag to reorder
-  let dragged = null;
-  grid.querySelectorAll('.widget-grip').forEach((grip) => {
-    grip.addEventListener('dragstart', (e) => {
-      dragged = grip.closest('.widget');
-      dragged.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      try { e.dataTransfer.setDragImage(dragged, 24, 16); } catch (_) {}
-    });
-    grip.addEventListener('dragend', () => {
-      if (dragged) dragged.classList.remove('dragging');
-      dragged = null;
-      save();
-    });
-  });
-  grid.querySelectorAll('.widget').forEach((card) => {
-    card.addEventListener('dragover', (e) => { if (dragged && dragged !== card) e.preventDefault(); });
-    card.addEventListener('drop', (e) => {
+  // drag to reorder — pointer-based (reliable across browsers, unlike native
+  // HTML5 drag-and-drop). While dragging we only highlight the widget under the
+  // cursor; the actual reorder happens once on release, which avoids the
+  // layout-shift oscillation that live-reordering a tall card causes.
+  grid.querySelectorAll('.widget-drag').forEach((handle) => {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
       e.preventDefault();
-      if (!dragged || dragged === card) return;
-      const kids = widgets();
-      if (kids.indexOf(dragged) < kids.indexOf(card)) card.after(dragged);
-      else grid.insertBefore(dragged, card);
-      save();
+      const card = handle.closest('.widget');
+      let moved = false;
+      let target = null;
+      const clearTarget = () => { if (target) target.classList.remove('drop-target'); target = null; };
+      const move = (ev) => {
+        if (!moved) {
+          moved = true;
+          card.classList.add('dragging');
+          document.body.classList.add('dragging-widget');
+        }
+        const el = document.elementFromPoint(ev.clientX, ev.clientY);
+        const over = el && el.closest('.widget');
+        if (over === target) return;
+        clearTarget();
+        if (over && over !== card && over.parentElement === grid && !over.classList.contains('widget-off')) {
+          target = over;
+          target.classList.add('drop-target');
+        }
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        card.classList.remove('dragging');
+        document.body.classList.remove('dragging-widget');
+        if (target) {
+          const t = target;
+          clearTarget();
+          const kids = widgets();
+          if (kids.indexOf(card) < kids.indexOf(t)) t.after(card);
+          else grid.insertBefore(card, t);
+          save();
+        }
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
     });
   });
 

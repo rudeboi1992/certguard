@@ -98,25 +98,37 @@ main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1.25rem; display: grid
 .grip-ex { font-family: monospace; }
 
 /* generic widget grid, shared by the dashboard and settings */
-.widget-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; align-content: start; }
+.widget-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; align-content: start; align-items: start; }
 .widget { grid-column: span 4; position: relative; scroll-margin-top: 1rem; }
 .widget-off { display: none !important; }
 .widget-bar { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; }
 .widget-bar .spacer { flex: 1; }
+.widget-drag { display: inline-flex; align-items: center; gap: .5rem; cursor: grab; user-select: none; touch-action: none; }
+.widget-drag:active { cursor: grabbing; }
 .widget-title { font-weight: 600; font-size: 1.05rem; }
-.widget-grip { cursor: grab; color: var(--muted); user-select: none; font-size: 1.05rem; line-height: 1; }
-.widget-grip:active { cursor: grabbing; }
+.widget-grip { color: var(--muted); font-size: 1.05rem; line-height: 1; }
+body.dragging-widget { cursor: grabbing; user-select: none; }
 .widget-hide {
   border: none; background: transparent; color: var(--muted); cursor: pointer;
   font-size: 1.2rem; line-height: 1; padding: 0 .35rem; border-radius: 6px;
 }
 .widget-hide:hover { background: rgba(127,127,127,.14); color: var(--ink); }
 .widget.dragging { opacity: .45; }
+.widget.drop-target { outline: 2px dashed var(--primary); outline-offset: -2px; }
 .widget-resize {
   position: absolute; top: 0; right: 0; bottom: 0; width: 10px; cursor: ew-resize;
   border-radius: 0 var(--radius) var(--radius) 0;
 }
 .widget-resize:hover { background: linear-gradient(to right, transparent, rgba(127,127,127,.14)); }
+
+/* merged Add-entry card: tabs */
+.add-tabs { display: flex; gap: .2rem; margin-bottom: .9rem; border-bottom: 1px solid var(--border); }
+.add-tab {
+  border: none; background: none; color: var(--muted); font: inherit; font-weight: 500;
+  padding: .5rem .7rem; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.add-tab:hover { color: var(--ink); }
+.add-tab.active { color: var(--ink); border-bottom-color: var(--primary); }
 
 /* "Add section" toolbar */
 .grid-toolbar { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }

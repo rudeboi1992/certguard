@@ -220,6 +220,14 @@ async function deleteCert(id) {
   else toast('Delete failed', true);
 }
 
+// --- Add-entry tabs (Scan / Manual) ---
+document.querySelectorAll('.add-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.add-tab').forEach((t) => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.add-pane').forEach((p) => { p.hidden = p.id !== tab.dataset.pane; });
+  });
+});
+
 // --- scan endpoint ---
 $('scanForm').addEventListener('submit', async (e) => {
   e.preventDefault();
