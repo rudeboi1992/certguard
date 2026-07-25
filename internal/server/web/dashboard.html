@@ -95,16 +95,19 @@
         <div class="widget-bar">
           <span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Calendar</span></span>
           <span class="spacer"></span>
+          <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
+        </div>
+        <div class="widget-body">
+        <div class="cal-toolbar">
           <div class="cal-nav">
             <button id="calYearBtn" class="btn ghost small" title="Back to year" hidden>◱ Year</button>
             <button id="calPrev" class="btn ghost small" title="Previous">‹</button>
             <span id="calLabel" class="cal-label"></span>
             <button id="calNext" class="btn ghost small" title="Next">›</button>
           </div>
-          <a id="downloadCal" class="btn ghost small" href="/api/v1/calendar.ics" title="Download all expirations as an .ics calendar">📅 Download</a>
-          <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
+          <span class="spacer"></span>
+          <a id="downloadCal" class="btn ghost small" href="/api/v1/calendar.ics" title="Add all expirations to your calendar (.ics)">📅 Add to calendar</a>
         </div>
-        <div class="widget-body">
         <div id="calLegend" class="cal-legend"></div>
         <div id="calWeekdays" class="cal-weekdays" hidden>
           <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
