@@ -125,7 +125,6 @@ async function loadCerts() {
       fpLine = `<br><span class="mono muted small" title="SHA-256: ${escapeHtml(c.sha256)}">${c.sha256.slice(0, 12)}…</span>${dup}`;
     }
     const actions = [
-      `<a class="btn ghost small" href="/api/v1/certs/${c.id}/calendar.ics" title="Add to calendar">📅</a>`,
       isAdmin ? `<button class="btn ghost small" data-edit="${c.id}">Edit</button>` : '',
       isAdmin ? `<button class="btn link" data-del="${c.id}">Delete</button>` : '',
     ].join(' ');

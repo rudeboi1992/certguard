@@ -98,7 +98,7 @@ main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1.25rem; display: grid
 .grip-ex { font-family: monospace; }
 
 /* generic widget grid, shared by the dashboard and settings */
-.widget-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; align-content: start; align-items: start; }
+.widget-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; align-content: start; align-items: stretch; }
 .widget { grid-column: span 4; position: relative; scroll-margin-top: 1rem; container-type: inline-size; }
 .widget-off { display: none !important; }
 .widget-bar { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; flex-wrap: wrap; }
@@ -121,9 +121,10 @@ body.dragging-widget { cursor: grabbing; user-select: none; }
 }
 .widget-resize:hover { background: linear-gradient(to right, transparent, rgba(127,127,127,.14)); }
 
-/* Tables scroll horizontally inside their card instead of overflowing it. */
+/* Tables scroll horizontally inside their card instead of overflowing it;
+   the tracked table also drops columns as its card narrows (see @container). */
 .table-wrap { overflow-x: auto; }
-.certs { min-width: 560px; }
+.certs { min-width: 440px; }
 .channels { min-width: 420px; }
 
 /* merged Add-entry card: tabs */
@@ -326,4 +327,13 @@ table.channels td.actions { text-align: right; white-space: nowrap; }
 }
 @container (max-width: 330px) {
   .sd-row { grid-template-columns: 1fr; gap: .05rem; padding: .3rem 0; }
+}
+/* Tracked table sheds less-essential columns as its card narrows, so it stays
+   readable instead of scrolling. (2 = Type, 5 = Trust.) */
+@container (max-width: 500px) {
+  .certs { min-width: 0; }
+  .certs :is(th, td):nth-child(2) { display: none; }
+}
+@container (max-width: 320px) {
+  .certs :is(th, td):nth-child(5) { display: none; }
 }
