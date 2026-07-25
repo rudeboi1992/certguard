@@ -248,7 +248,7 @@ table.certs th { color: var(--muted); font-weight: 600; }
 .cal-label { min-width: 9rem; text-align: center; font-weight: 600; }
 .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
 .cal-weekdays span { text-align: center; font-size: .75rem; color: var(--muted); font-weight: 600; }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .cal-cell { min-height: 78px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 5px; overflow: hidden; }
 .cal-cell.empty { border: none; background: transparent; }
 .cal-cell.today { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
@@ -264,13 +264,13 @@ table.certs th { color: var(--muted); font-weight: 600; }
 @media (max-width: 620px) { .cal-cell { min-height: 56px; } .cal-ev { font-size: .65rem; } }
 
 /* calendar — year overview */
-.cal-year { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.cal-year { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .mini-month { border: 1px solid var(--border); border-radius: 8px; padding: 8px 8px 10px;
   cursor: pointer; transition: border-color .15s, background .15s; }
 .mini-month:hover { border-color: var(--primary); background: rgba(37,99,235,.05); }
 .mini-title { font-size: .82rem; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: .4rem; }
 .mini-count { background: var(--primary); color: #fff; border-radius: 999px; font-size: .65rem; padding: 0 .4rem; font-weight: 600; }
-.mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.mini-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
 .mini-cell { font-size: .6rem; text-align: center; color: var(--muted); aspect-ratio: 1;
   display: flex; align-items: center; justify-content: center; border-radius: 3px; }
 .mini-cell.empty { visibility: hidden; }
@@ -316,7 +316,7 @@ table.channels td.actions { text-align: right; white-space: nowrap; }
 
 /* Container queries — respond to each WIDGET's width (placed last so they win
    over the base rules). A widget resized narrow reflows instead of overflowing. */
-@container (max-width: 700px) { .cal-year { grid-template-columns: repeat(2, 1fr); } }
+@container (max-width: 700px) { .cal-year { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @container (max-width: 340px) { .cal-year { grid-template-columns: 1fr; } }
 @container (max-width: 520px) {
   .cal-cell { min-height: 52px; }
