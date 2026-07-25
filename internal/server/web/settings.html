@@ -22,46 +22,64 @@
     </div>
   </header>
 
-  <main>
-    <h1 class="page-title">Settings</h1>
+  <div class="settings-layout">
+    <aside class="settings-nav">
+      <h1 class="page-title">Settings</h1>
+      <nav id="settingsNav">
+        <a href="#notifyCard" data-nav="notifyCard">Notifications</a>
+        <a href="#usersCard" data-nav="usersCard" id="navUsers">Users</a>
+      </nav>
+      <p class="muted small layout-hint">Drag <span class="grip-ex">⠿</span> to reorder · drag a card's right edge to resize.</p>
+      <button id="resetLayout" class="nav-btn">Reset layout</button>
+    </aside>
 
-    <div class="card">
-      <h2>Notifications</h2>
-      <p class="muted">Get alerted as your entries approach expiry (at 30, 7, and 3 days). Channels are yours; alerts cover the whole shared inventory.</p>
-      <form id="channelForm" class="channel-row">
-        <select id="chType">
-          <option value="email">Email</option>
-          <option value="slack">Slack</option>
-          <option value="discord">Discord</option>
-          <option value="webhook">Webhook</option>
-        </select>
-        <input type="text" id="chTarget" placeholder="email address or webhook URL" required>
-        <input type="text" id="chThresholds" class="thresh" placeholder="30,7,3" title="Comma-separated day thresholds (blank = all)">
-        <button type="submit" class="btn primary">Add</button>
-      </form>
-      <table class="channels">
-        <tbody id="channelRows"></tbody>
-      </table>
-      <p id="noChannels" class="muted small" hidden>No channels yet — add one above.</p>
-    </div>
+    <div class="settings-grid" id="settingsGrid">
+      <section class="card widget" id="notifyCard">
+        <div class="widget-head">
+          <span class="widget-grip" draggable="true" title="Drag to move">⠿</span>
+          <h2>Notifications</h2>
+        </div>
+        <p class="muted">Get alerted as your entries approach expiry (at 30, 7, and 3 days). Channels are yours; alerts cover the whole shared inventory.</p>
+        <form id="channelForm" class="channel-row">
+          <select id="chType">
+            <option value="email">Email</option>
+            <option value="slack">Slack</option>
+            <option value="discord">Discord</option>
+            <option value="webhook">Webhook</option>
+          </select>
+          <input type="text" id="chTarget" placeholder="email address or webhook URL" required>
+          <input type="text" id="chThresholds" class="thresh" placeholder="30,7,3" title="Comma-separated day thresholds (blank = all)">
+          <button type="submit" class="btn primary">Add</button>
+        </form>
+        <table class="channels">
+          <tbody id="channelRows"></tbody>
+        </table>
+        <p id="noChannels" class="muted small" hidden>No channels yet — add one above.</p>
+        <span class="widget-resize" title="Drag to resize width"></span>
+      </section>
 
-    <div class="card" id="usersCard" hidden>
-      <h2>Users</h2>
-      <p class="muted">People who can sign in. Accounts are created here — there is no public sign-up. Admins can manage everything; viewers are read-only.</p>
-      <form id="userForm" class="channel-row">
-        <input type="email" id="uEmail" placeholder="email" required>
-        <input type="password" id="uPassword" placeholder="password (8+ chars)" required>
-        <select id="uRole">
-          <option value="viewer">Viewer</option>
-          <option value="admin">Admin</option>
-        </select>
-        <button type="submit" class="btn primary">Add user</button>
-      </form>
-      <table class="channels">
-        <tbody id="userRows"></tbody>
-      </table>
+      <section class="card widget" id="usersCard" hidden>
+        <div class="widget-head">
+          <span class="widget-grip" draggable="true" title="Drag to move">⠿</span>
+          <h2>Users</h2>
+        </div>
+        <p class="muted">People who can sign in. Accounts are created here — there is no public sign-up. Admins can manage everything; viewers are read-only.</p>
+        <form id="userForm" class="channel-row">
+          <input type="email" id="uEmail" placeholder="email" required>
+          <input type="password" id="uPassword" placeholder="password (8+ chars)" required>
+          <select id="uRole">
+            <option value="viewer">Viewer</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button type="submit" class="btn primary">Add user</button>
+        </form>
+        <table class="channels">
+          <tbody id="userRows"></tbody>
+        </table>
+        <span class="widget-resize" title="Drag to resize width"></span>
+      </section>
     </div>
-  </main>
+  </div>
 
   <div id="toast" class="toast" hidden></div>
 

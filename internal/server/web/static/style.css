@@ -81,6 +81,40 @@ code { background: rgba(127,127,127,.15); padding: .05em .35em; border-radius: 4
 main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1.25rem; display: grid; gap: 1.25rem; }
 .page-title { font-size: 1.35rem; margin: 0; }
 
+/* settings: sidebar + draggable/resizable widget grid */
+.settings-layout {
+  max-width: 1120px; margin: 1.5rem auto; padding: 0 1.25rem;
+  display: grid; grid-template-columns: 172px 1fr; gap: 1.25rem; align-items: start;
+}
+.settings-nav { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: .5rem; }
+.settings-nav .page-title { margin-bottom: .4rem; }
+#settingsNav { display: flex; flex-direction: column; gap: .1rem; }
+#settingsNav a {
+  color: var(--muted); text-decoration: none; padding: .4rem .55rem;
+  border-radius: 8px; font-size: .92rem; font-weight: 500;
+}
+#settingsNav a:hover { background: rgba(127,127,127,.12); color: var(--ink); }
+.layout-hint { margin: .4rem 0; line-height: 1.4; }
+.grip-ex { font-family: monospace; }
+
+.settings-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; align-content: start; }
+.widget { grid-column: span 4; position: relative; scroll-margin-top: 1rem; }
+.widget-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem; }
+.widget-head h2 { margin: 0; }
+.widget-grip { cursor: grab; color: var(--muted); user-select: none; font-size: 1.05rem; line-height: 1; }
+.widget-grip:active { cursor: grabbing; }
+.widget.dragging { opacity: .45; }
+.widget-resize { position: absolute; top: 0; right: 0; bottom: 0; width: 10px; cursor: ew-resize; border-radius: 0 var(--radius) var(--radius) 0; }
+.widget-resize:hover { background: linear-gradient(to right, transparent, rgba(127,127,127,.14)); }
+
+@media (max-width: 820px) {
+  .settings-layout { grid-template-columns: 1fr; }
+  .settings-nav { position: static; }
+  .settings-grid { grid-template-columns: 1fr; }
+  .widget { grid-column: 1 / -1 !important; }
+  .widget-resize { display: none; }
+}
+
 .card {
   background: var(--card); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 1.1rem 1.25rem;
