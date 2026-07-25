@@ -26,9 +26,20 @@
   <main>
     <section class="summary" id="summary"></section>
 
-    <div class="add-grid" id="adminControls" hidden>
-      <div class="card">
-        <h2>Scan a live endpoint</h2>
+    <div class="grid-toolbar">
+      <select id="addSectionDash" class="add-section"></select>
+      <button id="resetDashLayout" class="nav-btn">Reset layout</button>
+      <span class="muted small">Drag ⠿ to reorder · drag a card's right edge to resize · × to hide.</span>
+    </div>
+
+    <div class="widget-grid" id="dashGrid">
+      <section class="card widget" id="w-scan" data-admin data-title="Scan a live endpoint" style="grid-column: span 2">
+        <div class="widget-bar">
+          <span class="widget-grip" draggable="true" title="Drag to move">⠿</span>
+          <span class="widget-title">Scan a live endpoint</span>
+          <span class="spacer"></span>
+          <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
+        </div>
         <p class="muted">Connect over TLS and read a certificate automatically.</p>
         <form id="scanForm" class="row">
           <input type="text" id="scanTarget" placeholder="example.com or host:8443" required>
@@ -37,10 +48,16 @@
         <input type="text" id="scanName" class="sub-input" placeholder="Name (optional) — e.g. Karakeep">
         <p id="scanStatus" class="status" hidden></p>
         <div id="scanDetail" class="scan-detail" hidden></div>
-      </div>
+        <span class="widget-resize" title="Drag to resize width"></span>
+      </section>
 
-      <div class="card">
-        <h2>Add an entry</h2>
+      <section class="card widget" id="w-add" data-admin data-title="Add an entry" style="grid-column: span 2">
+        <div class="widget-bar">
+          <span class="widget-grip" draggable="true" title="Drag to move">⠿</span>
+          <span class="widget-title">Add an entry</span>
+          <span class="spacer"></span>
+          <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
+        </div>
         <p class="muted small">A certificate, API key, subscription, domain — anything with an expiry date.</p>
         <div id="dropZone" class="drop-zone">
           <p>Drag &amp; drop a <code>.pem .cer .crt .p12 .pfx</code> file</p>
@@ -70,41 +87,50 @@
           <input type="hidden" id="certSha256">
           <button type="submit" class="btn primary">Add entry</button>
         </form>
-      </div>
-    </div>
+        <span class="widget-resize" title="Drag to resize width"></span>
+      </section>
 
-    <div class="card">
-      <div class="cal-head">
-        <h2>Calendar</h2>
-        <div class="cal-nav">
-          <button id="calYearBtn" class="btn ghost small" title="Back to year" hidden>◱ Year</button>
-          <button id="calPrev" class="btn ghost small" title="Previous">‹</button>
-          <span id="calLabel" class="cal-label"></span>
-          <button id="calNext" class="btn ghost small" title="Next">›</button>
+      <section class="card widget" id="w-calendar" data-title="Calendar" style="grid-column: span 4">
+        <div class="widget-bar">
+          <span class="widget-grip" draggable="true" title="Drag to move">⠿</span>
+          <span class="widget-title">Calendar</span>
+          <span class="spacer"></span>
+          <div class="cal-nav">
+            <button id="calYearBtn" class="btn ghost small" title="Back to year" hidden>◱ Year</button>
+            <button id="calPrev" class="btn ghost small" title="Previous">‹</button>
+            <span id="calLabel" class="cal-label"></span>
+            <button id="calNext" class="btn ghost small" title="Next">›</button>
+          </div>
+          <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
         </div>
-      </div>
-      <div id="calLegend" class="cal-legend"></div>
-      <div id="calWeekdays" class="cal-weekdays" hidden>
-        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-      </div>
-      <div id="calGrid" class="cal-year"></div>
-    </div>
+        <div id="calLegend" class="cal-legend"></div>
+        <div id="calWeekdays" class="cal-weekdays" hidden>
+          <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+        </div>
+        <div id="calGrid" class="cal-year"></div>
+        <span class="widget-resize" title="Drag to resize width"></span>
+      </section>
 
-    <div class="card">
-      <div class="cal-head">
-        <h2>Tracked expirations</h2>
-        <a id="downloadCal" class="btn ghost small" href="/api/v1/calendar.ics">📅 Download calendar</a>
-      </div>
-      <table class="certs">
-        <thead>
-          <tr>
-            <th>Name</th><th>Type</th><th>Expires</th><th>Remaining</th>
-            <th>Trust</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="certRows"></tbody>
-      </table>
-      <p id="empty" class="muted" hidden>Nothing tracked yet.</p>
+      <section class="card widget" id="w-tracked" data-title="Tracked expirations" style="grid-column: span 4">
+        <div class="widget-bar">
+          <span class="widget-grip" draggable="true" title="Drag to move">⠿</span>
+          <span class="widget-title">Tracked expirations</span>
+          <span class="spacer"></span>
+          <a id="downloadCal" class="btn ghost small" href="/api/v1/calendar.ics">📅 Download calendar</a>
+          <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
+        </div>
+        <table class="certs">
+          <thead>
+            <tr>
+              <th>Name</th><th>Type</th><th>Expires</th><th>Remaining</th>
+              <th>Trust</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="certRows"></tbody>
+        </table>
+        <p id="empty" class="muted" hidden>Nothing tracked yet.</p>
+        <span class="widget-resize" title="Drag to resize width"></span>
+      </section>
     </div>
   </main>
 
@@ -113,6 +139,7 @@
   <script src="/static/vendor/forge.min.js"></script>
   <script src="/static/cert-parser.js"></script>
   <script src="/static/common.js"></script>
+  <script src="/static/widgets.js"></script>
   <script src="/static/dashboard.js"></script>
 </body>
 </html>

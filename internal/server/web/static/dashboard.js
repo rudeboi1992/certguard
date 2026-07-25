@@ -434,7 +434,14 @@ $('calYearBtn').addEventListener('click', () => { calView = 'year'; renderCalend
 
 // initial load
 loadWhoami().then(() => {
-  $('adminControls').hidden = !isAdmin;
+  // Viewers don't get the scan / add-entry widgets at all.
+  if (!isAdmin) {
+    document.querySelectorAll('#dashGrid .widget[data-admin]').forEach((w) => w.remove());
+  }
+  initWidgetGrid($('dashGrid'), 'certguard-dash-layout', {
+    addSelect: $('addSectionDash'),
+    resetBtn: $('resetDashLayout'),
+  });
   renderLegend();
   loadCerts();
 }).catch(() => {});
