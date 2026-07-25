@@ -53,9 +53,11 @@
           <input type="text" id="chThresholds" class="thresh" placeholder="30,7,3" title="Comma-separated day thresholds (blank = all)">
           <button type="submit" class="btn primary">Add</button>
         </form>
-        <table class="channels">
-          <tbody id="channelRows"></tbody>
-        </table>
+        <div class="table-wrap">
+          <table class="channels">
+            <tbody id="channelRows"></tbody>
+          </table>
+        </div>
         <p id="noChannels" class="muted small" hidden>No channels yet — add one above.</p>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
@@ -76,9 +78,11 @@
           </select>
           <button type="submit" class="btn primary">Add user</button>
         </form>
-        <table class="channels">
-          <tbody id="userRows"></tbody>
-        </table>
+        <div class="table-wrap">
+          <table class="channels">
+            <tbody id="userRows"></tbody>
+          </table>
+        </div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
     </div>

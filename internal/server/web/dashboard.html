@@ -116,15 +116,17 @@
           <a id="downloadCal" class="btn ghost small" href="/api/v1/calendar.ics">📅 Download calendar</a>
           <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
         </div>
-        <table class="certs">
-          <thead>
-            <tr>
-              <th>Name</th><th>Type</th><th>Expires</th><th>Remaining</th>
-              <th>Trust</th><th></th>
-            </tr>
-          </thead>
-          <tbody id="certRows"></tbody>
-        </table>
+        <div class="table-wrap">
+          <table class="certs">
+            <thead>
+              <tr>
+                <th>Name</th><th>Type</th><th>Expires</th><th>Remaining</th>
+                <th>Trust</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="certRows"></tbody>
+          </table>
+        </div>
         <p id="empty" class="muted" hidden>Nothing tracked yet.</p>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
