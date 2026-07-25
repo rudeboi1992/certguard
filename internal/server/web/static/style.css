@@ -98,7 +98,7 @@ main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1.25rem; display: grid
 .grip-ex { font-family: monospace; }
 
 /* generic widget grid, shared by the dashboard and settings */
-.widget-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; align-content: start; align-items: stretch; }
+.widget-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; align-content: start; align-items: start; }
 .widget { grid-column: span 4; position: relative; scroll-margin-top: 1rem; container-type: inline-size; }
 .widget-off { display: none !important; }
 .widget-bar { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; flex-wrap: wrap; }
@@ -121,11 +121,13 @@ body.dragging-widget { cursor: grabbing; user-select: none; }
 }
 .widget-resize:hover { background: linear-gradient(to right, transparent, rgba(127,127,127,.14)); }
 
-/* Tables scroll horizontally inside their card instead of overflowing it;
-   the tracked table also drops columns as its card narrows (see @container). */
-.table-wrap { overflow-x: auto; }
+/* Tables scroll inside their card instead of overflowing it; the tracked table
+   also drops columns as its card narrows (see @container). A tall table caps at
+   70vh and scrolls, with the header row kept sticky. */
+.table-wrap { overflow: auto; max-height: 70vh; }
 .certs { min-width: 440px; }
 .channels { min-width: 420px; }
+.certs thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
 
 /* merged Add-entry card: tabs */
 .add-tabs { display: flex; gap: .2rem; margin-bottom: .9rem; border-bottom: 1px solid var(--border); }
@@ -249,7 +251,7 @@ table.certs th { color: var(--muted); font-weight: 600; }
 .cal-label { min-width: 9rem; text-align: center; font-weight: 600; }
 .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
 .cal-weekdays span { text-align: center; font-size: .75rem; color: var(--muted); font-weight: 600; }
-.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; max-height: 70vh; overflow-y: auto; }
 .cal-cell { min-height: 78px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 5px; overflow: hidden; }
 .cal-cell.empty { border: none; background: transparent; }
 .cal-cell.today { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
@@ -265,7 +267,7 @@ table.certs th { color: var(--muted); font-weight: 600; }
 @media (max-width: 620px) { .cal-cell { min-height: 56px; } .cal-ev { font-size: .65rem; } }
 
 /* calendar — year overview */
-.cal-year { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.cal-year { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; max-height: 70vh; overflow-y: auto; }
 .mini-month { border: 1px solid var(--border); border-radius: 8px; padding: 8px 8px 10px;
   cursor: pointer; transition: border-color .15s, background .15s; }
 .mini-month:hover { border-color: var(--primary); background: rgba(37,99,235,.05); }
