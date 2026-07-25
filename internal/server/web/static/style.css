@@ -108,6 +108,9 @@ main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1.25rem; display: grid
   display: flex; flex-direction: column; max-height: 78vh;
 }
 .widget-grid.ready .widget { transition: top .18s ease, left .18s ease; }
+/* The Add-entry and Calendar cards size to their content instead of capping +
+   scrolling — the tabs stay put and the manual form / calendar always fit. */
+#w-add, #w-calendar { max-height: none; }
 .widget-off { display: none !important; }
 /* The bar stays put; only the body scrolls (vertically) when a card grows too
    tall. Horizontal scroll is disabled — content reflows to fit the card. */
@@ -209,8 +212,9 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 
 .drop-zone {
   border: 2px dashed var(--border); border-radius: 10px; padding: 1.1rem;
-  text-align: center; transition: border-color .15s, background .15s;
+  text-align: center; transition: border-color .15s, background .15s; cursor: pointer;
 }
+.drop-zone:hover { border-color: var(--primary); background: rgba(37,99,235,.04); }
 .drop-zone.dragover { border-color: var(--primary); background: rgba(37,99,235,.06); }
 .drop-zone.parsed { border-color: var(--ok); }
 
@@ -369,8 +373,17 @@ table.channels td.actions { text-align: right; white-space: nowrap; }
 
 /* Container queries — respond to each WIDGET's width (placed last so they win
    over the base rules). A widget resized narrow reflows instead of overflowing. */
-@container (max-width: 700px) { .cal-year { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@container (max-width: 340px) { .cal-year { grid-template-columns: 1fr; } }
+/* Medium widths: fewer mini-month columns. */
+@container (max-width: 760px) { .cal-year { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* Small screens / narrow cards: collapse the year to just tappable month names
+   (with their expiry counts) so the whole year fits with no scrolling. */
+@container (max-width: 600px) {
+  .cal-year { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .mini-grid { display: none; }
+  .mini-month { padding: .6rem .5rem; text-align: center; }
+  .mini-title { margin: 0; justify-content: center; font-size: .9rem; }
+}
+@container (max-width: 360px) { .cal-year { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @container (max-width: 520px) {
   .cal-cell { min-height: 52px; }
   .cal-ev { font-size: .62rem; padding: 1px 4px; }
