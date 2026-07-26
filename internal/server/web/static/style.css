@@ -243,7 +243,23 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 /* Tracked-entries list. Mobile-first: each row is a card whose surface can be
    swiped left to reveal Edit/Delete. At >=640px card width it becomes a table-
    like grid (see the @container block near the end of the file). */
+/* search + sort toolbar above the tracked list */
+.tracked-toolbar { display: flex; gap: .6rem; margin-bottom: .8rem; flex-wrap: wrap; }
+.tracked-search { flex: 1; min-width: 150px; }
+.tracked-search, .tracked-sort {
+  padding: .45rem .6rem; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); color: var(--ink); font: inherit;
+}
+
 .tracked-list { font-size: .92rem; }
+/* rescan-now link + "last checked" line on endpoint rows */
+.checkline { display: inline-block; margin-top: .15rem; }
+.rescan-btn {
+  background: none; border: none; padding: 0; color: var(--primary);
+  font: inherit; font-size: .78rem; cursor: pointer;
+}
+.rescan-btn:hover { text-decoration: underline; }
+.rescan-btn:disabled { color: var(--muted); cursor: default; text-decoration: none; }
 .trow-head { display: none; }
 .trow { position: relative; overflow: hidden; border-bottom: 1px solid var(--border); }
 .trow-actions { position: absolute; top: 0; right: 0; bottom: 0; display: flex; }

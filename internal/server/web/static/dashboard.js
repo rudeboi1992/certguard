@@ -89,6 +89,50 @@ function renderLegend() {
 async function loadCerts() {
   const res = await api('GET', '/api/v1/certs');
   currentItems = await res.json();
+  // Summary + calendar reflect the full set; compute once per fetch.
+  let urgent = 0, soon = 0;
+  for (const it of currentItems) {
+    const level = expiryLevel(it.days_remaining);
+    if (level === 'urgent') urgent++;
+    else if (level === 'warn' || level === 'notice') soon++;
+  }
+  renderSummary(currentItems.length, soon, urgent);
+  renderCalendar();
+  renderCerts();
+}
+
+// Re-render the list (rows only) when the search text or sort order changes.
+['trackedSearch', 'trackedSort'].forEach((id) => {
+  const el = $(id);
+  if (el) el.addEventListener('input', renderCerts);
+});
+
+// Apply the current search text + sort order to a copy of currentItems.
+function filterSortItems() {
+  const q = (($('trackedSearch') || {}).value || '').trim().toLowerCase();
+  let items = currentItems.slice();
+  if (q) {
+    items = items.filter((it) => {
+      const c = it.cert;
+      return (c.name || '').toLowerCase().includes(q)
+        || (c.host || '').toLowerCase().includes(q)
+        || (c.category || '').toLowerCase().includes(q)
+        || categoryLabel(c.category).toLowerCase().includes(q);
+    });
+  }
+  const sort = (($('trackedSort') || {}).value) || 'expiry-asc';
+  items.sort((a, b) => {
+    if (sort === 'name') return (a.cert.name || '').localeCompare(b.cert.name || '');
+    if (sort === 'added') return (b.cert.id || 0) - (a.cert.id || 0);
+    if (sort === 'expiry-desc') return b.days_remaining - a.days_remaining;
+    return a.days_remaining - b.days_remaining; // soonest first (default)
+  });
+  return items;
+}
+
+// renderCerts (re)draws the list from currentItems. Summary/calendar/fingerprint
+// stats always reflect the FULL set; only the visible rows are filtered/sorted.
+function renderCerts() {
   const rows = $('certRows');
   rows.innerHTML = '';
 
@@ -99,14 +143,12 @@ async function loadCerts() {
     if (fp) (fpGroups[fp] ||= []).push({ id: it.cert.id, name: it.cert.name });
   }
 
-  let urgent = 0, soon = 0;
-  for (const it of currentItems) {
+  const items = filterSortItems();
+  for (const it of items) {
     const c = it.cert;
     const days = it.days_remaining;
     const trusted = !c.last_error;
     const level = expiryLevel(days);
-    if (level === 'urgent') urgent++;
-    else if (level === 'warn' || level === 'notice') soon++;
 
     const catCol = categoryColor(c.category);
     const typeCell = c.category
@@ -123,6 +165,14 @@ async function loadCerts() {
         ? ` <span class="pill dup" title="Same certificate as: ${escapeHtml(others.join(', '))}">duplicate</span>`
         : '';
       fpLine = `<br><span class="mono muted small" title="SHA-256: ${escapeHtml(c.sha256)}">${c.sha256.slice(0, 12)}…</span>${dup}`;
+    }
+    // Endpoints show when they were last checked, plus a rescan-now button.
+    let checkLine = '';
+    const isEndpoint = c.kind === 'endpoint' || !!c.host;
+    if (isEndpoint) {
+      const checked = c.last_scanned_at ? `checked ${escapeHtml(relTime(c.last_scanned_at))}` : 'never checked';
+      const rescan = isAdmin ? `<button class="rescan-btn" data-rescan="${c.id}" title="Rescan this endpoint now">↻ rescan</button> · ` : '';
+      checkLine = `<br><span class="checkline muted small">${rescan}${checked}</span>`;
     }
     const inlineActions = [
       isAdmin ? `<button class="btn ghost small" data-edit="${c.id}">Edit</button>` : '',
@@ -142,7 +192,7 @@ async function loadCerts() {
     row.innerHTML = `
       <div class="trow-actions" aria-hidden="true">${swipeActions}</div>
       <div class="trow-surface">
-        <div class="tcol tc-name"><strong>${escapeHtml(c.name)}</strong>${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}${fpLine}${coverToggle}</div>
+        <div class="tcol tc-name"><strong>${escapeHtml(c.name)}</strong>${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}${fpLine}${checkLine}${coverToggle}</div>
         <div class="tcol tc-meta">
           <span class="tc-type">${typeCell}</span>
           <span class="tc-exp">${fmtDate(c.expires_at)}</span>
@@ -154,11 +204,10 @@ async function loadCerts() {
     rows.appendChild(row);
   }
   $('empty').hidden = currentItems.length !== 0;
-  $('empty').closest('.widget-body').querySelector('.swipe-hint').hidden =
-    currentItems.length === 0 || !isAdmin;
-
-  renderSummary(currentItems.length, soon, urgent);
-  renderCalendar();
+  if ($('trackedToolbar')) $('trackedToolbar').hidden = currentItems.length === 0;
+  if ($('noMatch')) $('noMatch').hidden = !(currentItems.length !== 0 && items.length === 0);
+  const hint = $('empty').closest('.widget-body').querySelector('.swipe-hint');
+  if (hint) hint.hidden = items.length === 0 || !isAdmin;
 
   openRow = null;
   rows.querySelectorAll('[data-del]').forEach((b) =>
@@ -167,7 +216,19 @@ async function loadCerts() {
     b.addEventListener('click', () => startEdit(b.dataset.edit)));
   rows.querySelectorAll('[data-cover]').forEach((b) =>
     b.addEventListener('click', () => toggleCover(b)));
+  rows.querySelectorAll('[data-rescan]').forEach((b) =>
+    b.addEventListener('click', () => rescanCert(b.dataset.rescan, b)));
   rows.querySelectorAll('.trow').forEach(attachSwipe);
+}
+
+// Rescan a single endpoint on demand, then refresh the list.
+async function rescanCert(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '↻ scanning…'; }
+  const res = await api('POST', `/api/v1/certs/${id}/rescan`);
+  const d = await res.json().catch(() => ({}));
+  if (res.ok) toast('Rescanned ✓');
+  else toast(d.error || 'Rescan failed', true);
+  loadCerts();
 }
 
 // --- swipe-to-reveal Edit/Delete on entry rows (mobile card layout) ---

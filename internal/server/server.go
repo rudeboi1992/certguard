@@ -73,6 +73,7 @@ func (s *Server) routes() {
 	// Admin-only (writes).
 	s.mux.Handle("POST /api/v1/scan", s.adminOnly(s.handleScan))
 	s.mux.Handle("POST /api/v1/certs", s.adminOnly(s.handleCreateCert))
+	s.mux.Handle("POST /api/v1/certs/{id}/rescan", s.adminOnly(s.handleRescanCert))
 	s.mux.Handle("PATCH /api/v1/certs/{id}", s.adminOnly(s.handleUpdateCert))
 	s.mux.Handle("DELETE /api/v1/certs/{id}", s.adminOnly(s.handleDeleteCert))
 
@@ -461,6 +462,43 @@ func (s *Server) handleUpdateCert(w http.ResponseWriter, r *http.Request) {
 	}
 	updated, _ := s.store.GetByID(id)
 	writeJSON(w, http.StatusOK, updated)
+}
+
+// handleRescanCert re-scans a single live endpoint on demand, refreshing its
+// stored expiry and trust state. Only endpoint entries have somewhere to scan.
+func (s *Server) handleRescanCert(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	c, err := s.store.GetByID(id)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "entry not found")
+		return
+	}
+	if c.Kind != model.KindEndpoint || c.Host == "" {
+		writeErr(w, http.StatusBadRequest, "only live endpoint entries can be rescanned")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ScanTimeout+2*time.Second)
+	defer cancel()
+	res, err := scanner.Scan(ctx, c.Host, c.Port, scanner.Options{
+		Timeout:    s.cfg.ScanTimeout,
+		ServerName: c.ServerName,
+	})
+	if err != nil {
+		// Record the failed attempt so "last checked" and the error surface in UI.
+		_ = s.store.TouchScanError(id, err.Error())
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	stored, err := s.store.UpsertScan(c.Name, res)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, stored)
 }
 
 // handleCalendar returns all active entries as an .ics calendar file.

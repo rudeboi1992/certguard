@@ -212,6 +212,14 @@ func (s *Store) UpdateEntry(id int64, name, category, notes string) error {
 	return nil
 }
 
+// TouchScanError records a failed scan attempt (bump last_scanned_at + store the
+// error) so an on-demand rescan that couldn't connect still reflects the attempt.
+func (s *Store) TouchScanError(id int64, msg string) error {
+	now := time.Now().UTC().Format(rfc3339)
+	_, err := s.exec(`UPDATE certs SET last_scanned_at=?, last_error=? WHERE id=? AND active=1`, now, msg, id)
+	return err
+}
+
 // SoftDelete marks a cert inactive so it drops out of listings and scans.
 func (s *Store) SoftDelete(id int64) error {
 	res, err := s.exec(`UPDATE certs SET active=0 WHERE id=? AND active=1`, id)

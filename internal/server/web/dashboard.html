@@ -123,6 +123,15 @@
           <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
         </div>
         <div class="widget-body">
+        <div class="tracked-toolbar" id="trackedToolbar" hidden>
+          <input type="search" id="trackedSearch" class="tracked-search" placeholder="Search name, host, type…" aria-label="Search entries">
+          <select id="trackedSort" class="tracked-sort" aria-label="Sort entries">
+            <option value="expiry-asc">Soonest expiry</option>
+            <option value="expiry-desc">Latest expiry</option>
+            <option value="name">Name (A–Z)</option>
+            <option value="added">Recently added</option>
+          </select>
+        </div>
         <div class="tracked-list">
           <div class="trow-head">
             <div>Name</div><div>Type</div><div>Expires</div><div>Remaining</div><div>Trust</div><div></div>
@@ -130,6 +139,7 @@
           <div id="certRows"></div>
         </div>
         <p id="empty" class="muted" hidden>Nothing tracked yet.</p>
+        <p id="noMatch" class="muted small" hidden>No entries match your search.</p>
         <p class="muted small swipe-hint">Tip: swipe a row left to edit or delete it.</p>
         </div>
         <span class="widget-resize" title="Drag to resize width"></span>
