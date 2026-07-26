@@ -82,6 +82,8 @@ function initWidgetGrid(grid, storageKey, opts) {
   function apply() {
     let data;
     try { data = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch (e) {}
+    // First run (or after Reset): seed the shipped default arrangement.
+    if (!data && opts.defaults) data = opts.defaults;
     if (data) {
       (data.order || []).forEach((id) => {
         const el = document.getElementById(id);
@@ -202,7 +204,17 @@ function initWidgetGrid(grid, storageKey, opts) {
       e.preventDefault();
       const startY = e.clientY;
       const startH = card.offsetHeight;
-      const move = (ev) => { setHeight(card, startH + (ev.clientY - startY)); layout(); };
+      // Snap targets: every other visible card's height (align to a neighbour)
+      // plus this card's own fit-to-content height (snap back to "just fits").
+      const body = card.querySelector('.widget-body');
+      const snaps = visible().filter((c) => c !== card).map((c) => c.offsetHeight);
+      if (body) snaps.push(startH - body.clientHeight + body.scrollHeight);
+      const move = (ev) => {
+        let h = Math.max(96, startH + (ev.clientY - startY));
+        for (const s of snaps) { if (s > 0 && Math.abs(h - s) <= 14) { h = s; break; } }
+        setHeight(card, h);
+        layout();
+      };
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);

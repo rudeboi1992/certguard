@@ -651,6 +651,11 @@ loadWhoami().then(() => {
   initWidgetGrid($('dashGrid'), 'certguard-dash-layout', {
     addSelect: $('addSectionDash'),
     resetBtn: $('resetDashLayout'),
+    // Shipped default arrangement: Add + Tracked side by side, Calendar full-width below.
+    defaults: {
+      order: ['w-add', 'w-tracked', 'w-calendar'],
+      spans: { 'w-add': 2, 'w-tracked': 2, 'w-calendar': 4 },
+    },
   });
   renderLegend();
   loadCerts();
