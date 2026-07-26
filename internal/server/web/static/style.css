@@ -131,18 +131,30 @@ body.dragging-widget { cursor: grabbing; user-select: none; }
 .widget.dragging { opacity: .45; }
 .widget.drop-target { outline: 2px dashed var(--primary); outline-offset: -2px; }
 .widget-resize {
-  position: absolute; top: 0; right: 0; bottom: 0; width: 12px; cursor: ew-resize;
-  border-radius: 0 var(--radius) var(--radius) 0;
+  position: absolute; top: 0; right: 0; bottom: 14px; width: 12px; cursor: ew-resize;
+  border-radius: 0 var(--radius) 0 0;
   touch-action: none; /* let a horizontal drag resize instead of scrolling the page */
 }
 .widget-resize:hover { background: linear-gradient(to right, transparent, rgba(127,127,127,.14)); }
-/* On touch devices the handle is wider and shows a visible grab pill so it's
+/* Bottom-edge handle sets an explicit card height; the body scrolls inside it. */
+.widget-resize-v {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 12px; cursor: ns-resize;
+  border-radius: 0 0 var(--radius) var(--radius);
+  touch-action: none;
+}
+.widget-resize-v:hover { background: linear-gradient(to bottom, transparent, rgba(127,127,127,.14)); }
+/* On touch devices the handles are wider and show a visible grab pill so they're
    discoverable and easy to hit with a finger. */
 @media (pointer: coarse) {
   .widget-resize { width: 24px; }
   .widget-resize::before {
     content: ""; position: absolute; top: 50%; right: 7px; transform: translateY(-50%);
     width: 4px; height: 42px; border-radius: 3px; background: var(--border);
+  }
+  .widget-resize-v { height: 24px; }
+  .widget-resize-v::before {
+    content: ""; position: absolute; left: 50%; bottom: 7px; transform: translateX(-50%);
+    width: 42px; height: 4px; border-radius: 3px; background: var(--border);
   }
 }
 

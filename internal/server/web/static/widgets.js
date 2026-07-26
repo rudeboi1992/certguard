@@ -63,12 +63,21 @@ function initWidgetGrid(grid, storageKey, opts) {
   function save() {
     const order = widgets().map((c) => c.id);
     const spans = {};
+    const heightsMap = {};
     const hidden = [];
     for (const c of widgets()) {
       spans[c.id] = spanOf(c);
+      if (c.dataset.height) heightsMap[c.id] = +c.dataset.height;
       if (c.classList.contains('widget-off')) hidden.push(c.id);
     }
-    try { localStorage.setItem(storageKey, JSON.stringify({ order, spans, hidden })); } catch (e) {}
+    try { localStorage.setItem(storageKey, JSON.stringify({ order, spans, heights: heightsMap, hidden })); } catch (e) {}
+  }
+  // Give a card an explicit height (content scrolls inside); min keeps the bar usable.
+  function setHeight(card, h) {
+    h = Math.max(96, Math.round(h));
+    card.style.height = h + 'px';
+    card.style.maxHeight = 'none';
+    card.dataset.height = h;
   }
   function apply() {
     let data;
@@ -81,6 +90,10 @@ function initWidgetGrid(grid, storageKey, opts) {
       for (const id in (data.spans || {})) {
         const el = document.getElementById(id);
         if (el) el.dataset.span = data.spans[id];
+      }
+      for (const id in (data.heights || {})) {
+        const el = document.getElementById(id);
+        if (el) setHeight(el, data.heights[id]);
       }
       (data.hidden || []).forEach((id) => {
         const el = document.getElementById(id);
@@ -166,6 +179,30 @@ function initWidgetGrid(grid, storageKey, opts) {
         const span = Math.max(1, Math.min(cols, Math.round((w + GAP) / (colW + GAP))));
         if (String(span) !== card.dataset.span) { card.dataset.span = span; layout(); }
       };
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        save();
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    });
+  });
+
+  // --- drag the bottom edge to resize height (content scrolls inside) ---
+  // The vertical handle is injected next to each existing width handle so it
+  // applies on every resizable card without extra markup.
+  widgets().forEach((card) => {
+    if (!card.querySelector('.widget-resize') || card.querySelector('.widget-resize-v')) return;
+    const vh = document.createElement('span');
+    vh.className = 'widget-resize-v';
+    vh.title = 'Drag to resize height';
+    card.appendChild(vh);
+    vh.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const startY = e.clientY;
+      const startH = card.offsetHeight;
+      const move = (ev) => { setHeight(card, startH + (ev.clientY - startY)); layout(); };
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
