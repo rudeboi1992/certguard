@@ -96,16 +96,16 @@
       <section class="card widget" id="w-calendar" data-title="Calendar" style="grid-column: span 4">
         <div class="widget-bar">
           <span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Calendar</span></span>
-          <button id="calYearBtn" class="btn ghost small" title="Back" hidden>◱ Year</button>
-          <a id="downloadCal" class="btn ghost small cal-add" href="/api/v1/calendar.ics" title="Add all expirations to your calendar (.ics)" aria-label="Add to calendar">+📆</a>
           <span class="spacer"></span>
           <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
         </div>
         <div class="widget-body">
         <div class="cal-range">
+          <button id="calYearBtn" class="btn ghost small" title="Back" hidden>◱ Year</button>
           <button id="calPrev" class="btn ghost small" title="Previous">‹</button>
           <span id="calLabel" class="cal-label"></span>
           <button id="calNext" class="btn ghost small" title="Next">›</button>
+          <a id="downloadCal" class="btn ghost small cal-add" href="/api/v1/calendar.ics" title="Add all expirations to your calendar (.ics)" aria-label="Add to calendar">+📆</a>
         </div>
         <div id="calLegend" class="cal-legend"></div>
         <div id="calWeekdays" class="cal-weekdays" hidden>

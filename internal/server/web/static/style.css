@@ -316,10 +316,12 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .cal-legend { display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: center; margin: 0 0 1rem; }
 .cal-legend .leg { display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; color: var(--muted); }
 .cal-legend .leg i { width: 11px; height: 11px; border-radius: 3px; }
-/* the month/year range sits on its own line under the title bar */
-.cal-range { display: flex; align-items: center; gap: .5rem; margin-bottom: .8rem; }
-.cal-add { white-space: nowrap; }
-.cal-label { min-width: 9rem; text-align: center; font-weight: 600; }
+/* nav row (back · ‹ range › · add-to-calendar) sits under the clean title bar */
+.cal-range { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .8rem; }
+/* margin-left:auto keeps the add button right-aligned whether it stays on the
+   nav line or wraps to its own line on a narrow card. */
+.cal-add { white-space: nowrap; margin-left: auto; }
+.cal-label { min-width: 0; text-align: center; font-weight: 600; padding: 0 .2rem; }
 .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
 .cal-weekdays span { text-align: center; font-size: .75rem; color: var(--muted); font-weight: 600; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
