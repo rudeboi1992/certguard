@@ -651,10 +651,13 @@ loadWhoami().then(() => {
   initWidgetGrid($('dashGrid'), 'certguard-dash-layout', {
     addSelect: $('addSectionDash'),
     resetBtn: $('resetDashLayout'),
-    // Shipped default arrangement: Add + Tracked side by side, Calendar full-width below.
+    // Shipped default arrangement: Add + Tracked side by side at a matched
+    // height (fits the manual-entry form), Calendar full-width below. The
+    // heights are only applied on multi-column (desktop) layouts.
     defaults: {
       order: ['w-add', 'w-tracked', 'w-calendar'],
       spans: { 'w-add': 2, 'w-tracked': 2, 'w-calendar': 4 },
+      heights: { 'w-add': 625, 'w-tracked': 625 },
     },
   });
   renderLegend();

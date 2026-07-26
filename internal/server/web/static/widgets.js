@@ -80,10 +80,10 @@ function initWidgetGrid(grid, storageKey, opts) {
     card.dataset.height = h;
   }
   function apply() {
-    let data;
+    let data, fromDefault = false;
     try { data = JSON.parse(localStorage.getItem(storageKey) || 'null'); } catch (e) {}
     // First run (or after Reset): seed the shipped default arrangement.
-    if (!data && opts.defaults) data = opts.defaults;
+    if (!data && opts.defaults) { data = opts.defaults; fromDefault = true; }
     if (data) {
       (data.order || []).forEach((id) => {
         const el = document.getElementById(id);
@@ -93,7 +93,11 @@ function initWidgetGrid(grid, storageKey, opts) {
         const el = document.getElementById(id);
         if (el) el.dataset.span = data.spans[id];
       }
+      // Skip the shipped default heights on a single-column (mobile) layout —
+      // a forced height there just makes a card scroll. User-set heights apply.
+      const skipHeights = fromDefault && grid.clientWidth < 640;
       for (const id in (data.heights || {})) {
+        if (skipHeights) break;
         const el = document.getElementById(id);
         if (el) setHeight(el, data.heights[id]);
       }
