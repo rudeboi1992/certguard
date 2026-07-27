@@ -60,9 +60,11 @@ html, body { overflow-x: hidden; max-width: 100%; }
 /* "More content below" affordance: a slow amber breathing glow at the bottom
    edge of any card whose body can still scroll down. */
 .widget::after {
-  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 4;
-  border-radius: var(--radius); opacity: 0;
-  box-shadow: inset 0 -16px 22px -10px rgba(234,179,8,.9);
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 46px;
+  pointer-events: none; z-index: 4; opacity: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+  /* pure vertical gradient — glows along the bottom only, never the sides */
+  background: linear-gradient(to top, rgba(234,179,8,.6), rgba(234,179,8,.15) 45%, transparent);
 }
 .widget.can-scroll-down::after { animation: cg-breathe 2.6s ease-in-out infinite; }
 @keyframes cg-breathe { 0%, 100% { opacity: .18; } 50% { opacity: .8; } }
