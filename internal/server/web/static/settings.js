@@ -9,16 +9,17 @@ async function loadChannels() {
   rows.innerHTML = '';
   for (const c of chans) {
     const th = c.thresholds && c.thresholds.trim() ? c.thresholds : '30,7,3';
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><span class="pill notice">${c.type}</span></td>
-      <td class="mono">${escapeHtml(c.target)}</td>
-      <td class="muted small">${escapeHtml(th)}</td>
-      <td class="actions">
+    const row = document.createElement('div');
+    row.className = 'set-row';
+    row.innerHTML = `
+      <span class="pill notice set-tag">${escapeHtml(c.type)}</span>
+      <span class="set-target mono" title="${escapeHtml(c.target)}">${escapeHtml(c.target)}</span>
+      <span class="set-meta muted small" title="Alert thresholds (days)">${escapeHtml(th)}</span>
+      <span class="set-actions">
         <button class="btn ghost small" data-test="${c.id}">Test</button>
         <button class="btn link" data-delch="${c.id}">Remove</button>
-      </td>`;
-    rows.appendChild(tr);
+      </span>`;
+    rows.appendChild(row);
   }
   $('noChannels').hidden = chans.length !== 0;
   rows.querySelectorAll('[data-test]').forEach((b) =>
@@ -70,13 +71,14 @@ async function loadUsers() {
   rows.innerHTML = '';
   for (const u of users) {
     const isSelf = u.id === currentUserId;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${escapeHtml(u.email)}${isSelf ? ' <span class="muted small">(you)</span>' : ''}</td>
-      <td><span class="pill ${u.role === 'admin' ? 'notice' : 'ok'}">${u.role}</span></td>
-      <td class="muted small">joined ${fmtDate(u.created_at)}</td>
-      <td class="actions">${isSelf ? '' : `<button class="btn link" data-deluser="${u.id}">Remove</button>`}</td>`;
-    rows.appendChild(tr);
+    const row = document.createElement('div');
+    row.className = 'set-row';
+    row.innerHTML = `
+      <span class="set-target" title="${escapeHtml(u.email)}">${escapeHtml(u.email)}${isSelf ? ' <span class="muted small">(you)</span>' : ''}</span>
+      <span class="pill ${u.role === 'admin' ? 'notice' : 'ok'} set-tag">${escapeHtml(u.role)}</span>
+      <span class="set-meta set-date muted small">joined ${fmtDate(u.created_at)}</span>
+      <span class="set-actions">${isSelf ? '' : `<button class="btn link" data-deluser="${u.id}">Remove</button>`}</span>`;
+    rows.appendChild(row);
   }
   rows.querySelectorAll('[data-deluser]').forEach((b) =>
     b.addEventListener('click', () => deleteUser(b.dataset.deluser)));
@@ -119,6 +121,10 @@ document.querySelectorAll('#settingsNav a').forEach((a) => {
 initWidgetGrid($('settingsGrid'), 'certguard-settings-layout', {
   addSelect: $('addSectionSettings'),
   resetBtn: $('resetLayout'),
+  defaults: {
+    order: ['notifyCard', 'usersCard'],
+    spans: { notifyCard: 2, usersCard: 2 },
+  },
 });
 
 // initial load

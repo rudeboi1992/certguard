@@ -188,10 +188,6 @@ body.dragging-widget { cursor: grabbing; user-select: none; }
   }
 }
 
-/* Settings channel/user tables keep a comfortable min-width on wide cards but
-   drop it on narrow ones (see @container) so they never scroll sideways. */
-.channels { min-width: 420px; }
-
 /* merged Add-entry card: tabs */
 .add-tabs { display: flex; gap: .2rem; margin-bottom: .9rem; border-bottom: 1px solid var(--border); }
 .add-tab {
@@ -429,14 +425,26 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .status.ok { color: var(--ok); }
 .error { color: var(--urgent); font-size: .9rem; margin: 0; }
 
-.channel-row { display: flex; gap: .5rem; margin-bottom: .8rem; flex-wrap: wrap; }
+/* Add-channel / add-user forms: capped so they don't stretch across a wide card. */
+.channel-row { display: flex; gap: .5rem; margin-bottom: .9rem; flex-wrap: wrap; max-width: 640px; }
 .channel-row select, .channel-row input { padding: .5rem .6rem; border: 1px solid var(--border);
   border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
-.channel-row #chTarget { flex: 1; min-width: 200px; }
+.channel-row #chTarget, .channel-row #uEmail, .channel-row #uPassword { flex: 1; min-width: 200px; }
 .channel-row .thresh { width: 90px; }
-table.channels { width: 100%; border-collapse: collapse; table-layout: fixed; }
-table.channels td { padding: .45rem .5rem; border-bottom: 1px solid var(--border); font-size: .9rem; vertical-align: middle; overflow-wrap: anywhere; }
-table.channels td.actions { text-align: right; white-space: nowrap; }
+
+/* Clean settings rows (channels + users): content on the left (long targets
+   ellipsize), actions on the right. Reads well at any card width. */
+.set-list { max-width: 640px; }
+.set-row { display: flex; align-items: center; gap: .55rem; padding: .6rem .1rem;
+  border-bottom: 1px solid var(--border); font-size: .9rem; }
+.set-row:last-child { border-bottom: none; }
+.set-tag { flex: 0 0 auto; text-transform: capitalize; }
+.set-target { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-meta { flex: 0 0 auto; }
+.set-actions { flex: 0 0 auto; margin-left: auto; display: flex; align-items: center; gap: .4rem; }
+/* On narrow cards drop the secondary column (channel thresholds / join date)
+   so the address or email shows in full. */
+@container (max-width: 520px) { .set-meta { display: none; } }
 .btn.small { padding: .3rem .6rem; font-size: .82rem; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; word-break: break-all; }
 
@@ -515,4 +523,3 @@ table.channels td.actions { text-align: right; white-space: nowrap; }
   .swipe-hint { display: none; }
 }
 /* Settings tables: drop the min-width on narrow cards so they never scroll. */
-@container (max-width: 460px) { .channels { min-width: 0; } }
