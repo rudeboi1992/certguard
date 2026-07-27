@@ -445,6 +445,32 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 /* On narrow cards drop the secondary column (channel thresholds / join date)
    so the address or email shows in full. */
 @container (max-width: 520px) { .set-meta { display: none; } }
+/* --- insight cards (Expiring soon / Problems / Issuers / Audit / etc.) --- */
+.mini-row { display: flex; align-items: center; gap: .55rem; padding: .5rem .1rem;
+  border-bottom: 1px solid var(--border); font-size: .9rem; }
+.mini-row:last-child { border-bottom: none; }
+.mini-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.mini-date { flex: 0 0 auto; white-space: nowrap; margin-left: auto; }
+.mini-row .pill { flex: 0 0 auto; }
+.audit-flags { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: .3rem; justify-content: flex-end; }
+.empty-ok { color: var(--ok); font-weight: 500; margin: .2rem 0; }
+.kv { display: flex; align-items: center; gap: .55rem; padding: .32rem 0; font-size: .9rem; }
+.kv-label { flex: 0 0 42%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kv-bar { flex: 1; height: 8px; background: rgba(127,127,127,.16); border-radius: 5px; overflow: hidden; }
+.kv-bar > span { display: block; height: 100%; background: var(--primary); border-radius: 5px; }
+.kv-num { flex: 0 0 auto; min-width: 1.6em; text-align: right; font-weight: 600; }
+.kv2 { display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  padding: .4rem 0; border-bottom: 1px solid var(--border); font-size: .92rem; }
+.kv2:last-of-type { border-bottom: none; }
+#schedulerBody #scanAllBtn { margin-top: .8rem; }
+.nextup { text-align: center; padding: .8rem 0 .4rem; }
+.nextup-num { font-size: 2.4rem; font-weight: 700; line-height: 1; }
+.nextup-num.urgent { color: var(--urgent); } .nextup-num.warn { color: var(--warn); }
+.nextup-num.notice { color: var(--notice); } .nextup-num.ok { color: var(--ok); }
+.nextup-name { font-weight: 600; margin-top: .4rem; overflow-wrap: anywhere; }
+.notes-input { width: 100%; min-height: 150px; resize: vertical; padding: .6rem .7rem;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+
 .btn.small { padding: .3rem .6rem; font-size: .82rem; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; word-break: break-all; }
 

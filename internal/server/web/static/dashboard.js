@@ -99,6 +99,7 @@ async function loadCerts() {
   renderSummary(currentItems.length, soon, urgent);
   renderCalendar();
   renderCerts();
+  renderDerivedCards();
 }
 
 // Re-render the list (rows only) when the search text or sort order changes.
@@ -642,6 +643,192 @@ $('calYearBtn').addEventListener('click', () => {
   renderCalendar();
 });
 
+// ===== Optional insight cards (all derive from currentItems + a little extra) =====
+let dashChannels = [];
+let schedStatus = null;
+
+async function loadDashExtras() {
+  try { dashChannels = await (await api('GET', '/api/v1/channels')).json(); } catch (e) { dashChannels = []; }
+  try { schedStatus = await (await api('GET', '/api/v1/scan/status')).json(); } catch (e) { schedStatus = null; }
+  renderDerivedCards();
+}
+
+function renderDerivedCards() {
+  renderSoon(); renderProblems(); renderNextUp(); renderIssuers();
+  renderAudit(); renderScanHealth(); renderRenewals();
+  renderAlertPreview(); renderScheduler();
+}
+
+// small formatting helpers
+function shortErr(s) { s = (s || '').replace(/\s+/g, ' ').trim(); return s.length > 44 ? s.slice(0, 44) + '…' : s; }
+// Pull a friendly issuer name (Organization, else Common Name) out of the DN,
+// coping with escaped commas inside a value like "O=Cloudflare\, Inc.".
+function shortIssuer(dn) {
+  const s = (dn || '').trim();
+  if (!s) return '—';
+  const m = /O=(.*?)(?:,\s*[A-Za-z]+=|$)/i.exec(s) || /CN=(.*?)(?:,\s*[A-Za-z]+=|$)/i.exec(s);
+  const v = m ? m[1] : s;
+  return v.replace(/\\/g, '').replace(/^"|"$/g, '').trim() || '—';
+}
+function humanDuration(sec) {
+  if (sec % 3600 === 0) return (sec / 3600) + 'h';
+  if (sec % 60 === 0) return (sec / 60) + 'm';
+  return sec + 's';
+}
+function relFuture(ms) {
+  const s = (ms - Date.now()) / 1000;
+  if (s <= 0) return 'due now';
+  const h = Math.floor(s / 3600); if (h >= 1) return 'in ' + h + 'h';
+  return 'in ' + Math.max(1, Math.floor(s / 60)) + 'm';
+}
+const isEndpointItem = (it) => it.cert.kind === 'endpoint' || !!it.cert.host;
+
+function renderSoon() {
+  const el = $('soonBody'); if (!el) return;
+  const items = currentItems.filter((it) => it.days_remaining <= 30).sort((a, b) => a.days_remaining - b.days_remaining);
+  if (!items.length) { el.innerHTML = '<p class="empty-ok">✓ Nothing expiring in the next 30 days.</p>'; return; }
+  el.innerHTML = items.map((it) => {
+    const c = it.cert, lvl = expiryLevel(it.days_remaining);
+    return `<div class="mini-row"><span class="mini-name">${escapeHtml(c.name)}</span><span class="muted small mini-date">${fmtDate(c.expires_at)}</span><span class="pill ${lvl}">${fmtRemaining(it.days_remaining)}</span></div>`;
+  }).join('');
+}
+
+function renderProblems() {
+  const el = $('problemsBody'); if (!el) return;
+  const items = currentItems.filter((it) => it.cert.last_error);
+  if (!items.length) { el.innerHTML = '<p class="empty-ok">✓ No trust or scan problems.</p>'; return; }
+  el.innerHTML = items.map((it) => {
+    const c = it.cert;
+    return `<div class="mini-row"><span class="mini-name">${escapeHtml(c.name)}${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}</span><span class="pill untrusted" title="${escapeHtml(c.last_error)}">${escapeHtml(shortErr(c.last_error))}</span></div>`;
+  }).join('');
+}
+
+function renderNextUp() {
+  const el = $('nextupBody'); if (!el) return;
+  if (!currentItems.length) { el.innerHTML = '<p class="muted">Nothing tracked yet.</p>'; return; }
+  const it = [...currentItems].sort((a, b) => a.days_remaining - b.days_remaining)[0];
+  const lvl = expiryLevel(it.days_remaining);
+  el.innerHTML = `<div class="nextup"><div class="nextup-num ${lvl}">${fmtRemaining(it.days_remaining)}</div><div class="nextup-name">${escapeHtml(it.cert.name)}</div><div class="muted small">${fmtDate(it.cert.expires_at)}</div></div>`;
+}
+
+function renderIssuers() {
+  const el = $('issuersBody'); if (!el) return;
+  const map = {};
+  for (const it of currentItems) { const iss = shortIssuer(it.cert.issuer); map[iss] = (map[iss] || 0) + 1; }
+  const rows = Object.entries(map).sort((a, b) => b[1] - a[1]);
+  if (!rows.length) { el.innerHTML = '<p class="muted">Nothing tracked yet.</p>'; return; }
+  const max = rows[0][1];
+  el.innerHTML = rows.map(([iss, n]) =>
+    `<div class="kv"><span class="kv-label" title="${escapeHtml(iss)}">${escapeHtml(iss)}</span><span class="kv-bar"><span style="width:${Math.round(n / max * 100)}%"></span></span><span class="kv-num">${n}</span></div>`).join('');
+}
+
+function renderAudit() {
+  const el = $('auditBody'); if (!el) return;
+  const issues = [];
+  for (const it of currentItems) {
+    const c = it.cert, probs = [];
+    const m = /RSA[- ]?(\d+)/i.exec(c.key_type || '');
+    if (m && +m[1] < 2048) probs.push('weak key (' + escapeHtml(c.key_type) + ')');
+    if (/sha1|md5/i.test(c.signature_algorithm || '')) probs.push('weak signature');
+    // Only real (scanned/parsed) certs have a not_before; manual entries serialize
+    // the zero date (0001-01-01), which would look absurdly long — skip those.
+    if (c.not_before && c.expires_at && new Date(c.not_before).getUTCFullYear() > 2000) {
+      const days = (new Date(c.expires_at) - new Date(c.not_before)) / 86400000;
+      if (days > 398) probs.push('long validity (' + Math.round(days) + 'd)');
+    }
+    if (probs.length) issues.push({ name: c.name, probs });
+  }
+  if (!issues.length) { el.innerHTML = '<p class="empty-ok">✓ No weak keys, signatures, or over-long certs.</p>'; return; }
+  el.innerHTML = issues.map((i) =>
+    `<div class="mini-row"><span class="mini-name">${escapeHtml(i.name)}</span><span class="audit-flags">${i.probs.map((p) => `<span class="pill warn">${p}</span>`).join('')}</span></div>`).join('');
+}
+
+function renderScanHealth() {
+  const el = $('scanhealthBody'); if (!el) return;
+  const eps = currentItems.filter(isEndpointItem);
+  if (!eps.length) { el.innerHTML = '<p class="muted">No live endpoints tracked.</p>'; return; }
+  const staleMs = (schedStatus && schedStatus.interval_seconds ? schedStatus.interval_seconds * 2500 : 24 * 3600 * 1000);
+  const bad = [];
+  for (const it of eps) {
+    const c = it.cert;
+    if (c.last_error) bad.push({ c, cls: 'untrusted', note: shortErr(c.last_error) });
+    else if (!c.last_scanned_at) bad.push({ c, cls: 'notice', note: 'never checked' });
+    else if (Date.now() - new Date(c.last_scanned_at) > staleMs) bad.push({ c, cls: 'notice', note: 'checked ' + relTime(c.last_scanned_at) });
+  }
+  if (!bad.length) { el.innerHTML = `<p class="empty-ok">✓ All ${eps.length} endpoints healthy.</p>`; return; }
+  el.innerHTML = bad.map((b) =>
+    `<div class="mini-row"><span class="mini-name">${escapeHtml(b.c.name)}<br><span class="muted small">${escapeHtml(b.c.host)}:${b.c.port}</span></span><span class="pill ${b.cls}">${escapeHtml(b.note)}</span></div>`).join('');
+}
+
+function renderRenewals() {
+  const el = $('renewalsBody'); if (!el) return;
+  const recent = currentItems.filter((it) => {
+    const nb = it.cert.not_before; if (!nb) return false;
+    const age = Date.now() - new Date(nb);
+    return age >= 0 && age <= 14 * 86400000;
+  }).sort((a, b) => new Date(b.cert.not_before) - new Date(a.cert.not_before));
+  if (!recent.length) { el.innerHTML = '<p class="muted">No certificates issued in the last 14 days.</p>'; return; }
+  el.innerHTML = recent.map((it) => {
+    const c = it.cert;
+    return `<div class="mini-row"><span class="mini-name">${escapeHtml(c.name)}</span><span class="muted small mini-date">exp ${fmtDate(c.expires_at)}</span><span class="pill ok">issued ${escapeHtml(relTime(c.not_before))}</span></div>`;
+  }).join('');
+}
+
+function channelWantsThreshold(ch, t) {
+  const s = (ch.thresholds || '').trim();
+  if (!s) return true;
+  return s.split(',').map((x) => parseInt(x.trim(), 10)).includes(t);
+}
+function renderAlertPreview() {
+  const el = $('alertsBody'); if (!el) return;
+  if (!dashChannels.length) { el.innerHTML = '<p class="muted">No alert channels yet — add one in <a href="/settings">Settings</a>.</p>'; return; }
+  const THR = [30, 7, 3], WINDOW = 14, upcoming = [];
+  for (const it of currentItems) {
+    const D = it.days_remaining; if (D <= 0) continue;
+    const t = THR.find((x) => x < D); if (t === undefined) continue;
+    const inDays = D - t; if (inDays < 0 || inDays > WINDOW) continue;
+    const chans = [...new Set(dashChannels.filter((ch) => channelWantsThreshold(ch, t)).map((ch) => ch.type))];
+    if (!chans.length) continue;
+    upcoming.push({ name: it.cert.name, inDays, t, chans });
+  }
+  upcoming.sort((a, b) => a.inDays - b.inDays);
+  if (!upcoming.length) { el.innerHTML = `<p class="empty-ok">✓ No alerts due in the next ${WINDOW} days.</p>`; return; }
+  el.innerHTML = upcoming.map((u) =>
+    `<div class="mini-row"><span class="mini-name">${escapeHtml(u.name)}<br><span class="muted small">${u.t}-day alert → ${escapeHtml(u.chans.join(', '))}</span></span><span class="pill ${u.inDays <= 1 ? 'urgent' : 'notice'}">${u.inDays === 0 ? 'today' : 'in ' + u.inDays + 'd'}</span></div>`).join('');
+}
+
+function renderScheduler() {
+  const el = $('schedulerBody'); if (!el) return;
+  const times = currentItems.filter((it) => it.cert.last_scanned_at).map((it) => new Date(it.cert.last_scanned_at).getTime());
+  const last = times.length ? Math.max(...times) : 0;
+  const enabled = schedStatus && schedStatus.enabled;
+  const intS = schedStatus && schedStatus.interval_seconds;
+  let html = `<div class="kv2"><span class="muted">Auto-scan</span><span>${enabled ? `<span class="pill ok">on</span> · every ${humanDuration(intS)}` : '<span class="pill untrusted">off</span>'}</span></div>`;
+  html += `<div class="kv2"><span class="muted">Last scan</span><span>${last ? escapeHtml(relTime(new Date(last).toISOString())) : 'never'}</span></div>`;
+  if (enabled && last && intS) html += `<div class="kv2"><span class="muted">Next scan</span><span>${escapeHtml(relFuture(last + intS * 1000))}</span></div>`;
+  if (isAdmin) html += `<button class="btn primary small" id="scanAllBtn">Scan all now</button>`;
+  el.innerHTML = html;
+  const b = $('scanAllBtn'); if (b) b.addEventListener('click', scanAll);
+}
+async function scanAll() {
+  const b = $('scanAllBtn'); if (b) { b.disabled = true; b.textContent = 'Scanning…'; }
+  const res = await api('POST', '/api/v1/scan/all');
+  const d = await res.json().catch(() => ({}));
+  if (res.ok) toast(`Scanned ${d.scanned}/${d.total}${d.errors ? `, ${d.errors} failed` : ''} ✓`);
+  else toast(d.error || 'Scan failed', true);
+  loadCerts();
+}
+
+function initNotes() {
+  const t = $('notesInput'); if (!t) return;
+  try { t.value = localStorage.getItem('certguard-notes') || ''; } catch (e) {}
+  let timer = null;
+  t.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { try { localStorage.setItem('certguard-notes', t.value); } catch (e) {} }, 400);
+  });
+}
+
 // initial load
 loadWhoami().then(() => {
   // Viewers don't get the scan / add-entry widgets at all.
@@ -658,8 +845,13 @@ loadWhoami().then(() => {
       order: ['w-add', 'w-tracked', 'w-calendar'],
       spans: { 'w-add': 2, 'w-tracked': 2, 'w-calendar': 4 },
       heights: { 'w-add': 625, 'w-tracked': 625 },
+      // The optional insight cards ship hidden — add them via "＋ Add section".
+      hidden: ['w-soon', 'w-problems', 'w-nextup', 'w-issuers', 'w-audit',
+        'w-scanhealth', 'w-renewals', 'w-alerts', 'w-scheduler', 'w-notes'],
     },
   });
   renderLegend();
+  initNotes();
+  loadDashExtras();
   loadCerts();
 }).catch(() => {});

@@ -70,6 +70,10 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/v1/users", s.adminOnly(s.handleCreateUser))
 	s.mux.Handle("DELETE /api/v1/users/{id}", s.adminOnly(s.handleDeleteUser))
 
+	// Scheduler visibility.
+	s.mux.Handle("GET /api/v1/scan/status", s.authed(s.handleScanStatus))
+	s.mux.Handle("POST /api/v1/scan/all", s.adminOnly(s.handleScanAll))
+
 	// Admin-only (writes).
 	s.mux.Handle("POST /api/v1/scan", s.adminOnly(s.handleScan))
 	s.mux.Handle("POST /api/v1/certs", s.adminOnly(s.handleCreateCert))
@@ -462,6 +466,46 @@ func (s *Server) handleUpdateCert(w http.ResponseWriter, r *http.Request) {
 	}
 	updated, _ := s.store.GetByID(id)
 	writeJSON(w, http.StatusOK, updated)
+}
+
+// handleScanStatus reports the background scheduler's configuration so the UI
+// can show whether auto-scan is on and how often it runs. The "last scan" time
+// is derived client-side from the entries' last_scanned_at.
+func (s *Server) handleScanStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"enabled":          s.cfg.SchedulerEnabled,
+		"interval_seconds": int(s.cfg.CheckInterval / time.Second),
+	})
+}
+
+// handleScanAll re-scans every auto-rescan endpoint on demand (the same work the
+// scheduler does on its timer), refreshing expiry/trust for the whole inventory.
+func (s *Server) handleScanAll(w http.ResponseWriter, r *http.Request) {
+	eps, err := s.store.EndpointsForRescan()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	scanned, errs := 0, 0
+	for _, c := range eps {
+		if ctx.Err() != nil {
+			break
+		}
+		res, err := scanner.Scan(ctx, c.Host, c.Port, scanner.Options{Timeout: s.cfg.ScanTimeout, ServerName: c.ServerName})
+		if err != nil {
+			errs++
+			_ = s.store.TouchScanError(c.ID, err.Error())
+			continue
+		}
+		if _, err := s.store.UpsertScan(c.Name, res); err != nil {
+			errs++
+			continue
+		}
+		scanned++
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"total": len(eps), "scanned": scanned, "errors": errs})
 }
 
 // handleRescanCert re-scans a single live endpoint on demand, refreshing its
