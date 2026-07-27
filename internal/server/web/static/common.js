@@ -94,3 +94,47 @@ $('logout').addEventListener('click', async () => {
   await api('POST', '/api/v1/auth/logout');
   window.location.href = '/login';
 });
+
+// --- custom auto-hiding scrollbars + "more content below" glow ---
+// Scrollbars are transparent until the element is actively scrolled (a
+// `.scrolling` class is added briefly), and any card whose body has more to
+// scroll gets a slow amber breathing glow at its bottom edge.
+(function scrollAffordance() {
+  const timers = new WeakMap();
+  function markScrolling(el) {
+    if (!el || !el.classList) return;
+    el.classList.add('scrolling');
+    clearTimeout(timers.get(el));
+    timers.set(el, setTimeout(() => el.classList.remove('scrolling'), 900));
+  }
+  function updateGlow(body) {
+    const card = body.closest && body.closest('.widget');
+    if (!card) return;
+    const more = body.scrollHeight - body.scrollTop - body.clientHeight > 2;
+    card.classList.toggle('can-scroll-down', more);
+  }
+  let raf = 0;
+  function updateAll() {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      document.querySelectorAll('.widget-body').forEach(updateGlow);
+    });
+  }
+  document.addEventListener('scroll', (e) => {
+    const t = e.target === document ? document.documentElement : e.target;
+    markScrolling(t);
+    if (t && t.classList && t.classList.contains('widget-body')) updateGlow(t);
+  }, true);
+  function wire() {
+    const bodies = [...document.querySelectorAll('.widget-body')];
+    if (!bodies.length) return;
+    const ro = new ResizeObserver(updateAll);
+    const mo = new MutationObserver(updateAll);
+    bodies.forEach((b) => { ro.observe(b); mo.observe(b, { childList: true, subtree: true }); });
+    window.addEventListener('resize', updateAll);
+    updateAll();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+  else wire();
+})();

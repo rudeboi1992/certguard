@@ -41,6 +41,34 @@
    (e.g. display:grid), which would otherwise override it. */
 [hidden] { display: none !important; }
 html, body { overflow-x: hidden; max-width: 100%; }
+
+/* Custom, auto-hiding scrollbars: transparent until the element is actively
+   scrolled (JS adds `.scrolling`); card bodies also reveal on hover. */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: transparent; border-radius: 11px;
+  border: 3px solid transparent; background-clip: padding-box;
+  transition: background .25s;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(140,140,140,.75); background-clip: padding-box; }
+.scrolling::-webkit-scrollbar-thumb,
+.widget-body:hover::-webkit-scrollbar-thumb { background: rgba(140,140,140,.5); background-clip: padding-box; }
+.scrolling, .widget-body:hover { scrollbar-color: rgba(140,140,140,.5) transparent; }
+
+/* "More content below" affordance: a slow amber breathing glow at the bottom
+   edge of any card whose body can still scroll down. */
+.widget::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 4;
+  border-radius: var(--radius); opacity: 0;
+  box-shadow: inset 0 -16px 22px -10px rgba(234,179,8,.9);
+}
+.widget.can-scroll-down::after { animation: cg-breathe 2.6s ease-in-out infinite; }
+@keyframes cg-breathe { 0%, 100% { opacity: .18; } 50% { opacity: .8; } }
+@media (prefers-reduced-motion: reduce) {
+  .widget.can-scroll-down::after { animation: none; opacity: .45; }
+}
 body {
   margin: 0;
   font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
