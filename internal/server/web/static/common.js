@@ -5,6 +5,7 @@
 const $ = (id) => document.getElementById(id);
 let isAdmin = false;
 let currentUserId = null;
+let secretsEnabled = false;
 
 function toast(msg, isError) {
   const t = $('toast');
@@ -66,6 +67,7 @@ async function loadWhoami() {
   const u = data.user;
   isAdmin = u && u.role === 'admin';
   currentUserId = u && u.id;
+  secretsEnabled = !!data.secrets_enabled;
   $('whoami').textContent = `${u.email} · ${u.role}`;
   return u;
 }

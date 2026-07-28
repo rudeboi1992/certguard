@@ -175,6 +175,12 @@ function renderCerts() {
       const rescan = isAdmin ? `<button class="rescan-btn" data-rescan="${c.id}" title="Rescan this endpoint now">↻ rescan</button> · ` : '';
       checkLine = `<br><span class="checkline muted small">${rescan}${checked}</span>`;
     }
+    // Stored-secret badge with an admin reveal/copy action.
+    let secretLine = '';
+    if (c.has_secret) {
+      const rev = isAdmin ? ` · <button class="secret-btn" data-reveal="${c.id}">reveal</button>` : '';
+      secretLine = `<br><span class="secretline muted small">🔑 ${escapeHtml(c.secret_hint || 'secret set')}${rev}</span>`;
+    }
     const inlineActions = [
       isAdmin ? `<button class="btn ghost small" data-edit="${c.id}">Edit</button>` : '',
       isAdmin ? `<button class="btn link" data-del="${c.id}">Delete</button>` : '',
@@ -193,7 +199,7 @@ function renderCerts() {
     row.innerHTML = `
       <div class="trow-actions" aria-hidden="true">${swipeActions}</div>
       <div class="trow-surface">
-        <div class="tcol tc-name"><strong>${escapeHtml(c.name)}</strong>${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}${fpLine}${checkLine}${coverToggle}</div>
+        <div class="tcol tc-name"><strong>${escapeHtml(c.name)}</strong>${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}${fpLine}${checkLine}${secretLine}${coverToggle}</div>
         <div class="tcol tc-meta">
           <span class="tc-type">${typeCell}</span>
           <span class="tc-exp">${fmtDate(c.expires_at)}</span>
@@ -219,7 +225,24 @@ function renderCerts() {
     b.addEventListener('click', () => toggleCover(b)));
   rows.querySelectorAll('[data-rescan]').forEach((b) =>
     b.addEventListener('click', () => rescanCert(b.dataset.rescan, b)));
+  rows.querySelectorAll('[data-reveal]').forEach((b) =>
+    b.addEventListener('click', () => revealSecret(b.dataset.reveal, b)));
   rows.querySelectorAll('.trow').forEach(attachSwipe);
+}
+
+// Reveal a stored secret: copy to clipboard and show it inline briefly.
+async function revealSecret(id, btn) {
+  const res = await api('GET', `/api/v1/certs/${id}/secret`);
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) { toast(d.error || 'Reveal failed', true); return; }
+  let copied = false;
+  try { await navigator.clipboard.writeText(d.value); copied = true; } catch (e) {}
+  const span = btn.closest('.secretline');
+  if (!span) { toast(copied ? 'Secret copied ✓' : d.value); return; }
+  span.innerHTML = `🔑 <code class="secret-reveal">${escapeHtml(d.value)}</code> <button class="secret-btn" data-hide>hide</button>`;
+  span.querySelector('[data-hide]').addEventListener('click', () => loadCerts());
+  toast(copied ? 'Secret copied to clipboard ✓' : 'Secret revealed');
+  setTimeout(() => { if (document.body.contains(span)) loadCerts(); }, 30000);
 }
 
 // Rescan a single endpoint on demand, then refresh the list.
@@ -330,13 +353,18 @@ function startEdit(id) {
   closeSwipe(row);
   const c = it.cert;
   row.classList.add('editing');
+  const secretRow = secretsEnabled ? `
+      <div class="edit-secret-row">
+        <input type="text" class="edit-secret" placeholder="${c.has_secret ? 'Replace secret (leave blank to keep ' + escapeHtml(c.secret_hint || 'set') + ')' : 'Add a secret / key value (optional)'}">
+        ${c.has_secret ? '<label class="clear-sec"><input type="checkbox" class="edit-clearsec"> clear</label>' : ''}
+      </div>` : '';
   row.innerHTML = `
     <div class="edit-row">
       <input type="text" class="edit-name" value="${escapeHtml(c.name)}">
       <select class="edit-cat">${categoryOptions(c.category || 'certificate')}</select>
       <button class="btn primary small" data-save>Save</button>
       <button class="btn ghost small" data-cancel>Cancel</button>
-    </div>`;
+    </div>${secretRow}`;
   row.querySelector('[data-save]').addEventListener('click', () => saveEdit(id, row));
   row.querySelector('[data-cancel]').addEventListener('click', () => loadCerts());
   row.querySelector('.edit-name').focus();
@@ -347,8 +375,13 @@ async function saveEdit(id, tr) {
   const category = tr.querySelector('.edit-cat').value;
   if (!name) { toast('Name is required', true); return; }
   const res = await api('PATCH', `/api/v1/certs/${id}`, { name, category });
-  if (res.ok) { toast('Saved'); loadCerts(); }
-  else { const d = await res.json().catch(() => ({})); toast(d.error || 'Save failed', true); }
+  if (!res.ok) { const d = await res.json().catch(() => ({})); toast(d.error || 'Save failed', true); return; }
+  // Secret changes (optional): a new value replaces it; the clear box wipes it.
+  const secInput = tr.querySelector('.edit-secret');
+  const clearBox = tr.querySelector('.edit-clearsec');
+  if (secInput && secInput.value) await api('PUT', `/api/v1/certs/${id}/secret`, { value: secInput.value });
+  else if (clearBox && clearBox.checked) await api('PUT', `/api/v1/certs/${id}/secret`, { value: '' });
+  toast('Saved'); loadCerts();
 }
 
 function renderSummary(total, soon, urgent) {
@@ -414,6 +447,7 @@ $('manualForm').addEventListener('submit', async (e) => {
     issuer: $('certIssuer').value,
     sha256: $('certSha256').value,
   };
+  if (secretsEnabled && $('certSecret').value) body.secret = $('certSecret').value;
   const res = await api('POST', '/api/v1/certs', body);
   if (res.status === 201) {
     toast('Entry added');
@@ -850,6 +884,7 @@ loadWhoami().then(() => {
         'w-scanhealth', 'w-renewals', 'w-alerts', 'w-scheduler', 'w-notes'],
     },
   });
+  if (secretsEnabled && $('secretField')) $('secretField').hidden = false;
   renderLegend();
   initNotes();
   loadDashExtras();

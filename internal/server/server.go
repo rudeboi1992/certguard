@@ -19,6 +19,7 @@ import (
 	"github.com/bfalcher/certguard/internal/model"
 	"github.com/bfalcher/certguard/internal/notify"
 	"github.com/bfalcher/certguard/internal/scanner"
+	"github.com/bfalcher/certguard/internal/secret"
 	"github.com/bfalcher/certguard/internal/store"
 )
 
@@ -29,14 +30,16 @@ type ctxKey int
 const userKey ctxKey = 0
 
 type Server struct {
-	cfg    config.Config
-	store  *store.Store
-	sender notify.Sender
-	mux    *http.ServeMux
+	cfg     config.Config
+	store   *store.Store
+	sender  notify.Sender
+	secrets *secret.Box // nil when the secret vault is disabled (no master key)
+	mux     *http.ServeMux
 }
 
 func New(cfg config.Config, st *store.Store, sender notify.Sender) *Server {
-	s := &Server{cfg: cfg, store: st, sender: sender, mux: http.NewServeMux()}
+	box, _ := secret.New(cfg.MasterKey) // nil box (disabled) when no master key
+	s := &Server{cfg: cfg, store: st, sender: sender, secrets: box, mux: http.NewServeMux()}
 	s.routes()
 	return s
 }
@@ -80,6 +83,10 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/v1/certs/{id}/rescan", s.adminOnly(s.handleRescanCert))
 	s.mux.Handle("PATCH /api/v1/certs/{id}", s.adminOnly(s.handleUpdateCert))
 	s.mux.Handle("DELETE /api/v1/certs/{id}", s.adminOnly(s.handleDeleteCert))
+
+	// Encrypted secret vault (admin). Reveal returns plaintext; set/clear write.
+	s.mux.Handle("GET /api/v1/certs/{id}/secret", s.adminOnly(s.handleRevealSecret))
+	s.mux.Handle("PUT /api/v1/certs/{id}/secret", s.adminOnly(s.handleSetSecret))
 
 	// Browser UI (static assets + pages).
 	s.registerUI()
@@ -316,7 +323,84 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"user": userFrom(r.Context())})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user":            userFrom(r.Context()),
+		"secrets_enabled": s.secrets != nil,
+	})
+}
+
+type setSecretRequest struct {
+	Value string `json:"value"`
+}
+
+// handleSetSecret stores (or clears, with an empty value) the encrypted secret
+// for an entry. Requires the vault to be enabled (master key set).
+func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
+	if s.secrets == nil {
+		writeErr(w, http.StatusServiceUnavailable, "secret vault not enabled (set CERTGUARD_MASTER_KEY)")
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var req setSecretRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if err := s.storeSecret(id, req.Value); err != nil {
+		if err == store.ErrNotFound {
+			writeErr(w, http.StatusNotFound, "entry not found")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"has_secret": req.Value != "", "secret_hint": secret.Hint(req.Value)})
+}
+
+// storeSecret seals value (or clears when empty) and persists it.
+func (s *Server) storeSecret(id int64, value string) error {
+	if value == "" {
+		return s.store.SetSecret(id, "", "")
+	}
+	enc, err := s.secrets.Seal(value)
+	if err != nil {
+		return err
+	}
+	return s.store.SetSecret(id, enc, secret.Hint(value))
+}
+
+// handleRevealSecret decrypts and returns the plaintext secret for an entry.
+// Admin-only; this is the single path that ever emits plaintext.
+func (s *Server) handleRevealSecret(w http.ResponseWriter, r *http.Request) {
+	if s.secrets == nil {
+		writeErr(w, http.StatusServiceUnavailable, "secret vault not enabled")
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	c, err := s.store.GetByID(id)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "entry not found")
+		return
+	}
+	if c.SecretEnc == "" {
+		writeErr(w, http.StatusNotFound, "no secret stored for this entry")
+		return
+	}
+	plain, err := s.secrets.Open(c.SecretEnc)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]string{"value": plain})
 }
 
 func (s *Server) handleListCerts(w http.ResponseWriter, r *http.Request) {
@@ -395,6 +479,7 @@ type createCertRequest struct {
 	NotBefore string   `json:"not_before"`
 	KeyType   string   `json:"key_type"`
 	DNSNames  []string `json:"dns_names"`
+	Secret    string   `json:"secret"` // optional; stored encrypted if the vault is enabled
 }
 
 // handleCreateCert adds a manually-entered or client-side-parsed (dropped file)
@@ -430,6 +515,12 @@ func (s *Server) handleCreateCert(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	// Attach an optional secret (best-effort; the entry is already created).
+	if req.Secret != "" && s.secrets != nil {
+		if err := s.storeSecret(stored.ID, req.Secret); err == nil {
+			stored, _ = s.store.GetByID(stored.ID)
+		}
 	}
 	writeJSON(w, http.StatusCreated, stored)
 }

@@ -50,6 +50,14 @@ type Cert struct {
 	Active        bool       `json:"active"`
 	CreatedAt     time.Time  `json:"created_at"`
 
+	// Encrypted secret vault (optional). SecretEnc is the AES-256-GCM ciphertext
+	// and is NEVER serialized to clients; the API exposes only whether a secret
+	// is set and a masked hint. The plaintext is returned solely by the explicit
+	// admin "reveal" endpoint.
+	SecretEnc  string `json:"-"`
+	HasSecret  bool   `json:"has_secret"`
+	SecretHint string `json:"secret_hint,omitempty"`
+
 	// Notification escalation state (ported from the original design):
 	// LastNotifiedThreshold is 30, 7, 3, or 0 (never). A notification fires only
 	// when moving to a more urgent threshold, preventing duplicate spam.

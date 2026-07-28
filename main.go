@@ -97,6 +97,12 @@ func cmdServe() int {
 
 	sender := notify.NewRealSender(cfg.Mail)
 	srv := server.New(cfg, st, sender)
+	if cfg.MasterKey != "" {
+		fmt.Println("secret vault on: entries can store encrypted secrets (CERTGUARD_MASTER_KEY set)")
+		if !cfg.CookieSecure {
+			fmt.Println("  note: serve over HTTPS (or a private VPN) before revealing secrets over the network")
+		}
+	}
 
 	// Background rescan + notification job.
 	ctx, cancel := context.WithCancel(context.Background())

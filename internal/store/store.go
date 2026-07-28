@@ -220,6 +220,19 @@ func (s *Store) TouchScanError(id int64, msg string) error {
 	return err
 }
 
+// SetSecret stores (or clears, with empty enc/hint) the encrypted secret for an
+// entry. The store never sees plaintext — enc is already-sealed ciphertext.
+func (s *Store) SetSecret(id int64, enc, hint string) error {
+	res, err := s.exec(`UPDATE certs SET secret_enc=?, secret_hint=? WHERE id=? AND active=1`, enc, hint, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SoftDelete marks a cert inactive so it drops out of listings and scans.
 func (s *Store) SoftDelete(id int64) error {
 	res, err := s.exec(`UPDATE certs SET active=0 WHERE id=? AND active=1`, id)
@@ -282,7 +295,7 @@ func (s *Store) List() ([]*model.Cert, error) {
 const selectCols = `SELECT id, name, kind, category, host, port, server_name, subject, issuer,
 	serial, sha256, not_before, expires_at, dns_names, key_type, sig_alg,
 	auto_rescan, last_scanned_at, last_error, notes, active, created_at,
-	last_notified_threshold, last_notified_on FROM certs`
+	last_notified_threshold, last_notified_on, secret_enc, secret_hint FROM certs`
 
 type rowScanner interface{ Scan(dest ...any) error }
 
@@ -303,10 +316,12 @@ func scanRowValues(r rowScanner) (*model.Cert, error) {
 	err := r.Scan(&c.ID, &c.Name, &c.Kind, &c.Category, &c.Host, &c.Port, &c.ServerName,
 		&c.Subject, &c.Issuer, &c.Serial, &c.SHA256, &notBefore, &expiresAt,
 		&dnsJSON, &c.KeyType, &c.SigAlg, &autoRescan, &lastScanned, &c.LastError,
-		&c.Notes, &active, &createdAt, &lastNotifiedThreshold, &lastNotifiedOn)
+		&c.Notes, &active, &createdAt, &lastNotifiedThreshold, &lastNotifiedOn,
+		&c.SecretEnc, &c.SecretHint)
 	if err != nil {
 		return nil, err
 	}
+	c.HasSecret = c.SecretEnc != ""
 	c.NotBefore = parseTime(notBefore)
 	c.ExpiresAt = parseTime(expiresAt)
 	c.CreatedAt = parseTime(createdAt)

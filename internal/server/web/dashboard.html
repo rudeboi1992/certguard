@@ -82,6 +82,9 @@
             <label>Expiry date
               <input type="date" id="certExpiry" required>
             </label>
+            <label id="secretField" hidden>Secret / key value <span class="muted small">— optional, stored encrypted</span>
+              <textarea id="certSecret" class="secret-area" rows="2" placeholder="Paste the actual API key, token, or PEM…"></textarea>
+            </label>
             <input type="hidden" id="certKind" value="manual">
             <input type="hidden" id="certSubject">
             <input type="hidden" id="certIssuer">

@@ -298,6 +298,20 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 }
 .rescan-btn:hover { text-decoration: underline; }
 .rescan-btn:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+/* stored-secret badge + reveal */
+.secretline { display: inline-block; margin-top: .15rem; }
+.secret-btn { background: none; border: none; padding: 0; color: var(--primary);
+  font: inherit; font-size: .78rem; cursor: pointer; }
+.secret-btn:hover { text-decoration: underline; }
+.secret-reveal { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .78rem;
+  background: rgba(234,179,8,.14); color: var(--ink); padding: .05em .35em; border-radius: 4px;
+  word-break: break-all; user-select: all; }
+.secret-area { width: 100%; resize: vertical; padding: .55rem .7rem; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+.edit-secret-row { display: flex; align-items: center; gap: .6rem; margin-top: .5rem; }
+.edit-secret { flex: 1; min-width: 0; padding: .45rem .6rem; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+.clear-sec { display: inline-flex; align-items: center; gap: .3rem; font-size: .85rem; color: var(--muted); white-space: nowrap; }
 .trow-head { display: none; }
 .trow { position: relative; overflow: hidden; border-bottom: 1px solid var(--border); }
 .trow-actions { position: absolute; top: 0; right: 0; bottom: 0; display: flex; }
