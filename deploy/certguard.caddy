@@ -1,0 +1,19 @@
+# Add this block to your EXISTING Caddyfile (adjust the hostname). certguard must
+# be on the same Docker network as Caddy so the name `certguard` resolves.
+# Reload after editing:  docker exec <caddy> caddy reload --config /etc/caddy/Caddyfile
+certguard.example.com {
+	reverse_proxy certguard:8181
+}
+
+# --- Optional: gate it behind Authentik SSO (forward-auth) ---
+# Requires certguard's proxy-auth mode (CERTGUARD_PROXY_AUTH_HEADER=X-Authentik-Email)
+# so the Authentik-authenticated user is logged straight in — no second login.
+#
+# certguard.example.com {
+# 	forward_auth authentik-server:9000 {
+# 		uri /outpost.goauthentik.io/auth/caddy
+# 		copy_headers X-Authentik-Email X-Authentik-Username X-Authentik-Groups
+# 		trusted_proxies private_ranges
+# 	}
+# 	reverse_proxy certguard:8181
+# }

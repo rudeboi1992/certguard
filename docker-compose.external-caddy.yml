@@ -1,0 +1,36 @@
+# Add certguard to a host that ALREADY runs Caddy (or another reverse proxy).
+# This starts ONLY certguard — no second Caddy — and joins your proxy's existing
+# Docker network so Caddy can reach it by name as `certguard:8181`.
+#
+# Setup:
+#   1) Find your existing Caddy's Docker network:
+#        docker inspect <caddy-container> -f '{{json .NetworkSettings.Networks}}'
+#      and set CADDY_NETWORK to it (in a .env file), e.g.:
+#        CADDY_NETWORK=caddy
+#   2) docker compose -f docker-compose.external-caddy.yml up -d
+#   3) Add a site block to your existing Caddyfile (see deploy/certguard.caddy),
+#      then reload Caddy:
+#        docker exec <caddy-container> caddy reload --config /etc/caddy/Caddyfile
+services:
+  certguard:
+    build: .
+    image: certguard:latest
+    environment:
+      CERTGUARD_DB_DSN: /data/certguard.db
+      CERTGUARD_KEY_FILE: /data/certguard.key
+      CERTGUARD_COOKIE_SECURE: "true"   # reached via Caddy over HTTPS
+      CERTGUARD_CHECK_INTERVAL: ${CERTGUARD_CHECK_INTERVAL:-6h}
+    volumes:
+      - certguard_data:/data
+    networks:
+      - proxy
+    restart: unless-stopped
+    # No published ports — only the reverse proxy reaches certguard.
+
+networks:
+  proxy:
+    external: true
+    name: ${CADDY_NETWORK:-caddy}   # <-- your existing Caddy network name
+
+volumes:
+  certguard_data:

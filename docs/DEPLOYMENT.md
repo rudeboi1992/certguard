@@ -22,6 +22,23 @@ Open `https://certguard.example.com`, create your admin account, then add the
 other admins under Settings → Users. For an **internal-only** domain (not
 reachable by Let's Encrypt), switch the Caddyfile block to `tls internal`.
 
+### Already running Caddy (or another reverse proxy)?
+
+Don't start a second Caddy. Run only certguard, join it to your proxy's Docker
+network, and add a site block to your existing Caddyfile:
+
+```sh
+echo 'CADDY_NETWORK=caddy' > .env          # your existing Caddy network name
+docker compose -f docker-compose.external-caddy.yml up -d
+# then add deploy/certguard.caddy's block to your Caddyfile and reload Caddy
+```
+
+certguard authenticates its own users (admin/viewer), so a reverse proxy alone
+is all you need. To put it behind an SSO gate like **Authentik** so users are
+logged straight in, run certguard with `CERTGUARD_PROXY_AUTH_HEADER` set to the
+header the proxy injects (e.g. `X-Authentik-Email`) and use forward-auth in the
+proxy — see `deploy/certguard.caddy`.
+
 ## 2. Docker (plain HTTP — localhost / VPN only)
 
 ```sh
