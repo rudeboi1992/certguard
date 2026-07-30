@@ -10,7 +10,9 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -76,6 +78,10 @@ func (s *Server) routes() {
 	// Scheduler visibility.
 	s.mux.Handle("GET /api/v1/scan/status", s.authed(s.handleScanStatus))
 	s.mux.Handle("POST /api/v1/scan/all", s.adminOnly(s.handleScanAll))
+
+	// Backup / recovery (admin): download the vault key and a DB snapshot.
+	s.mux.Handle("GET /api/v1/backup/key", s.adminOnly(s.handleBackupKey))
+	s.mux.Handle("GET /api/v1/backup/db", s.adminOnly(s.handleBackupDB))
 
 	// Admin-only (writes).
 	s.mux.Handle("POST /api/v1/scan", s.adminOnly(s.handleScan))
@@ -597,6 +603,50 @@ func (s *Server) handleScanAll(w http.ResponseWriter, r *http.Request) {
 		scanned++
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"total": len(eps), "scanned": scanned, "errors": errs})
+}
+
+// handleBackupKey streams the secret-vault master key as a download so an admin
+// can keep a safe copy without shell access. Sensitive: admin-only, no-store.
+func (s *Server) handleBackupKey(w http.ResponseWriter, r *http.Request) {
+	if s.secrets == nil || s.cfg.MasterKey == "" {
+		writeErr(w, http.StatusServiceUnavailable, "secret vault not enabled")
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", `attachment; filename="certguard.key"`)
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = io.WriteString(w, s.cfg.MasterKey)
+}
+
+// handleBackupDB streams a consistent snapshot of the SQLite database.
+func (s *Server) handleBackupDB(w http.ResponseWriter, r *http.Request) {
+	if s.store.Driver() != "sqlite" {
+		writeErr(w, http.StatusBadRequest, "database download is only available for SQLite (use pg_dump for Postgres)")
+		return
+	}
+	f, err := os.CreateTemp("", "certguard-backup-*.db")
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	tmp := f.Name()
+	f.Close()
+	_ = os.Remove(tmp) // VACUUM INTO requires the destination not to exist yet
+	defer os.Remove(tmp)
+	if err := s.store.BackupSQLite(tmp); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out, err := os.Open(tmp)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer out.Close()
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", `attachment; filename="certguard-backup.db"`)
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = io.Copy(w, out)
 }
 
 // handleRescanCert re-scans a single live endpoint on demand, refreshing its

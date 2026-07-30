@@ -312,6 +312,8 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .edit-secret { flex: 1; min-width: 0; padding: .45rem .6rem; border: 1px solid var(--border);
   border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
 .clear-sec { display: inline-flex; align-items: center; gap: .3rem; font-size: .85rem; color: var(--muted); white-space: nowrap; }
+.backup-btns { display: flex; flex-wrap: wrap; gap: .6rem; margin: .8rem 0; }
+.backup-btns .btn:disabled { opacity: .5; cursor: default; }
 .trow-head { display: none; }
 .trow { position: relative; overflow: hidden; border-bottom: 1px solid var(--border); }
 .trow-actions { position: absolute; top: 0; right: 0; bottom: 0; display: flex; }

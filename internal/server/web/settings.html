@@ -28,6 +28,7 @@
       <nav id="settingsNav">
         <a href="#notifyCard" data-nav="notifyCard">Notifications</a>
         <a href="#usersCard" data-nav="usersCard" id="navUsers">Users</a>
+        <a href="#backupCard" data-nav="backupCard" id="navBackup">Backup</a>
       </nav>
       <p class="muted small layout-hint">Drag <span class="grip-ex">⠿</span> to reorder · drag a card's right or bottom edge to resize · × to hide.</p>
       <select id="addSectionSettings" class="add-section"></select>
@@ -78,6 +79,23 @@
           <button type="submit" class="btn primary">Add user</button>
         </form>
         <div class="set-list" id="userRows"></div>
+        </div>
+        <span class="widget-resize" title="Drag to resize width"></span>
+      </section>
+
+      <section class="card widget" id="backupCard" data-title="Backup" hidden>
+        <div class="widget-bar">
+          <span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Backup &amp; recovery</span></span>
+          <span class="spacer"></span>
+          <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
+        </div>
+        <div class="widget-body">
+        <p class="muted">Keep a copy of your <strong>master key</strong> and database somewhere safe. Restore by putting both files back in the data folder. Lose the key and stored secrets can't be recovered.</p>
+        <div class="backup-btns">
+          <button class="btn ghost" id="dlKey">⤓ Download master key</button>
+          <button class="btn ghost" id="dlDb">⤓ Download database</button>
+        </div>
+        <p id="backupNote" class="muted small">The master key is sensitive — store it in a password manager, ideally separate from the database, and only download it over HTTPS.</p>
         </div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>

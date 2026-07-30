@@ -108,6 +108,23 @@ async function deleteUser(id) {
   else { const d = await res.json().catch(() => ({})); toast(d.error || 'Remove failed', true); }
 }
 
+// --- backup / recovery (admin) ---
+async function downloadBackup(path, filename) {
+  const res = await api('GET', path);
+  if (!res.ok) { const d = await res.json().catch(() => ({})); toast(d.error || 'Download failed', true); return; }
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast('Downloaded ✓');
+}
+if ($('dlKey')) $('dlKey').addEventListener('click', () => downloadBackup('/api/v1/backup/key', 'certguard.key'));
+if ($('dlDb')) $('dlDb').addEventListener('click', () => downloadBackup('/api/v1/backup/db', 'certguard-backup.db'));
+
 // Sidebar links → smooth-scroll the section to the top.
 document.querySelectorAll('#settingsNav a').forEach((a) => {
   a.addEventListener('click', (e) => {
@@ -122,8 +139,8 @@ initWidgetGrid($('settingsGrid'), 'certguard-settings-layout', {
   addSelect: $('addSectionSettings'),
   resetBtn: $('resetLayout'),
   defaults: {
-    order: ['notifyCard', 'usersCard'],
-    spans: { notifyCard: 2, usersCard: 2 },
+    order: ['notifyCard', 'usersCard', 'backupCard'],
+    spans: { notifyCard: 2, usersCard: 2, backupCard: 2 },
   },
 });
 
@@ -131,6 +148,11 @@ initWidgetGrid($('settingsGrid'), 'certguard-settings-layout', {
 loadWhoami().then(() => {
   $('usersCard').hidden = !isAdmin;
   if ($('navUsers')) $('navUsers').hidden = !isAdmin;
+  // Backup is admin-only; the key download only makes sense with the vault on.
+  if ($('backupCard')) $('backupCard').hidden = !isAdmin;
+  if ($('navBackup')) $('navBackup').hidden = !isAdmin;
+  if ($('dlKey')) $('dlKey').disabled = !secretsEnabled;
+  if (!secretsEnabled && $('backupNote')) $('backupNote').textContent = 'The secret vault is off (no master key), so there is no key to back up — just the database.';
   loadChannels();
   loadUsers();
 }).catch(() => {});

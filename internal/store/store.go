@@ -70,6 +70,20 @@ func sqliteDSN(path string) string {
 
 func (s *Store) Close() error { return s.db.Close() }
 
+// Driver reports the active database driver ("sqlite" or "postgres").
+func (s *Store) Driver() string { return s.driver }
+
+// BackupSQLite writes a consistent snapshot of the (SQLite) database to dest via
+// VACUUM INTO, which is safe to run while the database is in use. dest must not
+// already exist. Returns an error for non-SQLite drivers.
+func (s *Store) BackupSQLite(dest string) error {
+	if s.driver != "sqlite" {
+		return fmt.Errorf("online backup is only supported for sqlite")
+	}
+	_, err := s.db.Exec("VACUUM INTO '" + strings.ReplaceAll(dest, "'", "''") + "'")
+	return err
+}
+
 // migrate applies embedded migrations in filename order, tracked in a
 // schema_migrations table. Each file runs at most once.
 func (s *Store) migrate() error {
