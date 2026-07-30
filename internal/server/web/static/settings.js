@@ -125,6 +125,63 @@ async function downloadBackup(path, filename) {
 if ($('dlKey')) $('dlKey').addEventListener('click', () => downloadBackup('/api/v1/backup/key', 'certguard.key'));
 if ($('dlDb')) $('dlDb').addEventListener('click', () => downloadBackup('/api/v1/backup/db', 'certguard-backup.db'));
 
+// --- security: two-factor + vault passphrase ---
+function renderTwoFA(enabled) {
+  if (!$('twofaOff')) return;
+  $('twofaOff').hidden = enabled;
+  $('twofaOn').hidden = !enabled;
+  $('twofaSetup').hidden = true;
+  $('twofaStatus').textContent = enabled
+    ? 'Two-factor is ON — a code from your authenticator is required at sign-in.'
+    : 'Add a time-based code from an authenticator app as a second factor at sign-in.';
+}
+if ($('twofaEnableBtn')) $('twofaEnableBtn').addEventListener('click', async () => {
+  const res = await api('POST', '/api/v1/2fa/setup');
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) { toast(d.error || 'Setup failed', true); return; }
+  $('twofaSecret').textContent = 'Key: ' + d.secret;
+  $('twofaQR').src = '/api/v1/2fa/qr?t=' + Date.now();
+  $('twofaOff').hidden = true;
+  $('twofaSetup').hidden = false;
+  $('twofaCode').focus();
+});
+if ($('twofaConfirmBtn')) $('twofaConfirmBtn').addEventListener('click', async () => {
+  const res = await api('POST', '/api/v1/2fa/enable', { code: $('twofaCode').value.trim() });
+  const d = await res.json().catch(() => ({}));
+  if (res.ok) { toast('Two-factor enabled ✓'); renderTwoFA(true); }
+  else toast(d.error || 'Could not enable', true);
+});
+if ($('twofaDisableBtn')) $('twofaDisableBtn').addEventListener('click', async () => {
+  const res = await api('POST', '/api/v1/2fa/disable', { code: $('twofaDisableCode').value.trim() });
+  const d = await res.json().catch(() => ({}));
+  if (res.ok) { toast('Two-factor disabled'); $('twofaDisableCode').value = ''; renderTwoFA(false); }
+  else toast(d.error || 'Could not disable', true);
+});
+
+async function renderVaultSec() {
+  if (!isAdmin || !secretsEnabled || !$('vaultSec')) return;
+  $('vaultSec').hidden = false;
+  const st = await (await api('GET', '/api/v1/vault/status')).json().catch(() => ({}));
+  $('vaultSecStatus').textContent = st.passphrase
+    ? (st.unlocked ? 'Passphrase-protected (unlocked).' : 'Passphrase-protected (locked).')
+    : 'Auto-unlock via key file. Set a passphrase for stronger, no-key-on-disk protection.';
+  $('vaultRemoveBtn').hidden = !st.passphrase;
+}
+async function vaultPass(newPass) {
+  const res = await api('POST', '/api/v1/vault/passphrase', {
+    current_passphrase: $('vaultCur').value, new_passphrase: newPass,
+  });
+  const d = await res.json().catch(() => ({}));
+  if (res.ok) { toast(newPass ? 'Passphrase set ✓' : 'Passphrase removed'); $('vaultCur').value = ''; $('vaultNew').value = ''; renderVaultSec(); }
+  else toast(d.error || 'Failed', true);
+}
+if ($('vaultSetBtn')) $('vaultSetBtn').addEventListener('click', () => vaultPass($('vaultNew').value));
+if ($('vaultRemoveBtn')) $('vaultRemoveBtn').addEventListener('click', () => vaultPass(''));
+if ($('vaultLockBtn')) $('vaultLockBtn').addEventListener('click', async () => {
+  const res = await api('POST', '/api/v1/vault/lock');
+  if (res.ok) { toast('Vault locked'); renderVaultSec(); } else toast('Failed', true);
+});
+
 // Sidebar links → smooth-scroll the section to the top.
 document.querySelectorAll('#settingsNav a').forEach((a) => {
   a.addEventListener('click', (e) => {
@@ -139,13 +196,13 @@ initWidgetGrid($('settingsGrid'), 'certguard-settings-layout', {
   addSelect: $('addSectionSettings'),
   resetBtn: $('resetLayout'),
   defaults: {
-    order: ['notifyCard', 'usersCard', 'backupCard'],
-    spans: { notifyCard: 2, usersCard: 2, backupCard: 2 },
+    order: ['notifyCard', 'usersCard', 'backupCard', 'securityCard'],
+    spans: { notifyCard: 2, usersCard: 2, backupCard: 2, securityCard: 2 },
   },
 });
 
 // initial load
-loadWhoami().then(() => {
+loadWhoami().then((u) => {
   $('usersCard').hidden = !isAdmin;
   if ($('navUsers')) $('navUsers').hidden = !isAdmin;
   // Backup is admin-only; the key download only makes sense with the vault on.
@@ -153,6 +210,10 @@ loadWhoami().then(() => {
   if ($('navBackup')) $('navBackup').hidden = !isAdmin;
   if ($('dlKey')) $('dlKey').disabled = !secretsEnabled;
   if (!secretsEnabled && $('backupNote')) $('backupNote').textContent = 'The secret vault is off (no master key), so there is no key to back up — just the database.';
+  // Security card: 2FA for everyone; vault passphrase for admins.
+  if ($('securityCard')) $('securityCard').hidden = false;
+  renderTwoFA(!!(u && u.totp_enabled));
+  renderVaultSec();
   loadChannels();
   loadUsers();
 }).catch(() => {});

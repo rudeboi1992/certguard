@@ -32,7 +32,7 @@ func (s *Store) CountUsers() (int, error) {
 	return n, err
 }
 
-const userCols = `SELECT id, email, password_hash, role, created_at FROM users`
+const userCols = `SELECT id, email, password_hash, role, created_at, totp_secret, totp_enabled FROM users`
 
 func (s *Store) GetUserByID(id int64) (*model.User, error) {
 	return scanUser(s.queryRow(userCols+` WHERE id=?`, id))
@@ -74,7 +74,8 @@ func (s *Store) DeleteUser(id int64) error {
 func scanUser(r rowScanner) (*model.User, error) {
 	var u model.User
 	var createdAt string
-	err := r.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &createdAt)
+	var totpEnabled int
+	err := r.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &createdAt, &u.TOTPSecret, &totpEnabled)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -82,7 +83,15 @@ func scanUser(r rowScanner) (*model.User, error) {
 		return nil, err
 	}
 	u.CreatedAt = parseTime(createdAt)
+	u.TOTPEnabled = totpEnabled != 0
 	return &u, nil
+}
+
+// SetUserTOTP stores a user's TOTP secret and enabled flag (clear with "", false).
+func (s *Store) SetUserTOTP(userID int64, secret string, enabled bool) error {
+	_, err := s.exec(`UPDATE users SET totp_secret=?, totp_enabled=? WHERE id=?`,
+		secret, boolToInt(enabled), userID)
+	return err
 }
 
 // --- API tokens ---

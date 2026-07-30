@@ -6,6 +6,7 @@ const $ = (id) => document.getElementById(id);
 let isAdmin = false;
 let currentUserId = null;
 let secretsEnabled = false;
+let vaultLocked = false; // vault is passphrase-protected and currently locked
 
 function toast(msg, isError) {
   const t = $('toast');
@@ -68,6 +69,7 @@ async function loadWhoami() {
   isAdmin = u && u.role === 'admin';
   currentUserId = u && u.id;
   secretsEnabled = !!data.secrets_enabled;
+  vaultLocked = !!data.secrets_enabled && !!data.vault_passphrase && !data.vault_unlocked;
   $('whoami').textContent = `${u.email} · ${u.role}`;
   return u;
 }

@@ -26,6 +26,12 @@
   </header>
 
   <main>
+    <div id="vaultLock" class="vault-lock" hidden>
+      <span>🔒 The secret vault is locked.</span>
+      <input type="password" id="vaultPass" placeholder="Vault passphrase" autocomplete="off">
+      <button class="btn primary small" id="vaultUnlockBtn">Unlock</button>
+      <span id="vaultLockErr" class="error small" hidden></span>
+    </div>
     <section class="summary" id="summary"></section>
 
     <div class="grid-toolbar">

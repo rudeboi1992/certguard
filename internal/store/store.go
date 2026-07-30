@@ -73,6 +73,23 @@ func (s *Store) Close() error { return s.db.Close() }
 // Driver reports the active database driver ("sqlite" or "postgres").
 func (s *Store) Driver() string { return s.driver }
 
+// GetMeta reads a key from the meta table; ErrNotFound if absent.
+func (s *Store) GetMeta(key string) (string, error) {
+	var v string
+	err := s.queryRow(`SELECT mval FROM meta WHERE mkey=?`, key).Scan(&v)
+	if err == sql.ErrNoRows {
+		return "", ErrNotFound
+	}
+	return v, err
+}
+
+// SetMeta upserts a meta key/value.
+func (s *Store) SetMeta(key, val string) error {
+	_, err := s.exec(`INSERT INTO meta (mkey, mval) VALUES (?,?)
+		ON CONFLICT (mkey) DO UPDATE SET mval=excluded.mval`, key, val)
+	return err
+}
+
 // BackupSQLite writes a consistent snapshot of the (SQLite) database to dest via
 // VACUUM INTO, which is safe to run while the database is in use. dest must not
 // already exist. Returns an error for non-SQLite drivers.

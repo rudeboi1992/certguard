@@ -22,7 +22,7 @@ $('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const err = $('error');
   err.hidden = true;
-  const body = { email: $('email').value, password: $('password').value };
+  const body = { email: $('email').value, password: $('password').value, code: $('code').value };
   const path = setupMode ? '/api/v1/setup' : '/api/v1/auth/login';
   try {
     const res = await fetch(path, {
@@ -35,6 +35,15 @@ $('loginForm').addEventListener('submit', async (e) => {
       return;
     }
     const data = await res.json().catch(() => ({}));
+    if (data.error === '2fa_required') {
+      const wasPrompted = !$('codeField').hidden;
+      $('codeField').hidden = false;
+      $('loginBtn').textContent = 'Verify';
+      $('code').focus();
+      err.textContent = wasPrompted ? 'Incorrect code — try again' : '';
+      err.hidden = !wasPrompted;
+      return;
+    }
     err.textContent = data.error || (setupMode ? 'Could not create account' : 'Sign in failed');
     err.hidden = false;
   } catch (_) {

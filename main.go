@@ -26,7 +26,6 @@ import (
 	"github.com/bfalcher/certguard/internal/notify"
 	"github.com/bfalcher/certguard/internal/scanner"
 	"github.com/bfalcher/certguard/internal/scheduler"
-	"github.com/bfalcher/certguard/internal/secret"
 	"github.com/bfalcher/certguard/internal/selfsign"
 	"github.com/bfalcher/certguard/internal/server"
 	"github.com/bfalcher/certguard/internal/store"
@@ -99,27 +98,21 @@ func cmdServe() int {
 		fmt.Println("      certguard user add <email> --role admin")
 	}
 
-	// Secret vault: use the env master key if given, otherwise auto-generate and
-	// persist one to the key file so the vault works with no manual setup.
-	keySource := "CERTGUARD_MASTER_KEY"
-	if cfg.MasterKey == "" {
-		key, err := secret.LoadOrCreateKey(cfg.KeyFile)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "note: secret vault disabled (could not init key file):", err)
-		} else {
-			cfg.MasterKey = key
-			keySource = cfg.KeyFile
-		}
-	}
-
 	if cfg.TLSEnabled() || cfg.ACMEEnabled() {
 		cfg.CookieSecure = true // browser talks HTTPS → the session cookie must be Secure
 	}
 
 	sender := notify.NewRealSender(cfg.Mail)
-	srv := server.New(cfg, st, sender)
-	if cfg.MasterKey != "" {
-		fmt.Printf("secret vault on: entries can store encrypted secrets (key: %s)\n", keySource)
+	srv := server.New(cfg, st, sender) // bootstraps/loads the secret vault keyring
+	if enabled, unlocked, passphrase := srv.VaultInfo(); enabled {
+		switch {
+		case passphrase && !unlocked:
+			fmt.Println("secret vault on: PASSPHRASE-PROTECTED and locked — an admin must unlock it in the UI before secrets can be used")
+		case passphrase:
+			fmt.Println("secret vault on: passphrase-protected")
+		default:
+			fmt.Println("secret vault on: entries can store encrypted secrets (auto-unlocks via key file)")
+		}
 		if !cfg.CookieSecure {
 			fmt.Println("  note: serve over HTTPS (or a private VPN) before revealing secrets over the network")
 		}

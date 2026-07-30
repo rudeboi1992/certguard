@@ -20,6 +20,9 @@
     <label>Password
       <input type="password" name="password" id="password" required>
     </label>
+    <label id="codeField" hidden>Authentication code
+      <input type="text" name="code" id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code">
+    </label>
     <button type="submit" class="btn primary" id="loginBtn">Sign in</button>
     <p id="hint" class="muted small" hidden></p>
     <p id="error" class="error" hidden></p>

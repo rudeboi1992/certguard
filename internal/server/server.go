@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bfalcher/certguard/internal/auth"
@@ -23,6 +24,7 @@ import (
 	"github.com/bfalcher/certguard/internal/scanner"
 	"github.com/bfalcher/certguard/internal/secret"
 	"github.com/bfalcher/certguard/internal/store"
+	"github.com/bfalcher/certguard/internal/twofa"
 )
 
 const sessionCookie = "certguard_session"
@@ -32,19 +34,22 @@ type ctxKey int
 const userKey ctxKey = 0
 
 type Server struct {
-	cfg     config.Config
-	store   *store.Store
-	sender  notify.Sender
-	secrets *secret.Box // nil when the secret vault is disabled (no master key)
-	mux     *http.ServeMux
+	cfg    config.Config
+	store  *store.Store
+	sender notify.Sender
+	vault  *vault // envelope-encrypted secret vault (may be locked)
+	mux    *http.ServeMux
 }
 
 func New(cfg config.Config, st *store.Store, sender notify.Sender) *Server {
-	box, _ := secret.New(cfg.MasterKey) // nil box (disabled) when no master key
-	s := &Server{cfg: cfg, store: st, sender: sender, secrets: box, mux: http.NewServeMux()}
+	s := &Server{cfg: cfg, store: st, sender: sender, mux: http.NewServeMux()}
+	s.vault = newVault(st, cfg.MasterKey, cfg.KeyFile)
 	s.routes()
 	return s
 }
+
+// VaultInfo is exposed for startup logging.
+func (s *Server) VaultInfo() (enabled, unlocked, passphrase bool) { return s.vault.status() }
 
 func (s *Server) Handler() http.Handler { return s.mux }
 
@@ -82,6 +87,18 @@ func (s *Server) routes() {
 	// Backup / recovery (admin): download the vault key and a DB snapshot.
 	s.mux.Handle("GET /api/v1/backup/key", s.adminOnly(s.handleBackupKey))
 	s.mux.Handle("GET /api/v1/backup/db", s.adminOnly(s.handleBackupDB))
+
+	// Vault lock/unlock + passphrase (admin).
+	s.mux.Handle("GET /api/v1/vault/status", s.authed(s.handleVaultStatus))
+	s.mux.Handle("POST /api/v1/vault/unlock", s.adminOnly(s.handleVaultUnlock))
+	s.mux.Handle("POST /api/v1/vault/lock", s.adminOnly(s.handleVaultLock))
+	s.mux.Handle("POST /api/v1/vault/passphrase", s.adminOnly(s.handleVaultPassphrase))
+
+	// Two-factor (TOTP) — each user manages their own.
+	s.mux.Handle("POST /api/v1/2fa/setup", s.authed(s.handle2FASetup))
+	s.mux.Handle("GET /api/v1/2fa/qr", s.authed(s.handle2FAQR))
+	s.mux.Handle("POST /api/v1/2fa/enable", s.authed(s.handle2FAEnable))
+	s.mux.Handle("POST /api/v1/2fa/disable", s.authed(s.handle2FADisable))
 
 	// Admin-only (writes).
 	s.mux.Handle("POST /api/v1/scan", s.adminOnly(s.handleScan))
@@ -154,6 +171,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 type loginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	Code     string `json:"code"` // TOTP code, when 2FA is enabled
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +184,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil || !auth.CheckPassword(user.PasswordHash, req.Password) {
 		// Same response whether the email is unknown or the password is wrong.
 		writeErr(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+	// Second factor, if the account has it enabled.
+	if user.TOTPEnabled && !twofa.Validate(user.TOTPSecret, req.Code) {
+		writeErr(w, http.StatusUnauthorized, "2fa_required")
 		return
 	}
 	if err := s.startSession(w, user); err != nil {
@@ -329,9 +352,12 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
+	enabled, unlocked, passphrase := s.vault.status()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user":            userFrom(r.Context()),
-		"secrets_enabled": s.secrets != nil,
+		"secrets_enabled": enabled,
+		"vault_unlocked":  unlocked,
+		"vault_passphrase": passphrase,
 	})
 }
 
@@ -342,8 +368,12 @@ type setSecretRequest struct {
 // handleSetSecret stores (or clears, with an empty value) the encrypted secret
 // for an entry. Requires the vault to be enabled (master key set).
 func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
-	if s.secrets == nil {
-		writeErr(w, http.StatusServiceUnavailable, "secret vault not enabled (set CERTGUARD_MASTER_KEY)")
+	if !s.vault.statusEnabled() {
+		writeErr(w, http.StatusServiceUnavailable, "secret vault not enabled")
+		return
+	}
+	if !s.vault.isUnlocked() {
+		writeErr(w, http.StatusLocked, "vault is locked — unlock it first")
 		return
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -372,7 +402,7 @@ func (s *Server) storeSecret(id int64, value string) error {
 	if value == "" {
 		return s.store.SetSecret(id, "", "")
 	}
-	enc, err := s.secrets.Seal(value)
+	enc, err := s.vault.seal(value)
 	if err != nil {
 		return err
 	}
@@ -382,8 +412,12 @@ func (s *Server) storeSecret(id int64, value string) error {
 // handleRevealSecret decrypts and returns the plaintext secret for an entry.
 // Admin-only; this is the single path that ever emits plaintext.
 func (s *Server) handleRevealSecret(w http.ResponseWriter, r *http.Request) {
-	if s.secrets == nil {
+	if !s.vault.statusEnabled() {
 		writeErr(w, http.StatusServiceUnavailable, "secret vault not enabled")
+		return
+	}
+	if !s.vault.isUnlocked() {
+		writeErr(w, http.StatusLocked, "vault is locked — unlock it first")
 		return
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -400,7 +434,7 @@ func (s *Server) handleRevealSecret(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no secret stored for this entry")
 		return
 	}
-	plain, err := s.secrets.Open(c.SecretEnc)
+	plain, err := s.vault.open(c.SecretEnc)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -523,7 +557,7 @@ func (s *Server) handleCreateCert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Attach an optional secret (best-effort; the entry is already created).
-	if req.Secret != "" && s.secrets != nil {
+	if req.Secret != "" && s.vault.isUnlocked() {
 		if err := s.storeSecret(stored.ID, req.Secret); err == nil {
 			stored, _ = s.store.GetByID(stored.ID)
 		}
@@ -608,14 +642,27 @@ func (s *Server) handleScanAll(w http.ResponseWriter, r *http.Request) {
 // handleBackupKey streams the secret-vault master key as a download so an admin
 // can keep a safe copy without shell access. Sensitive: admin-only, no-store.
 func (s *Server) handleBackupKey(w http.ResponseWriter, r *http.Request) {
-	if s.secrets == nil || s.cfg.MasterKey == "" {
+	if !s.vault.statusEnabled() {
 		writeErr(w, http.StatusServiceUnavailable, "secret vault not enabled")
 		return
+	}
+	if _, _, passphrase := s.vault.status(); passphrase {
+		writeErr(w, http.StatusConflict, "vault is passphrase-protected — there is no key file to download; your recovery is your passphrase plus a database backup")
+		return
+	}
+	material := s.cfg.MasterKey
+	if material == "" {
+		b, err := os.ReadFile(s.cfg.KeyFile)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "no key file to read")
+			return
+		}
+		material = strings.TrimSpace(string(b))
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="certguard.key"`)
 	w.Header().Set("Cache-Control", "no-store")
-	_, _ = io.WriteString(w, s.cfg.MasterKey)
+	_, _ = io.WriteString(w, material)
 }
 
 // handleBackupDB streams a consistent snapshot of the SQLite database.

@@ -29,6 +29,7 @@
         <a href="#notifyCard" data-nav="notifyCard">Notifications</a>
         <a href="#usersCard" data-nav="usersCard" id="navUsers">Users</a>
         <a href="#backupCard" data-nav="backupCard" id="navBackup">Backup</a>
+        <a href="#securityCard" data-nav="securityCard">Security</a>
       </nav>
       <p class="muted small layout-hint">Drag <span class="grip-ex">⠿</span> to reorder · drag a card's right or bottom edge to resize · × to hide.</p>
       <select id="addSectionSettings" class="add-section"></select>
@@ -96,6 +97,52 @@
           <button class="btn ghost" id="dlDb">⤓ Download database</button>
         </div>
         <p id="backupNote" class="muted small">The master key is sensitive — store it in a password manager, ideally separate from the database, and only download it over HTTPS.</p>
+        </div>
+        <span class="widget-resize" title="Drag to resize width"></span>
+      </section>
+
+      <section class="card widget" id="securityCard" data-title="Security" hidden>
+        <div class="widget-bar">
+          <span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Security</span></span>
+          <span class="spacer"></span>
+          <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
+        </div>
+        <div class="widget-body">
+        <h3 class="sec-h">Two-factor authentication</h3>
+        <p class="muted small" id="twofaStatus">Add a time-based code from an authenticator app as a second factor at sign-in.</p>
+        <div id="twofaOff">
+          <button class="btn ghost" id="twofaEnableBtn">Enable two-factor</button>
+        </div>
+        <div id="twofaSetup" hidden>
+          <p class="muted small">Scan this with your authenticator app (or enter the key), then confirm a code to turn it on.</p>
+          <img id="twofaQR" class="twofa-qr" alt="2FA QR code">
+          <p class="mono small" id="twofaSecret"></p>
+          <div class="sec-row">
+            <input type="text" id="twofaCode" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code">
+            <button class="btn primary small" id="twofaConfirmBtn">Verify &amp; turn on</button>
+          </div>
+        </div>
+        <div id="twofaOn" hidden>
+          <div class="sec-row">
+            <input type="text" id="twofaDisableCode" inputmode="numeric" placeholder="current 6-digit code">
+            <button class="btn link" id="twofaDisableBtn">Turn off</button>
+          </div>
+        </div>
+
+        <div id="vaultSec" hidden>
+          <h3 class="sec-h">Secret vault</h3>
+          <p class="muted small" id="vaultSecStatus"></p>
+          <div class="sec-fields">
+            <input type="password" id="vaultCur" placeholder="current passphrase (if one is set)" autocomplete="off">
+            <input type="password" id="vaultNew" placeholder="new passphrase (8+ chars)" autocomplete="off">
+          </div>
+          <div class="backup-btns">
+            <button class="btn primary small" id="vaultSetBtn">Set / change passphrase</button>
+            <button class="btn ghost small" id="vaultRemoveBtn">Remove passphrase</button>
+            <button class="btn ghost small" id="vaultLockBtn">Lock now</button>
+          </div>
+          <p class="muted small">In passphrase mode the vault key is derived from your passphrase and never stored on disk — after a restart the vault stays locked until unlocked. <strong>Forget the passphrase and the stored secrets are unrecoverable.</strong></p>
+        </div>
         </div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>

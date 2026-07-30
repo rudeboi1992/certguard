@@ -230,6 +230,22 @@ function renderCerts() {
   rows.querySelectorAll('.trow').forEach(attachSwipe);
 }
 
+// --- vault unlock (passphrase-protected vault, locked after a restart) ---
+function showVaultUnlock() {
+  const bar = $('vaultLock'); if (!bar) return;
+  bar.hidden = false;
+  const go = async () => {
+    const errEl = $('vaultLockErr');
+    const res = await api('POST', '/api/v1/vault/unlock', { passphrase: $('vaultPass').value });
+    if (res.ok) { location.reload(); return; }
+    const d = await res.json().catch(() => ({}));
+    errEl.textContent = d.error || 'Unlock failed';
+    errEl.hidden = false;
+  };
+  $('vaultUnlockBtn').onclick = go;
+  $('vaultPass').onkeydown = (e) => { if (e.key === 'Enter') go(); };
+}
+
 // Reveal a stored secret: copy to clipboard and show it inline briefly.
 async function revealSecret(id, btn) {
   const res = await api('GET', `/api/v1/certs/${id}/secret`);
@@ -885,6 +901,7 @@ loadWhoami().then(() => {
     },
   });
   if (secretsEnabled && $('secretField')) $('secretField').hidden = false;
+  if (vaultLocked) showVaultUnlock();
   renderLegend();
   initNotes();
   loadDashExtras();

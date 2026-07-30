@@ -10,6 +10,11 @@ type User struct {
 	PasswordHash string    `json:"-"` // never serialized
 	Role         string    `json:"role"`
 	CreatedAt    time.Time `json:"created_at"`
+
+	// Two-factor (TOTP). TOTPSecret is the base32 shared secret and is never
+	// serialized; TOTPEnabled reports whether 2FA is active for this user.
+	TOTPSecret  string `json:"-"`
+	TOTPEnabled bool   `json:"totp_enabled"`
 }
 
 // IsAdmin reports whether the user may perform write operations.

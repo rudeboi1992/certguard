@@ -314,6 +314,23 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .clear-sec { display: inline-flex; align-items: center; gap: .3rem; font-size: .85rem; color: var(--muted); white-space: nowrap; }
 .backup-btns { display: flex; flex-wrap: wrap; gap: .6rem; margin: .8rem 0; }
 .backup-btns .btn:disabled { opacity: .5; cursor: default; }
+/* security card + vault unlock */
+.sec-h { font-size: 1rem; margin: 1rem 0 .4rem; }
+.sec-h:first-child { margin-top: .2rem; }
+.sec-row { display: flex; gap: .5rem; align-items: center; margin-top: .6rem; flex-wrap: wrap; }
+.sec-row input { flex: 1; min-width: 140px; padding: .45rem .6rem; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+.sec-fields { display: flex; gap: .5rem; margin: .6rem 0; flex-wrap: wrap; }
+.sec-fields input { flex: 1; min-width: 180px; padding: .45rem .6rem; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+.twofa-qr { display: block; width: 200px; height: 200px; margin: .6rem 0; border-radius: 8px;
+  background: #fff; padding: 8px; }
+#vaultSec { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .4rem; }
+.vault-lock { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  background: rgba(234,179,8,.12); border: 1px solid rgba(234,179,8,.4);
+  border-radius: var(--radius); padding: .7rem .9rem; margin-bottom: 1.25rem; font-size: .92rem; }
+.vault-lock input { padding: .4rem .6rem; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); color: var(--ink); font: inherit; }
 .trow-head { display: none; }
 .trow { position: relative; overflow: hidden; border-bottom: 1px solid var(--border); }
 .trow-actions { position: absolute; top: 0; right: 0; bottom: 0; display: flex; }
