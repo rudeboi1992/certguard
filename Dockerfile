@@ -23,11 +23,12 @@ FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/certguard /certguard
 COPY --from=build --chown=65532:65532 /data /data
 
-EXPOSE 8181
-# Keep the database AND the secret-vault master key in the persisted volume, so
-# stored secrets stay decryptable when the container is recreated.
+EXPOSE 8181 80 443
+# Keep the database, the secret-vault master key, AND any ACME certificates in
+# the persisted volume so they survive a container recreate.
 ENV CERTGUARD_DB_DSN=/data/certguard.db \
-    CERTGUARD_KEY_FILE=/data/certguard.key
+    CERTGUARD_KEY_FILE=/data/certguard.key \
+    CERTGUARD_ACME_CACHE=/data/acme
 VOLUME ["/data"]
 
 ENTRYPOINT ["/certguard"]

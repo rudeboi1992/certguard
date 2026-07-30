@@ -57,12 +57,24 @@ type Config struct {
 	TLSKey   string
 	TLSAuto  bool
 	TLSHosts string // SAN hostnames for the self-signed cert (comma-separated)
+
+	// ACME: fully automatic HTTPS. When ACMEDomain is set, serve obtains and
+	// renews a real Let's Encrypt certificate for it (no reverse proxy needed) —
+	// this is the "just give it a domain" install. Needs ports 80 + 443 reachable
+	// and the domain's DNS pointing at the host. Certs are cached in ACMECacheDir.
+	ACMEDomain   string // comma-separated hostnames
+	ACMEEmail    string // optional contact for the ACME account
+	ACMECacheDir string
 }
 
-// TLSEnabled reports whether serve should listen over HTTPS.
+// TLSEnabled reports whether serve should listen over HTTPS with a static/self-
+// signed certificate (as opposed to automatic ACME).
 func (c Config) TLSEnabled() bool {
 	return (c.TLSCert != "" && c.TLSKey != "") || c.TLSAuto
 }
+
+// ACMEEnabled reports whether serve should fetch a certificate automatically.
+func (c Config) ACMEEnabled() bool { return c.ACMEDomain != "" }
 
 type MailConfig struct {
 	Host string
@@ -89,6 +101,9 @@ func Load() Config {
 		TLSKey:           env("CERTGUARD_TLS_KEY", ""),
 		TLSAuto:          envBool("CERTGUARD_TLS_AUTO", false),
 		TLSHosts:         env("CERTGUARD_TLS_HOSTS", "localhost"),
+		ACMEDomain:       env("CERTGUARD_ACME_DOMAIN", ""),
+		ACMEEmail:        env("CERTGUARD_ACME_EMAIL", ""),
+		ACMECacheDir:     env("CERTGUARD_ACME_CACHE", "certguard-acme"),
 		Mail: MailConfig{
 			Host: env("CERTGUARD_MAIL_HOST", ""),
 			Port: envInt("CERTGUARD_MAIL_PORT", 587),

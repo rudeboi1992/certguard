@@ -4,23 +4,33 @@ certguard ships as a single static binary with an embedded web UI. First-run
 setup happens **in the browser** — open the page and create your admin account
 (no CLI needed). Add more admins later from **Settings → Users**.
 
-## 1. Docker + HTTPS for a domain (recommended)
+## 1. All-in-one: one container, automatic HTTPS (recommended)
 
-The cleanest secure setup for a real domain with multiple admins: certguard runs
-on the private network and **Caddy** provisions and renews a trusted TLS
-certificate automatically.
+certguard fetches and renews its own Let's Encrypt certificate — no reverse
+proxy to run. This is the easiest secure install for a domain with multiple
+admins.
 
 ```sh
 # 1) point your domain's DNS (A/AAAA) at this host
 # 2) create a .env file:
-echo 'CERTGUARD_DOMAIN=certguard.example.com' > .env
+echo 'CERTGUARD_ACME_DOMAIN=certguard.example.com' > .env
 # 3) start (ports 80+443 must be reachable for the certificate):
-docker compose -f docker-compose.caddy.yml up -d
+docker compose -f docker-compose.aio.yml up -d
 ```
 
 Open `https://certguard.example.com`, create your admin account, then add the
-other admins under Settings → Users. For an **internal-only** domain (not
-reachable by Let's Encrypt), switch the Caddyfile block to `tls internal`.
+other admins under Settings → Users. Certs, the database, and the vault key all
+persist in the `certguard_data` volume.
+
+Native (non-Docker) equivalent:
+
+```sh
+CERTGUARD_ACME_DOMAIN=certguard.example.com ./certguard serve
+```
+
+Prefer a reverse proxy instead (e.g. to share Caddy across several apps, or for
+an internal-only domain via `tls internal`)? Use `docker-compose.caddy.yml`
+(bundled Caddy) — see the Caddyfile in `deploy/`.
 
 ### Already running Caddy (or another reverse proxy)?
 
@@ -115,6 +125,8 @@ Key environment variables:
 | `CERTGUARD_DB_DRIVER` / `CERTGUARD_DB_DSN` | `sqlite` / `certguard.db` | database |
 | `CERTGUARD_MASTER_KEY` | *(auto)* | secret-vault key (overrides the key file) |
 | `CERTGUARD_KEY_FILE` | `certguard.key` | where the auto-generated key is stored |
+| `CERTGUARD_ACME_DOMAIN` | – | automatic Let's Encrypt HTTPS for this domain (serves :80+:443) |
+| `CERTGUARD_ACME_EMAIL` | – | optional ACME account contact |
 | `CERTGUARD_TLS_AUTO` | `false` | serve HTTPS with a self-signed cert |
 | `CERTGUARD_TLS_CERT` / `CERTGUARD_TLS_KEY` | – | serve HTTPS with your cert |
 | `CERTGUARD_COOKIE_SECURE` | `false` | mark cookies Secure (auto-on with TLS; set true behind an HTTPS proxy) |

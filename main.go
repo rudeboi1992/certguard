@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/acme/autocert"
+
 	"github.com/bfalcher/certguard/internal/auth"
 	"github.com/bfalcher/certguard/internal/config"
 	"github.com/bfalcher/certguard/internal/model"
@@ -110,7 +112,7 @@ func cmdServe() int {
 		}
 	}
 
-	if cfg.TLSEnabled() {
+	if cfg.TLSEnabled() || cfg.ACMEEnabled() {
 		cfg.CookieSecure = true // browser talks HTTPS → the session cookie must be Secure
 	}
 
@@ -137,7 +139,26 @@ func cmdServe() int {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	if cfg.TLSEnabled() {
+	if cfg.ACMEEnabled() {
+		// Fully automatic HTTPS: obtain/renew a real cert for the domain(s). The
+		// HTTP listener on :80 answers ACME challenges and redirects to HTTPS.
+		domains := splitHosts(cfg.ACMEDomain)
+		m := &autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(domains...),
+			Cache:      autocert.DirCache(cfg.ACMECacheDir),
+			Email:      cfg.ACMEEmail,
+		}
+		go func() {
+			// challenge responder + HTTP→HTTPS redirect
+			_ = http.ListenAndServe(":80", m.HTTPHandler(nil))
+		}()
+		httpSrv.Addr = ":443"
+		httpSrv.TLSConfig = m.TLSConfig()
+		fmt.Printf("certguard %s listening on :443 with automatic HTTPS for %s (db: %s)\n",
+			version, strings.Join(domains, ", "), cfg.DBDriver)
+		err = httpSrv.ListenAndServeTLS("", "") // certs come from the ACME manager
+	} else if cfg.TLSEnabled() {
 		certPath, keyPath := cfg.TLSCert, cfg.TLSKey
 		if certPath == "" || keyPath == "" {
 			// No cert supplied: generate/reuse a self-signed one.
@@ -222,6 +243,17 @@ func cmdScan(args []string) int {
 
 	_ = json.Marshal // reserved for a future --json flag
 	return 0
+}
+
+// splitHosts turns a comma-separated host list into a trimmed slice.
+func splitHosts(s string) []string {
+	var out []string
+	for _, h := range strings.Split(s, ",") {
+		if h = strings.TrimSpace(h); h != "" {
+			out = append(out, h)
+		}
+	}
+	return out
 }
 
 // openStore is a small helper for CLI commands that touch the database.
