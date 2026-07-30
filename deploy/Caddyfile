@@ -1,0 +1,18 @@
+# Caddy config for certguard. The domain comes from the CERTGUARD_DOMAIN env
+# var (set it in your .env). Caddy fetches and renews a real certificate for it
+# automatically and proxies to the certguard container over the private network.
+#
+# Public domain (default): Let's Encrypt — needs ports 80+443 reachable and the
+# domain's DNS pointing here.
+{$CERTGUARD_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy certguard:8181
+}
+
+# Internal-only domain (not resolvable by Let's Encrypt)? Replace the block above
+# with the following to use Caddy's own local CA instead (install its root once):
+#
+# {$CERTGUARD_DOMAIN} {
+# 	tls internal
+# 	reverse_proxy certguard:8181
+# }

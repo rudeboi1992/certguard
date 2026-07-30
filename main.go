@@ -25,6 +25,7 @@ import (
 	"github.com/bfalcher/certguard/internal/scanner"
 	"github.com/bfalcher/certguard/internal/scheduler"
 	"github.com/bfalcher/certguard/internal/secret"
+	"github.com/bfalcher/certguard/internal/selfsign"
 	"github.com/bfalcher/certguard/internal/server"
 	"github.com/bfalcher/certguard/internal/store"
 )
@@ -109,6 +110,10 @@ func cmdServe() int {
 		}
 	}
 
+	if cfg.TLSEnabled() {
+		cfg.CookieSecure = true // browser talks HTTPS → the session cookie must be Secure
+	}
+
 	sender := notify.NewRealSender(cfg.Mail)
 	srv := server.New(cfg, st, sender)
 	if cfg.MasterKey != "" {
@@ -131,8 +136,25 @@ func cmdServe() int {
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	fmt.Printf("certguard %s listening on %s (db: %s)\n", version, cfg.Addr, cfg.DBDriver)
-	if err := httpSrv.ListenAndServe(); err != nil {
+
+	if cfg.TLSEnabled() {
+		certPath, keyPath := cfg.TLSCert, cfg.TLSKey
+		if certPath == "" || keyPath == "" {
+			// No cert supplied: generate/reuse a self-signed one.
+			certPath, keyPath = "certguard-cert.pem", "certguard-key.pem"
+			if e := selfsign.EnsureCert(certPath, keyPath, cfg.TLSHosts, time.Now()); e != nil {
+				fmt.Fprintln(os.Stderr, "tls: could not generate self-signed certificate:", e)
+				return 1
+			}
+			fmt.Println("tls: self-signed certificate (browsers will warn) — set CERTGUARD_TLS_CERT/KEY, or terminate TLS at a reverse proxy, for a trusted cert")
+		}
+		fmt.Printf("certguard %s listening on %s over HTTPS (db: %s)\n", version, cfg.Addr, cfg.DBDriver)
+		err = httpSrv.ListenAndServeTLS(certPath, keyPath)
+	} else {
+		fmt.Printf("certguard %s listening on %s (db: %s)\n", version, cfg.Addr, cfg.DBDriver)
+		err = httpSrv.ListenAndServe()
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "server error:", err)
 		return 1
 	}

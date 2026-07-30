@@ -1,10 +1,17 @@
-# certguard — self-hosting compose file.
+# certguard — self-hosting compose file (plain HTTP).
 #
-# Default: SQLite, zero external dependencies. Data persists in the named
-# volume `certguard_data`. Just run:
+# Default: SQLite, zero external dependencies. Data + the secret-vault key persist
+# in the named volume `certguard_data`. Just run:
 #
 #     docker compose up -d
-#     docker compose exec certguard /certguard user add you@example.com --role admin
+#
+# Then open http://<host>:8181 and create your admin account in the browser
+# (add more admins later from Settings → Users). No CLI setup needed.
+#
+# ⚠ This file serves plain HTTP — fine on localhost or a trusted VPN, but if you
+# expose it on a network (especially with the secret vault), use HTTPS instead:
+#   • docker-compose.caddy.yml  — automatic real cert for your domain (recommended)
+#   • or set CERTGUARD_TLS_AUTO=true for a self-signed cert on this service.
 #
 # To use Postgres instead, uncomment the two CERTGUARD_DB_* lines below and
 # start with the postgres profile:

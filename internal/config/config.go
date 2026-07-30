@@ -47,6 +47,21 @@ type Config struct {
 	// KeyFile is where the auto-generated master key is stored/read when MasterKey
 	// is not supplied via the environment.
 	KeyFile string
+
+	// TLS: serve HTTPS directly. TLSCert+TLSKey use a supplied certificate; if
+	// they are empty and TLSAuto is true, a self-signed certificate is generated
+	// and persisted. When any of these serves HTTPS, the Secure cookie flag is
+	// forced on. (For a real domain, terminating TLS at a reverse proxy such as
+	// Caddy — see docker-compose.caddy.yml — is usually preferable.)
+	TLSCert  string
+	TLSKey   string
+	TLSAuto  bool
+	TLSHosts string // SAN hostnames for the self-signed cert (comma-separated)
+}
+
+// TLSEnabled reports whether serve should listen over HTTPS.
+func (c Config) TLSEnabled() bool {
+	return (c.TLSCert != "" && c.TLSKey != "") || c.TLSAuto
 }
 
 type MailConfig struct {
@@ -70,6 +85,10 @@ func Load() Config {
 		SchedulerEnabled: envBool("CERTGUARD_SCHEDULER_ENABLED", true),
 		MasterKey:        env("CERTGUARD_MASTER_KEY", ""),
 		KeyFile:          env("CERTGUARD_KEY_FILE", "certguard.key"),
+		TLSCert:          env("CERTGUARD_TLS_CERT", ""),
+		TLSKey:           env("CERTGUARD_TLS_KEY", ""),
+		TLSAuto:          envBool("CERTGUARD_TLS_AUTO", false),
+		TLSHosts:         env("CERTGUARD_TLS_HOSTS", "localhost"),
 		Mail: MailConfig{
 			Host: env("CERTGUARD_MAIL_HOST", ""),
 			Port: envInt("CERTGUARD_MAIL_PORT", 587),

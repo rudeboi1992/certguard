@@ -13,3 +13,5 @@ certguard.exe
 
 # Secret vault master key (never commit; back up separately)
 *.key
+certguard-cert.pem
+certguard-key.pem

@@ -24,7 +24,10 @@ COPY --from=build /out/certguard /certguard
 COPY --from=build --chown=65532:65532 /data /data
 
 EXPOSE 8181
-ENV CERTGUARD_DB_DSN=/data/certguard.db
+# Keep the database AND the secret-vault master key in the persisted volume, so
+# stored secrets stay decryptable when the container is recreated.
+ENV CERTGUARD_DB_DSN=/data/certguard.db \
+    CERTGUARD_KEY_FILE=/data/certguard.key
 VOLUME ["/data"]
 
 ENTRYPOINT ["/certguard"]
