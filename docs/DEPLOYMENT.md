@@ -32,6 +32,22 @@ Prefer a reverse proxy instead (e.g. to share Caddy across several apps, or for
 an internal-only domain via `tls internal`)? Use `docker-compose.caddy.yml`
 (bundled Caddy) — see the Caddyfile in `deploy/`.
 
+### Portainer
+
+A published image (`ghcr.io/rudeboi1992/certguard:latest`, multi-arch) is built
+by CI, so you can deploy without building from source:
+
+1. One-time: make the GHCR package **public** (GitHub → Packages → certguard →
+   Package settings → visibility), or add GHCR credentials to Portainer.
+2. Portainer → **Stacks → Add stack → Web editor** and paste
+   `deploy/portainer-stack.yml`.
+3. Under **Environment variables**, set `CERTGUARD_ACME_DOMAIN` (and optionally
+   `CERTGUARD_ACME_EMAIL`), then **Deploy the stack**.
+4. Open `https://<your-domain>` and create your admin account.
+
+(Portainer can't build from a private repo's `Dockerfile` in the web editor,
+which is why the stack pulls the prebuilt image.)
+
 ### Already running Caddy (or another reverse proxy)?
 
 Don't start a second Caddy. Run only certguard, join it to your proxy's Docker

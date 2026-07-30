@@ -1,0 +1,28 @@
+# certguard — Portainer Stack (all-in-one, automatic HTTPS).
+#
+# Paste this into Portainer → Stacks → Add stack → Web editor. Set the env vars
+# in the "Environment variables" section below the editor (at minimum
+# CERTGUARD_ACME_DOMAIN). No build step — it pulls the published image.
+#
+# Requirements: your domain's DNS points at this host, and ports 80 + 443 are
+# reachable (and not already used by another container on the host).
+services:
+  certguard:
+    image: ghcr.io/rudeboi1992/certguard:latest
+    container_name: certguard
+    ports:
+      - "80:80"
+      - "443:443"
+    # Let the non-root image bind the privileged ports 80/443.
+    sysctls:
+      - net.ipv4.ip_unprivileged_port_start=0
+    environment:
+      CERTGUARD_ACME_DOMAIN: ${CERTGUARD_ACME_DOMAIN}   # e.g. certguard.example.com
+      CERTGUARD_ACME_EMAIL: ${CERTGUARD_ACME_EMAIL:-}
+      CERTGUARD_CHECK_INTERVAL: ${CERTGUARD_CHECK_INTERVAL:-6h}
+    volumes:
+      - certguard_data:/data
+    restart: unless-stopped
+
+volumes:
+  certguard_data:

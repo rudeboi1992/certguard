@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 
 # --- build stage -----------------------------------------------------------
-FROM golang:1.25-alpine AS build
+# Runs on the build host's native arch and cross-compiles to the target arch,
+# so multi-arch images (amd64 + arm64) build fast without emulation.
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
 WORKDIR /src
 
 # Cache module downloads separately from source.
@@ -10,8 +12,9 @@ RUN go mod download
 
 COPY . .
 ARG VERSION=docker
+ARG TARGETOS TARGETARCH
 # CGO is off (modernc.org/sqlite is pure Go) so the binary is fully static.
-RUN CGO_ENABLED=0 GOOS=linux go build \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
         -ldflags="-s -w -X main.version=${VERSION}" \
         -o /out/certguard . \
     && mkdir /data
