@@ -11,9 +11,35 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
+	"os"
+	"strings"
 )
+
+// LoadOrCreateKey returns the master-key material stored at path, generating a
+// fresh random 32-byte key (hex) and persisting it (0600) if the file is missing
+// or empty. This lets the secret vault work with zero setup — the operator never
+// has to run anything. A write failure is returned so the caller can leave the
+// vault disabled rather than use a key that won't survive a restart.
+func LoadOrCreateKey(path string) (string, error) {
+	if b, err := os.ReadFile(path); err == nil {
+		if k := strings.TrimSpace(string(b)); k != "" {
+			return k, nil
+		}
+	}
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	key := hex.EncodeToString(buf)
+	if err := os.WriteFile(path, []byte(key), 0o600); err != nil {
+		return "", fmt.Errorf("write key file %s: %w", path, err)
+	}
+	return key, nil
+}
 
 // Box seals and opens secret values with a fixed 256-bit key.
 type Box struct{ gcm cipher.AEAD }

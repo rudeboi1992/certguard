@@ -10,3 +10,6 @@ certguard.exe
 
 # Logs / scratch
 *.log
+
+# Secret vault master key (never commit; back up separately)
+*.key

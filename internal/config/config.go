@@ -38,11 +38,15 @@ type Config struct {
 	// empty, email channels are treated as unconfigured and skipped.
 	Mail MailConfig
 
-	// MasterKey enables the encrypted secret vault. When set, an entry may hold
-	// its actual secret value (API key, token, private key), encrypted at rest
-	// with AES-256-GCM using a key derived from this value. Empty disables the
-	// vault entirely. Generate one with: openssl rand -hex 32
+	// MasterKey enables the encrypted secret vault. When set (env), the secret
+	// value of an entry is encrypted at rest with AES-256-GCM using a key derived
+	// from this value. When empty, serve auto-generates a key and persists it to
+	// KeyFile so the vault works with no setup — set the env var instead to keep
+	// the key off-disk. Generate one with: openssl rand -hex 32
 	MasterKey string
+	// KeyFile is where the auto-generated master key is stored/read when MasterKey
+	// is not supplied via the environment.
+	KeyFile string
 }
 
 type MailConfig struct {
@@ -65,6 +69,7 @@ func Load() Config {
 		CheckInterval:    envDuration("CERTGUARD_CHECK_INTERVAL", 6*time.Hour),
 		SchedulerEnabled: envBool("CERTGUARD_SCHEDULER_ENABLED", true),
 		MasterKey:        env("CERTGUARD_MASTER_KEY", ""),
+		KeyFile:          env("CERTGUARD_KEY_FILE", "certguard.key"),
 		Mail: MailConfig{
 			Host: env("CERTGUARD_MAIL_HOST", ""),
 			Port: envInt("CERTGUARD_MAIL_PORT", 587),
