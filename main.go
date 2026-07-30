@@ -160,14 +160,18 @@ func cmdServe() int {
 		err = httpSrv.ListenAndServeTLS("", "") // certs come from the ACME manager
 	} else if cfg.TLSEnabled() {
 		certPath, keyPath := cfg.TLSCert, cfg.TLSKey
-		if certPath == "" || keyPath == "" {
-			// No cert supplied: generate/reuse a self-signed one.
-			certPath, keyPath = "certguard-cert.pem", "certguard-key.pem"
+		if cfg.TLSAuto {
+			// Self-signed: generate (once) to the given paths, or default paths.
+			// Point CERTGUARD_TLS_CERT/KEY at the data volume to persist the cert
+			// across container recreates so its fingerprint stays stable.
+			if certPath == "" || keyPath == "" {
+				certPath, keyPath = "certguard-cert.pem", "certguard-key.pem"
+			}
 			if e := selfsign.EnsureCert(certPath, keyPath, cfg.TLSHosts, time.Now()); e != nil {
 				fmt.Fprintln(os.Stderr, "tls: could not generate self-signed certificate:", e)
 				return 1
 			}
-			fmt.Println("tls: self-signed certificate (browsers will warn) — set CERTGUARD_TLS_CERT/KEY, or terminate TLS at a reverse proxy, for a trusted cert")
+			fmt.Println("tls: self-signed certificate (browsers will warn) — use CERTGUARD_ACME_DOMAIN with a real domain for a trusted cert")
 		}
 		fmt.Printf("certguard %s listening on %s over HTTPS (db: %s)\n", version, cfg.Addr, cfg.DBDriver)
 		err = httpSrv.ListenAndServeTLS(certPath, keyPath)
