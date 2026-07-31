@@ -84,6 +84,24 @@ Environment:
 `)
 }
 
+// bootstrapAdmin creates an initial admin user. Called only when the database
+// has no users, so it is safe to run on every start (it no-ops thereafter).
+func bootstrapAdmin(st *store.Store, email, password string) error {
+	email = strings.TrimSpace(strings.ToLower(email))
+	if email == "" {
+		return fmt.Errorf("CERTGUARD_ADMIN_EMAIL is empty")
+	}
+	if len(password) < 8 {
+		return fmt.Errorf("CERTGUARD_ADMIN_PASSWORD must be at least 8 characters")
+	}
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return err
+	}
+	_, err = st.CreateUser(email, hash, string(auth.RoleAdmin))
+	return err
+}
+
 func cmdServe() int {
 	cfg := config.Load()
 	st, err := store.Open(cfg.DBDriver, cfg.DBDSN)
@@ -94,8 +112,20 @@ func cmdServe() int {
 	defer st.Close()
 
 	if n, err := st.CountUsers(); err == nil && n == 0 {
-		fmt.Println("NOTE: no users exist yet — the API is locked until you create one:")
-		fmt.Println("      certguard user add <email> --role admin")
+		// First run on an empty database: optionally create an admin from the
+		// environment so a container deploy needs no shell access. This runs only
+		// while zero users exist; on later restarts it is skipped (users > 0).
+		if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
+			if err := bootstrapAdmin(st, cfg.AdminEmail, cfg.AdminPassword); err != nil {
+				fmt.Fprintln(os.Stderr, "admin bootstrap failed:", err)
+				return 1
+			}
+			fmt.Printf("bootstrapped admin %s from environment (delete CERTGUARD_ADMIN_PASSWORD after first login)\n", cfg.AdminEmail)
+		} else {
+			fmt.Println("NOTE: no users exist yet — the API is locked until you create one:")
+			fmt.Println("      certguard user add <email> --role admin")
+			fmt.Println("      (or set CERTGUARD_ADMIN_EMAIL + CERTGUARD_ADMIN_PASSWORD and restart)")
+		}
 	}
 
 	if cfg.TLSEnabled() || cfg.ACMEEnabled() {

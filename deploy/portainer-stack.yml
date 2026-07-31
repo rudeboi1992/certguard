@@ -20,6 +20,11 @@ services:
       CERTGUARD_ACME_DOMAIN: ${CERTGUARD_ACME_DOMAIN}   # e.g. certguard.example.com
       CERTGUARD_ACME_EMAIL: ${CERTGUARD_ACME_EMAIL:-}
       CERTGUARD_CHECK_INTERVAL: ${CERTGUARD_CHECK_INTERVAL:-6h}
+      # First-run only: create an admin so no shell access is needed. Used just
+      # once, while the database has no users; ignored on later restarts. Remove
+      # CERTGUARD_ADMIN_PASSWORD after your first login.
+      CERTGUARD_ADMIN_EMAIL: ${CERTGUARD_ADMIN_EMAIL:-}
+      CERTGUARD_ADMIN_PASSWORD: ${CERTGUARD_ADMIN_PASSWORD:-}
     volumes:
       - certguard_data:/data
     restart: unless-stopped

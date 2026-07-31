@@ -38,6 +38,12 @@ type Config struct {
 	// empty, email channels are treated as unconfigured and skipped.
 	Mail MailConfig
 
+	// AdminEmail/AdminPassword bootstrap the first admin on an empty database, so
+	// a container deploy needs no shell access. They are used ONCE — only when no
+	// users exist yet — and ignored afterward. Set both, or neither.
+	AdminEmail    string
+	AdminPassword string
+
 	// MasterKey enables the encrypted secret vault. When set (env), the secret
 	// value of an entry is encrypted at rest with AES-256-GCM using a key derived
 	// from this value. When empty, serve auto-generates a key and persists it to
@@ -104,6 +110,8 @@ func Load() Config {
 		ACMEDomain:       env("CERTGUARD_ACME_DOMAIN", ""),
 		ACMEEmail:        env("CERTGUARD_ACME_EMAIL", ""),
 		ACMECacheDir:     env("CERTGUARD_ACME_CACHE", "certguard-acme"),
+		AdminEmail:    env("CERTGUARD_ADMIN_EMAIL", ""),
+		AdminPassword: env("CERTGUARD_ADMIN_PASSWORD", ""),
 		Mail: MailConfig{
 			Host: env("CERTGUARD_MAIL_HOST", ""),
 			Port: envInt("CERTGUARD_MAIL_PORT", 587),
