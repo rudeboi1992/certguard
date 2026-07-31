@@ -288,7 +288,11 @@ loadWhoami().then((u) => {
   if ($('securityCard')) $('securityCard').hidden = false;
   renderTwoFA(!!(u && u.totp_enabled));
   renderVaultSec();
-  if ($('caSec')) $('caSec').hidden = !caAvailable; // shown only when a CA is configured
+  if ($('caSec')) {
+    $('caSec').hidden = !caAvailable; // shown only when a CA is available
+    const caLink = $('caSec').querySelector('a');
+    if (caLink) caLink.href = caUrl;  // certguard's /ca.crt, or an external URL (bundled Caddy)
+  }
   loadChannels();
   loadUsers();
 }).catch(() => {});

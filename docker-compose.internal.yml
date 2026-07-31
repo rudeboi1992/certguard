@@ -16,14 +16,13 @@
 #   2) Create a .env file next to this file:
 #        CERTGUARD_DOMAIN=certguard.lan
 #   3) docker compose -f docker-compose.internal.yml up -d
-#   4) Trust Caddy's root CA on the machines that will use certguard so the
-#      padlock is green (one-time):
-#        docker compose -f docker-compose.internal.yml exec caddy \
-#          cat /data/caddy/pki/authorities/local/root.crt > caddy-root.crt
-#      then import caddy-root.crt into each machine's "Trusted Root Certification
-#      Authorities" (Windows: certlm.msc or a Group Policy; macOS: Keychain;
-#      Linux: /usr/local/share/ca-certificates + update-ca-certificates).
-#   5) Open https://certguard.lan and create your admin account.
+#   4) Open https://certguard.lan and create your admin account.
+#   5) Trust the CA on the machines that will use certguard so the padlock goes
+#      green (one-time): in certguard go to Settings -> Security -> Download CA
+#      certificate (or just visit https://certguard.lan/ca.crt), then import it
+#      into each machine's "Trusted Root Certification Authorities" (Windows:
+#      certlm.msc or Group Policy; macOS: Keychain; Linux: drop it in
+#      /usr/local/share/ca-certificates and run update-ca-certificates).
 services:
   certguard:
     image: ghcr.io/rudeboi1992/certguard:latest
@@ -33,29 +32,50 @@ services:
       # TLS terminates at Caddy, so mark the session cookie Secure.
       CERTGUARD_COOKIE_SECURE: "true"
       CERTGUARD_CHECK_INTERVAL: ${CERTGUARD_CHECK_INTERVAL:-6h}
-      # Serve Caddy's local CA at /ca.crt with a Download button in Settings, so
-      # users can install trust without digging in the Caddy volume.
-      CERTGUARD_CA_FILE: /caddy-data/caddy/pki/authorities/local/root.crt
+      # Caddy (which owns the CA and runs as root) serves its own root cert at
+      # /ca.crt. This makes the "Download CA certificate" button appear in
+      # Settings, pointing there — certguard itself never needs to read Caddy's
+      # protected key material.
+      CERTGUARD_CA_URL: /ca.crt
     volumes:
       - certguard_data:/data
-      - caddy_data:/caddy-data:ro   # read-only access to Caddy's CA for the download
     # No published ports: only Caddy reaches certguard, on the internal network.
 
   caddy:
     image: caddy:2-alpine
     container_name: certguard-caddy
     restart: unless-stopped
-    # One-liner Caddy: serve the domain over HTTPS using Caddy's internal CA and
-    # proxy to certguard. No Caddyfile to mount.
-    command: caddy reverse-proxy --from ${CERTGUARD_DOMAIN:?set CERTGUARD_DOMAIN in your .env, e.g. certguard.lan} --to certguard:8181 --internal-certs
+    environment:
+      CERTGUARD_DOMAIN: ${CERTGUARD_DOMAIN:?set CERTGUARD_DOMAIN in your .env, e.g. certguard.lan}
     ports:
       - "80:80"
       - "443:443"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
     volumes:
       - caddy_data:/data      # holds the local CA — back this up, don't delete it
       - caddy_config:/config
     depends_on:
       - certguard
+
+# Inline Caddyfile: HTTPS via Caddy's internal CA, serve the root at /ca.crt, and
+# proxy everything else to certguard. ($$ escapes compose interpolation so Caddy
+# sees the {$CERTGUARD_DOMAIN} env placeholder.)
+configs:
+  caddyfile:
+    content: |
+      {$$CERTGUARD_DOMAIN} {
+          tls internal
+          handle_path /ca.crt {
+              root * /data/caddy/pki/authorities/local
+              rewrite * /root.crt
+              file_server
+          }
+          handle {
+              reverse_proxy certguard:8181
+          }
+      }
 
 volumes:
   certguard_data:

@@ -370,8 +370,19 @@ func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
 		"vault_unlocked":   unlocked,
 		"vault_passphrase": passphrase,
 		"zk_enabled":       s.vault.zkOn(),
-		"ca_available":     s.cfg.CAFile != "",
+		"ca_available":     s.cfg.CAFile != "" || s.cfg.CADownloadURL != "",
+		"ca_url":           s.caURL(),
 	})
+}
+
+// caURL is where the "Download CA certificate" button points: an external URL if
+// one is configured (e.g. a bundled proxy serving it), else certguard's own
+// /ca.crt (which serves CAFile).
+func (s *Server) caURL() string {
+	if s.cfg.CADownloadURL != "" {
+		return s.cfg.CADownloadURL
+	}
+	return "/ca.crt"
 }
 
 // handleCACert serves the configured CA certificate for download, so users can

@@ -44,11 +44,16 @@ type Config struct {
 	AdminEmail    string
 	AdminPassword string
 
-	// CAFile, when set, is the path to a CA certificate (e.g. the local CA of a
-	// bundled reverse proxy) that certguard serves for download at /ca.crt, with a
-	// "Download CA certificate" button in Settings. Lets users install trust for an
-	// internal-CA HTTPS setup without digging in a container volume.
-	CAFile string
+	// CAFile, when set, is the path to a READABLE CA certificate that certguard
+	// serves for download at /ca.crt. Use this when you have a plain CA file
+	// certguard's (non-root) user can read.
+	//
+	// CADownloadURL is the alternative for when something ELSE serves the CA — e.g.
+	// a bundled Caddy serving its own root at /ca.crt (Caddy owns the file; a
+	// non-root certguard cannot read Caddy's 0600 root key/cert). Either one makes
+	// the "Download CA certificate" button appear in Settings.
+	CAFile        string
+	CADownloadURL string
 
 	// MasterKey enables the encrypted secret vault. When set (env), the secret
 	// value of an entry is encrypted at rest with AES-256-GCM using a key derived
@@ -119,6 +124,7 @@ func Load() Config {
 		AdminEmail:    env("CERTGUARD_ADMIN_EMAIL", ""),
 		AdminPassword: env("CERTGUARD_ADMIN_PASSWORD", ""),
 		CAFile:        env("CERTGUARD_CA_FILE", ""),
+		CADownloadURL: env("CERTGUARD_CA_URL", ""),
 		Mail: MailConfig{
 			Host: env("CERTGUARD_MAIL_HOST", ""),
 			Port: envInt("CERTGUARD_MAIL_PORT", 587),
