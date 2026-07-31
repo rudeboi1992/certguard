@@ -2,6 +2,15 @@
 # reverse proxy to run. certguard fetches and renews its own Let's Encrypt
 # certificate.
 #
+# ⚠ SECURITY: this recipe puts certguard ON THE PUBLIC INTERNET (Let's Encrypt
+# has to reach it). certguard holds a secret vault, so before you expose it:
+#   • turn on two-factor auth for EVERY admin (Settings → Security),
+#   • enable the zero-knowledge vault (so a server compromise never leaks secrets),
+#   • ideally put it behind SSO (e.g. Authentik forward-auth) as well.
+# For an internal tool, prefer docker-compose.internal.yml + a VPN for remote
+# access — only use this if you genuinely need public, unauthenticated-network
+# reachability.
+#
 # Setup:
 #   1) Point your domain's DNS (A/AAAA record) at this host.
 #   2) Create a .env file next to this file:

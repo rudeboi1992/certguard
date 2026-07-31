@@ -60,6 +60,11 @@ CERTGUARD_ACME_DOMAIN=certguard.example.com docker compose -f docker-compose.aio
 Needs ports 80 + 443 reachable and the domain's DNS pointing here. Open
 `https://certguard.example.com`.
 
+> ⚠ **This exposes certguard to the internet.** It holds a secret vault, so
+> before you do: enable **2FA** for every admin, turn on the **zero-knowledge
+> vault**, and ideally front it with **SSO**. For an internal tool, prefer the
+> internal recipe above + a VPN — only go public if you truly need it.
+
 ### Portainer (one click)
 
 1. Portainer → **Settings → App Templates** → set the URL to:
