@@ -165,9 +165,10 @@ fi
 echo -e "${GN}────────────────────────────────────────────────────────${CL}"
 echo
 if [ "$MODE" = "internal" ]; then
-  warn "First visit warns until you trust the CA: open ${URL}/ca.crt (or"
-  warn "Settings → Download CA certificate), install it in Trusted Root on"
-  warn "each device (or push via Group Policy), then reload — green padlock."
+  warn "First visit warns (self-signed). To get the green padlock, per device:"
+  warn "  1) open ${URL}/ca.crt (or Settings → Download CA certificate)"
+  warn "  2) install it into 'Trusted Root Certification Authorities'"
+  warn "  3) FULLY QUIT and reopen your browser (a refresh isn't enough)"
 else
   warn "This serves plain HTTP — fine on a trusted LAN/VPN. For a trusted"
   warn "padlock, re-run with MODE=internal (bundled Caddy + local CA)."

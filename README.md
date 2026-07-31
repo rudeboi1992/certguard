@@ -18,6 +18,9 @@ is handled. All of them end the same way: open the page and **create your admin
 account in the browser** (no CLI). Not sure which? Most self-hosters want the
 first one.
 
+📖 **Full step-by-step for every method (with per-OS certificate steps) is in
+[docs/INSTALL.md](docs/INSTALL.md).**
+
 ### ★ Internal network, no public domain — the usual self-hosted choice
 
 Running this on a LAN with no public domain (homelab, small office)? This is for

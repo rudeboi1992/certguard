@@ -18,11 +18,11 @@
 #   3) docker compose -f docker-compose.internal.yml up -d
 #   4) Open https://certguard.lan and create your admin account.
 #   5) Trust the CA on the machines that will use certguard so the padlock goes
-#      green (one-time): in certguard go to Settings -> Security -> Download CA
-#      certificate (or just visit https://certguard.lan/ca.crt), then import it
-#      into each machine's "Trusted Root Certification Authorities" (Windows:
-#      certlm.msc or Group Policy; macOS: Keychain; Linux: drop it in
-#      /usr/local/share/ca-certificates and run update-ca-certificates).
+#      green (one-time): Settings -> Security -> Download CA certificate (or visit
+#      https://certguard.lan/ca.crt), install it into "Trusted Root Certification
+#      Authorities", then FULLY QUIT AND REOPEN THE BROWSER (a refresh isn't
+#      enough — browsers only read the cert store at startup). Full per-OS steps:
+#      docs/INSTALL.md.
 services:
   certguard:
     image: ghcr.io/rudeboi1992/certguard:latest
