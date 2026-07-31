@@ -15,8 +15,8 @@
 # secret-vault key persist in the certguard_data volume.
 services:
   certguard:
-    build: .
-    image: certguard:latest
+    image: ghcr.io/rudeboi1992/certguard:latest
+    # To build from source instead of pulling: comment the image line and use `build: .`
     environment:
       CERTGUARD_DB_DSN: /data/certguard.db
       CERTGUARD_KEY_FILE: /data/certguard.key

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" role="img" aria-label="certguard">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f2937"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+  </defs>
+  <rect width="96" height="96" rx="20" fill="url(#g)"/>
+  <path d="M48 16 L74 26 V46 C74 63 62 74 48 80 C34 74 22 63 22 46 V26 Z"
+        fill="none" stroke="#f59e0b" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M37 48 l8 9 16 -19" fill="none" stroke="#f59e0b" stroke-width="6"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

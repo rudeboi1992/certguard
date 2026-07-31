@@ -1,0 +1,54 @@
+{
+  "version": "2",
+  "templates": [
+    {
+      "type": 3,
+      "title": "certguard",
+      "name": "certguard",
+      "description": "Active TLS certificate, API-key & subscription expiry monitor with an encrypted (optionally zero-knowledge) secret vault, alerts, and a calendar view.",
+      "note": "Serves on the chosen port (default 8181). On first visit it prompts you to create an admin — or fill the Admin email/password fields to have it created automatically. For HTTPS, put certguard behind your existing reverse proxy and set 'Behind HTTPS proxy' to Yes, or use docker-compose.aio.yml from the repo for a self-contained certificate. Never delete the volume unless you mean to erase everything.",
+      "categories": ["Monitoring", "Security"],
+      "platform": "linux",
+      "logo": "https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/logo.svg",
+      "repository": {
+        "url": "https://github.com/rudeboi1992/certguard",
+        "stackfile": "deploy/portainer-stack.yml"
+      },
+      "env": [
+        {
+          "name": "CERTGUARD_PORT",
+          "label": "Web port",
+          "description": "Host port to publish the UI on.",
+          "default": "8181"
+        },
+        {
+          "name": "CERTGUARD_ADMIN_EMAIL",
+          "label": "Admin email (optional)",
+          "description": "Fill both admin fields to auto-create the first admin. Leave blank to create it in the browser on first visit.",
+          "default": ""
+        },
+        {
+          "name": "CERTGUARD_ADMIN_PASSWORD",
+          "label": "Admin password (optional, 8+ chars)",
+          "description": "Only used once, on an empty database. Remove it after your first login.",
+          "default": ""
+        },
+        {
+          "name": "CERTGUARD_COOKIE_SECURE",
+          "label": "Behind an HTTPS proxy?",
+          "description": "Set to Yes if a reverse proxy terminates HTTPS in front of certguard.",
+          "select": [
+            { "text": "No — plain HTTP (localhost / VPN)", "value": "false", "default": true },
+            { "text": "Yes — served over HTTPS", "value": "true" }
+          ]
+        },
+        {
+          "name": "CERTGUARD_CHECK_INTERVAL",
+          "label": "Rescan interval",
+          "description": "How often to re-scan endpoints and evaluate alerts (e.g. 6h, 12h, 24h).",
+          "default": "6h"
+        }
+      ]
+    }
+  ]
+}

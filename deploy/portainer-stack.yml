@@ -1,33 +1,39 @@
-# certguard — Portainer Stack (all-in-one, automatic HTTPS).
+# certguard — Portainer App Template stack.
 #
-# Paste this into Portainer → Stacks → Add stack → Web editor. Set the env vars
-# in the "Environment variables" section below the editor (at minimum
-# CERTGUARD_ACME_DOMAIN). No build step — it pulls the published image.
+# This is the compose the certguard App Template deploys. The template form
+# (Settings → App Templates → certguard) fills the ${...} values below, so you
+# normally never edit this file by hand — you just click Deploy and fill the form.
 #
-# Requirements: your domain's DNS points at this host, and ports 80 + 443 are
-# reachable (and not already used by another container on the host).
+# It serves plain HTTP on the chosen port (default 8181), which is the most
+# compatible default: run it on localhost/VPN, or put it behind whatever reverse
+# proxy you already use (Nginx Proxy Manager, Traefik, Caddy) for HTTPS. For a
+# self-contained HTTPS setup with your own domain, use docker-compose.aio.yml
+# from the repo instead.
 services:
   certguard:
     image: ghcr.io/rudeboi1992/certguard:latest
     container_name: certguard
+    restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
-    # Let the non-root image bind the privileged ports 80/443.
-    sysctls:
-      - net.ipv4.ip_unprivileged_port_start=0
+      - "${CERTGUARD_PORT:-8181}:8181"
     environment:
-      CERTGUARD_ACME_DOMAIN: ${CERTGUARD_ACME_DOMAIN}   # e.g. certguard.example.com
-      CERTGUARD_ACME_EMAIL: ${CERTGUARD_ACME_EMAIL:-}
-      CERTGUARD_CHECK_INTERVAL: ${CERTGUARD_CHECK_INTERVAL:-6h}
-      # First-run only: create an admin so no shell access is needed. Used just
-      # once, while the database has no users; ignored on later restarts. Remove
-      # CERTGUARD_ADMIN_PASSWORD after your first login.
+      # Optional: auto-create the first admin so no setup screen is needed. Leave
+      # blank to create it in the browser on first visit. Used once, on an empty
+      # database; ignored afterward.
       CERTGUARD_ADMIN_EMAIL: ${CERTGUARD_ADMIN_EMAIL:-}
       CERTGUARD_ADMIN_PASSWORD: ${CERTGUARD_ADMIN_PASSWORD:-}
+      # Set true when a reverse proxy terminates HTTPS in front of certguard, so
+      # the session cookie is marked Secure.
+      CERTGUARD_COOKIE_SECURE: ${CERTGUARD_COOKIE_SECURE:-false}
+      CERTGUARD_CHECK_INTERVAL: ${CERTGUARD_CHECK_INTERVAL:-6h}
+      # Optional SMTP for email alerts.
+      CERTGUARD_MAIL_HOST: ${CERTGUARD_MAIL_HOST:-}
+      CERTGUARD_MAIL_PORT: ${CERTGUARD_MAIL_PORT:-587}
+      CERTGUARD_MAIL_USER: ${CERTGUARD_MAIL_USER:-}
+      CERTGUARD_MAIL_PASS: ${CERTGUARD_MAIL_PASS:-}
+      CERTGUARD_MAIL_FROM: ${CERTGUARD_MAIL_FROM:-}
     volumes:
       - certguard_data:/data
-    restart: unless-stopped
 
 volumes:
   certguard_data:

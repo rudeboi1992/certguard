@@ -11,6 +11,54 @@ best parts — privacy-preserving client-side file parsing and a
 notification-escalation state machine — while adding the feature that turns a
 manual registry into a real monitoring tool: **active endpoint scanning**.
 
+## Quick start
+
+Pick the one that matches you. All of them end the same way: open the page and
+**create your admin account in the browser** — no CLI, no config files to edit.
+
+### Try it in 60 seconds (localhost)
+
+```
+docker run -d --name certguard -p 8181:8181 -v certguard-data:/data \
+  ghcr.io/rudeboi1992/certguard:latest
+```
+
+Open **http://localhost:8181** and create your admin. That's it. Plain HTTP is
+fine on your own machine or a trusted VPN.
+
+### Portainer (one click)
+
+1. Portainer → **Settings → App Templates** → set the URL to:
+   `https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/portainer-template.json`
+2. **App Templates** → pick **certguard** → fill the short form → **Deploy**.
+3. Open `http://<host>:8181` and create your admin (or set the Admin email/password
+   fields in the form to have it created for you).
+
+### Real deploy with your own domain (automatic HTTPS)
+
+One container, a real certificate, no reverse proxy to run — just point your
+domain at the host and set one variable:
+
+```
+CERTGUARD_ACME_DOMAIN=certguard.example.com docker compose -f docker-compose.aio.yml up -d
+```
+
+Needs ports 80 + 443 reachable and the domain's DNS pointing here. Open
+`https://certguard.example.com`.
+
+### Behind a reverse proxy you already run
+
+Deploy the `docker run` / Portainer option above, point your proxy (Nginx Proxy
+Manager, Traefik, Caddy…) at `certguard:8181`, and set `CERTGUARD_COOKIE_SECURE=true`
+so the session cookie is marked Secure. An internal-only, domain-joined setup can
+use Caddy's built-in CA — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+> **One rule for all of them:** the `certguard-data` volume holds your database
+> and the secret-vault key. Back it up; don't delete it.
+
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for Postgres, secret-vault modes
+(including zero-knowledge), backups, and hardening.
+
 ## Status: Phases 1–2 — working
 
 ```

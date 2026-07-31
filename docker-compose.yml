@@ -19,8 +19,8 @@
 #     docker compose --profile postgres up -d
 services:
   certguard:
-    build: .
-    image: certguard:latest
+    image: ghcr.io/rudeboi1992/certguard:latest
+    # To build from source instead of pulling: comment the image line and use `build: .`
     ports:
       - "8181:8181"
     environment:
