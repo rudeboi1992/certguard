@@ -19,8 +19,8 @@ CORES="${CORES:-2}"                    # vCPU cores
 RAM="${RAM:-1024}"                     # MB
 DISK="${DISK:-6}"                      # GB root disk (Docker + image need room)
 BRIDGE="${BRIDGE:-vmbr0}"              # network bridge
-STORAGE="${STORAGE:-local-lvm}"        # storage for the container root disk
-TEMPLATE_STORAGE="${TEMPLATE_STORAGE:-local}"  # storage holding LXC templates
+STORAGE="${STORAGE:-}"                 # container root disk storage (auto-detected if empty)
+TEMPLATE_STORAGE="${TEMPLATE_STORAGE:-}"  # template storage (auto-detected if empty)
 PORT="${PORT:-8181}"                   # host port certguard listens on
 IMAGE="${IMAGE:-ghcr.io/rudeboi1992/certguard:latest}"
 # Optional: auto-create the first admin (else you make it in the browser).
@@ -45,6 +45,18 @@ if [ -z "$CTID" ]; then
   CTID="$(pvesh get /cluster/nextid)"
 fi
 info "Using container ID ${CTID}"
+
+# Auto-detect storage — not every host has "local-lvm". Pick the first storage
+# that can hold a container root disk (rootdir) / templates (vztmpl).
+if [ -z "$STORAGE" ]; then
+  STORAGE="$(pvesm status -content rootdir 2>/dev/null | awk 'NR>1{print $1; exit}')"
+  [ -n "$STORAGE" ] || die "No storage supports container disks (rootdir). Set STORAGE=... explicitly."
+fi
+if [ -z "$TEMPLATE_STORAGE" ]; then
+  TEMPLATE_STORAGE="$(pvesm status -content vztmpl 2>/dev/null | awk 'NR>1{print $1; exit}')"
+  [ -n "$TEMPLATE_STORAGE" ] || die "No storage supports templates (vztmpl). Set TEMPLATE_STORAGE=... explicitly."
+fi
+info "Root disk on '${STORAGE}', templates on '${TEMPLATE_STORAGE}'"
 
 # ---- ensure a Debian 12 template is available -------------------------------
 info "Checking for a Debian 12 LXC template…"
