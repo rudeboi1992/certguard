@@ -121,32 +121,23 @@ if [ -n "$CG_ADMIN_EMAIL" ] && [ -n "$CG_ADMIN_PASSWORD" ]; then
 fi
 
 if [ "$MODE" = "internal" ]; then
+  # certguard's own self-signed cert is a CA cert (ExtKeyUsage serverAuth) that
+  # covers IP SANs — so, unlike a CA-signed hostname cert, it gives a trusted
+  # padlock by bare IP with no DNS once you install it. One container, no proxy.
   SITE="${DOMAIN:-$IP}"
-  info "Deploying certguard + Caddy (trusted internal cert for ${SITE})…"
+  HOSTS="$IP"; [ -n "$DOMAIN" ] && HOSTS="${IP},${DOMAIN}"
+  info "Deploying certguard over HTTPS (self-signed, trusted-after-install) for ${SITE}…"
   pct exec "$CTID" -- bash -c "
     docker rm -f certguard certguard-caddy >/dev/null 2>&1 || true
-    docker network create certguard-net >/dev/null 2>&1 || true
-    docker run -d --name certguard --network certguard-net --restart unless-stopped \
-      -e CERTGUARD_COOKIE_SECURE=true -e CERTGUARD_CA_URL=/ca.crt ${ENV_ADMIN} \
+    docker run -d --name certguard --restart unless-stopped \
+      -p 443:8181 \
+      -e CERTGUARD_TLS_AUTO=1 \
+      -e CERTGUARD_TLS_HOSTS=${HOSTS} \
+      -e CERTGUARD_TLS_CERT=/data/tls-cert.pem \
+      -e CERTGUARD_TLS_KEY=/data/tls-key.pem \
+      -e CERTGUARD_CA_FILE=/data/tls-cert.pem \
+      ${ENV_ADMIN} \
       -v certguard-data:/data ${IMAGE} >/dev/null
-    cat > /etc/certguard-Caddyfile <<CADDY
-${SITE} {
-    tls internal
-    handle_path /ca.crt {
-        root * /data/caddy/pki/authorities/local
-        rewrite * /root.crt
-        file_server
-    }
-    handle {
-        reverse_proxy certguard:8181
-    }
-}
-CADDY
-    docker run -d --name certguard-caddy --network certguard-net --restart unless-stopped \
-      -p 80:80 -p 443:443 \
-      -v /etc/certguard-Caddyfile:/etc/caddy/Caddyfile:ro \
-      -v certguard-caddy-data:/data -v certguard-caddy-config:/config \
-      caddy:2-alpine >/dev/null
   "
   URL="https://${SITE}"
 else
