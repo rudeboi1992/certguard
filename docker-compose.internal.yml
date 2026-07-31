@@ -1,0 +1,59 @@
+# certguard — bundled Caddy with a TRUSTED internal certificate.
+#
+# For a LAN / internal deployment where you DON'T have a public domain (so
+# Let's Encrypt can't be used) but still want a real green-padlock cert instead
+# of self-signed warnings. One stack: certguard + Caddy, and Caddy mints the
+# certificate from its own local CA.
+#
+# Use this when NOTHING else on the host already uses ports 80/443. If you
+# already run a reverse proxy (Nginx Proxy Manager, Traefik, another Caddy),
+# don't use this — add a route to that proxy instead (it owns 80/443).
+#
+# Setup:
+#   1) Pick an internal hostname and make it resolve to this host on your LAN
+#      (an A record in your internal DNS, or a hosts-file entry), e.g.
+#        certguard.lan  ->  192.168.1.50
+#   2) Create a .env file next to this file:
+#        CERTGUARD_DOMAIN=certguard.lan
+#   3) docker compose -f docker-compose.internal.yml up -d
+#   4) Trust Caddy's root CA on the machines that will use certguard so the
+#      padlock is green (one-time):
+#        docker compose -f docker-compose.internal.yml exec caddy \
+#          cat /data/caddy/pki/authorities/local/root.crt > caddy-root.crt
+#      then import caddy-root.crt into each machine's "Trusted Root Certification
+#      Authorities" (Windows: certlm.msc or a Group Policy; macOS: Keychain;
+#      Linux: /usr/local/share/ca-certificates + update-ca-certificates).
+#   5) Open https://certguard.lan and create your admin account.
+services:
+  certguard:
+    image: ghcr.io/rudeboi1992/certguard:latest
+    container_name: certguard
+    restart: unless-stopped
+    environment:
+      # TLS terminates at Caddy, so mark the session cookie Secure.
+      CERTGUARD_COOKIE_SECURE: "true"
+      CERTGUARD_CHECK_INTERVAL: ${CERTGUARD_CHECK_INTERVAL:-6h}
+    volumes:
+      - certguard_data:/data
+    # No published ports: only Caddy reaches certguard, on the internal network.
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: certguard-caddy
+    restart: unless-stopped
+    # One-liner Caddy: serve the domain over HTTPS using Caddy's internal CA and
+    # proxy to certguard. No Caddyfile to mount.
+    command: caddy reverse-proxy --from ${CERTGUARD_DOMAIN:?set CERTGUARD_DOMAIN in your .env, e.g. certguard.lan} --to certguard:8181 --internal-certs
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data      # holds the local CA — back this up, don't delete it
+      - caddy_config:/config
+    depends_on:
+      - certguard
+
+volumes:
+  certguard_data:
+  caddy_data:
+  caddy_config:

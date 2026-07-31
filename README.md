@@ -46,12 +46,25 @@ CERTGUARD_ACME_DOMAIN=certguard.example.com docker compose -f docker-compose.aio
 Needs ports 80 + 443 reachable and the domain's DNS pointing here. Open
 `https://certguard.example.com`.
 
+### Internal / LAN, no public domain (trusted cert, no warnings)
+
+Want a real green padlock on an internal network where Let's Encrypt can't reach
+you? Bundled Caddy issues a certificate from its own local CA — one stack, then
+you trust its root once:
+
+```
+CERTGUARD_DOMAIN=certguard.lan docker compose -f docker-compose.internal.yml up -d
+```
+
+Point `certguard.lan` at the host in your internal DNS. See the header of
+[docker-compose.internal.yml](docker-compose.internal.yml) for the one-time
+CA-trust step. Only use this if nothing else on the host owns ports 80/443.
+
 ### Behind a reverse proxy you already run
 
 Deploy the `docker run` / Portainer option above, point your proxy (Nginx Proxy
 Manager, Traefik, Caddy…) at `certguard:8181`, and set `CERTGUARD_COOKIE_SECURE=true`
-so the session cookie is marked Secure. An internal-only, domain-joined setup can
-use Caddy's built-in CA — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+so the session cookie is marked Secure. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 > **One rule for all of them:** the `certguard-data` volume holds your database
 > and the secret-vault key. Back it up; don't delete it.
