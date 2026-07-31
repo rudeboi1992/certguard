@@ -5,10 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>certguard</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛡️</text></svg>">
-  <script>
-    // Apply the saved theme before the page paints, to avoid a light/dark flash.
-    try { var t = localStorage.getItem('certguard-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
-  </script>
+  <script src="/static/theme-init.js"></script>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>

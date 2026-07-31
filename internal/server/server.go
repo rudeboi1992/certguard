@@ -34,15 +34,17 @@ type ctxKey int
 const userKey ctxKey = 0
 
 type Server struct {
-	cfg    config.Config
-	store  *store.Store
-	sender notify.Sender
-	vault  *vault // envelope-encrypted secret vault (may be locked)
-	mux    *http.ServeMux
+	cfg          config.Config
+	store        *store.Store
+	sender       notify.Sender
+	vault        *vault // envelope-encrypted secret vault (may be locked)
+	mux          *http.ServeMux
+	loginLimiter *rateLimiter // slows credential guessing on auth endpoints
 }
 
 func New(cfg config.Config, st *store.Store, sender notify.Sender) *Server {
 	s := &Server{cfg: cfg, store: st, sender: sender, mux: http.NewServeMux()}
+	s.loginLimiter = newRateLimiter(10, 15*time.Minute) // 10 attempts / IP / 15 min
 	s.vault = newVault(st, cfg.MasterKey, cfg.KeyFile)
 	s.routes()
 	return s
@@ -51,16 +53,17 @@ func New(cfg config.Config, st *store.Store, sender notify.Sender) *Server {
 // VaultInfo is exposed for startup logging.
 func (s *Server) VaultInfo() (enabled, unlocked, passphrase bool) { return s.vault.status() }
 
-func (s *Server) Handler() http.Handler { return s.mux }
+func (s *Server) Handler() http.Handler { return securityHeaders(s.mux) }
 
 func (s *Server) routes() {
 	// Public.
 	s.mux.HandleFunc("GET /healthz", s.handleHealth)
-	s.mux.HandleFunc("POST /api/v1/auth/login", s.handleLogin)
+	// Rate-limited by client IP to slow credential guessing.
+	s.mux.HandleFunc("POST /api/v1/auth/login", s.limitAuth(s.handleLogin))
 	// First-run: create the initial admin from the browser, but only while no
 	// users exist. Once one does, setup locks and there is no public sign-up.
 	s.mux.HandleFunc("GET /api/v1/setup/status", s.handleSetupStatus)
-	s.mux.HandleFunc("POST /api/v1/setup", s.handleSetup)
+	s.mux.HandleFunc("POST /api/v1/setup", s.limitAuth(s.handleSetup))
 
 	// Authenticated (any role).
 	s.mux.Handle("POST /api/v1/auth/logout", s.authed(s.handleLogout))
