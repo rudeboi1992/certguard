@@ -37,6 +37,18 @@ CERTGUARD_DOMAIN=certguard.lan docker compose -f docker-compose.internal.yml up 
 
 Only use this if nothing else on the host already owns ports 80/443.
 
+### Proxmox — one line, whole thing
+
+On a Proxmox VE host, this creates a Debian LXC, installs Docker, deploys
+certguard, and prints the URL:
+
+```
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/proxmox-install.sh)"
+```
+
+Then open the `http://<ip>:8181` it gives you and create your admin. Override
+defaults inline, e.g. `CORES=4 RAM=2048 bash -c "$(curl -fsSL …)"`.
+
 ### Try it in 60 seconds (localhost, plain HTTP)
 
 Just kicking the tyres on your own machine:
