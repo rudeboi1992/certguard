@@ -49,6 +49,14 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/rudeboi1992/certguard/ma
 Then open the `http://<ip>:8181` it gives you and create your admin. Override
 defaults inline, e.g. `CORES=4 RAM=2048 bash -c "$(curl -fsSL …)"`.
 
+Want a trusted HTTPS padlock instead of plain HTTP? Add `MODE=internal` — it
+bundles Caddy with a local CA and serves `https://<ip>` (install the CA once from
+`https://<ip>/ca.crt`):
+
+```
+MODE=internal bash -c "$(curl -fsSL https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/proxmox-install.sh)"
+```
+
 ### Try it in 60 seconds (localhost, plain HTTP)
 
 Just kicking the tyres on your own machine:

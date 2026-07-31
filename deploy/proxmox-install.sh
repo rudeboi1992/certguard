@@ -21,8 +21,13 @@ DISK="${DISK:-6}"                      # GB root disk (Docker + image need room)
 BRIDGE="${BRIDGE:-vmbr0}"              # network bridge
 STORAGE="${STORAGE:-}"                 # container root disk storage (auto-detected if empty)
 TEMPLATE_STORAGE="${TEMPLATE_STORAGE:-}"  # template storage (auto-detected if empty)
-PORT="${PORT:-8181}"                   # host port certguard listens on
+PORT="${PORT:-8181}"                   # host port certguard listens on (plain mode)
 IMAGE="${IMAGE:-ghcr.io/rudeboi1992/certguard:latest}"
+# MODE=plain    → HTTP on :PORT (simplest; fine on a trusted LAN)
+# MODE=internal → bundled Caddy + trusted internal cert on :443 (green padlock
+#                 after you install the CA). Uses DOMAIN if set, else the LXC IP.
+MODE="${MODE:-plain}"
+DOMAIN="${DOMAIN:-}"
 # Optional: auto-create the first admin (else you make it in the browser).
 CG_ADMIN_EMAIL="${CG_ADMIN_EMAIL:-}"
 CG_ADMIN_PASSWORD="${CG_ADMIN_PASSWORD:-}"
@@ -109,24 +114,57 @@ pct exec "$CTID" -- bash -c "
 msg "Docker installed"
 
 # ---- deploy certguard -------------------------------------------------------
-info "Pulling and starting certguard…"
-ENV_ARGS=""
+IP="$(pct exec "$CTID" -- hostname -I 2>/dev/null | awk '{print $1}')"
+ENV_ADMIN=""
 if [ -n "$CG_ADMIN_EMAIL" ] && [ -n "$CG_ADMIN_PASSWORD" ]; then
-  ENV_ARGS="-e CERTGUARD_ADMIN_EMAIL=${CG_ADMIN_EMAIL} -e CERTGUARD_ADMIN_PASSWORD=${CG_ADMIN_PASSWORD}"
+  ENV_ADMIN="-e CERTGUARD_ADMIN_EMAIL=${CG_ADMIN_EMAIL} -e CERTGUARD_ADMIN_PASSWORD=${CG_ADMIN_PASSWORD}"
 fi
-pct exec "$CTID" -- bash -c "
-  docker rm -f certguard >/dev/null 2>&1 || true
-  docker run -d --name certguard --restart unless-stopped \
-    -p ${PORT}:8181 -v certguard-data:/data ${ENV_ARGS} ${IMAGE} >/dev/null
-"
+
+if [ "$MODE" = "internal" ]; then
+  SITE="${DOMAIN:-$IP}"
+  info "Deploying certguard + Caddy (trusted internal cert for ${SITE})…"
+  pct exec "$CTID" -- bash -c "
+    docker rm -f certguard certguard-caddy >/dev/null 2>&1 || true
+    docker network create certguard-net >/dev/null 2>&1 || true
+    docker run -d --name certguard --network certguard-net --restart unless-stopped \
+      -e CERTGUARD_COOKIE_SECURE=true -e CERTGUARD_CA_URL=/ca.crt ${ENV_ADMIN} \
+      -v certguard-data:/data ${IMAGE} >/dev/null
+    cat > /etc/certguard-Caddyfile <<CADDY
+${SITE} {
+    tls internal
+    handle_path /ca.crt {
+        root * /data/caddy/pki/authorities/local
+        rewrite * /root.crt
+        file_server
+    }
+    handle {
+        reverse_proxy certguard:8181
+    }
+}
+CADDY
+    docker run -d --name certguard-caddy --network certguard-net --restart unless-stopped \
+      -p 80:80 -p 443:443 \
+      -v /etc/certguard-Caddyfile:/etc/caddy/Caddyfile:ro \
+      -v certguard-caddy-data:/data -v certguard-caddy-config:/config \
+      caddy:2-alpine >/dev/null
+  "
+  URL="https://${SITE}"
+else
+  info "Pulling and starting certguard (plain HTTP)…"
+  pct exec "$CTID" -- bash -c "
+    docker rm -f certguard >/dev/null 2>&1 || true
+    docker run -d --name certguard --restart unless-stopped \
+      -p ${PORT}:8181 -v certguard-data:/data ${ENV_ADMIN} ${IMAGE} >/dev/null
+  "
+  URL="http://${IP}:${PORT}"
+fi
 msg "certguard is running"
 
 # ---- summary ----------------------------------------------------------------
-IP="$(pct exec "$CTID" -- hostname -I 2>/dev/null | awk '{print $1}')"
 echo
 echo -e "${GN}────────────────────────────────────────────────────────${CL}"
 echo -e "${GN} certguard is up!${CL}"
-echo -e "   URL:        ${BL}http://${IP}:${PORT}${CL}"
+echo -e "   URL:        ${BL}${URL}${CL}"
 echo -e "   Container:  LXC ${CTID} (${HOSTNAME_})"
 if [ -n "$CG_ADMIN_EMAIL" ]; then
   echo -e "   Admin:      ${CG_ADMIN_EMAIL} (created for you)"
@@ -135,7 +173,13 @@ else
 fi
 echo -e "${GN}────────────────────────────────────────────────────────${CL}"
 echo
-warn "This serves plain HTTP — fine on a trusted LAN/VPN. For a trusted"
-warn "padlock with no public domain, see docker-compose.internal.yml in the repo."
+if [ "$MODE" = "internal" ]; then
+  warn "First visit warns until you trust the CA: open ${URL}/ca.crt (or"
+  warn "Settings → Download CA certificate), install it in Trusted Root on"
+  warn "each device (or push via Group Policy), then reload — green padlock."
+else
+  warn "This serves plain HTTP — fine on a trusted LAN/VPN. For a trusted"
+  warn "padlock, re-run with MODE=internal (bundled Caddy + local CA)."
+fi
 echo
 info "Manage it:  pct enter ${CTID}   ·   docker logs -f certguard"
