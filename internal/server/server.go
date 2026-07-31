@@ -64,6 +64,8 @@ func (s *Server) routes() {
 	// users exist. Once one does, setup locks and there is no public sign-up.
 	s.mux.HandleFunc("GET /api/v1/setup/status", s.handleSetupStatus)
 	s.mux.HandleFunc("POST /api/v1/setup", s.limitAuth(s.handleSetup))
+	// Public CA download (served only when CERTGUARD_CA_FILE is set).
+	s.mux.HandleFunc("GET /ca.crt", s.handleCACert)
 
 	// Authenticated (any role).
 	s.mux.Handle("POST /api/v1/auth/logout", s.authed(s.handleLogout))
@@ -368,7 +370,27 @@ func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
 		"vault_unlocked":   unlocked,
 		"vault_passphrase": passphrase,
 		"zk_enabled":       s.vault.zkOn(),
+		"ca_available":     s.cfg.CAFile != "",
 	})
+}
+
+// handleCACert serves the configured CA certificate for download, so users can
+// install trust for an internal-CA HTTPS setup. Public (a root cert is not
+// secret, and it's needed to bootstrap trust before the padlock is valid).
+func (s *Server) handleCACert(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.CAFile == "" {
+		writeErr(w, http.StatusNotFound, "no CA certificate is configured")
+		return
+	}
+	b, err := os.ReadFile(s.cfg.CAFile)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "CA certificate not available yet")
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-x509-ca-cert")
+	w.Header().Set("Content-Disposition", `attachment; filename="certguard-ca.crt"`)
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(b)
 }
 
 type setSecretRequest struct {

@@ -33,8 +33,12 @@ services:
       # TLS terminates at Caddy, so mark the session cookie Secure.
       CERTGUARD_COOKIE_SECURE: "true"
       CERTGUARD_CHECK_INTERVAL: ${CERTGUARD_CHECK_INTERVAL:-6h}
+      # Serve Caddy's local CA at /ca.crt with a Download button in Settings, so
+      # users can install trust without digging in the Caddy volume.
+      CERTGUARD_CA_FILE: /caddy-data/caddy/pki/authorities/local/root.crt
     volumes:
       - certguard_data:/data
+      - caddy_data:/caddy-data:ro   # read-only access to Caddy's CA for the download
     # No published ports: only Caddy reaches certguard, on the internal network.
 
   caddy:

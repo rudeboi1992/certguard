@@ -44,6 +44,12 @@ type Config struct {
 	AdminEmail    string
 	AdminPassword string
 
+	// CAFile, when set, is the path to a CA certificate (e.g. the local CA of a
+	// bundled reverse proxy) that certguard serves for download at /ca.crt, with a
+	// "Download CA certificate" button in Settings. Lets users install trust for an
+	// internal-CA HTTPS setup without digging in a container volume.
+	CAFile string
+
 	// MasterKey enables the encrypted secret vault. When set (env), the secret
 	// value of an entry is encrypted at rest with AES-256-GCM using a key derived
 	// from this value. When empty, serve auto-generates a key and persists it to
@@ -112,6 +118,7 @@ func Load() Config {
 		ACMECacheDir:     env("CERTGUARD_ACME_CACHE", "certguard-acme"),
 		AdminEmail:    env("CERTGUARD_ADMIN_EMAIL", ""),
 		AdminPassword: env("CERTGUARD_ADMIN_PASSWORD", ""),
+		CAFile:        env("CERTGUARD_CA_FILE", ""),
 		Mail: MailConfig{
 			Host: env("CERTGUARD_MAIL_HOST", ""),
 			Port: envInt("CERTGUARD_MAIL_PORT", 587),

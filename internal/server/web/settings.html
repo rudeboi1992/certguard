@@ -141,6 +141,17 @@
           </div>
           <p class="muted small">Your passphrase is turned into a key <strong>in your browser</strong> and never sent to the server, which only ever stores ciphertext. Share the vault by sharing the passphrase — each admin unlocks once per browser session. <strong>Forget the passphrase and the stored secrets are unrecoverable.</strong></p>
         </div>
+
+        <div id="caSec" hidden>
+          <h3 class="sec-h">Trusted certificate (HTTPS)</h3>
+          <p class="muted small">This server uses a private certificate authority. Install it on a device to make certguard's HTTPS show a trusted padlock instead of a warning.</p>
+          <a class="btn primary small" href="/ca.crt" download="certguard-ca.crt">⤓ Download CA certificate</a>
+          <p class="muted small">
+            <strong>Windows:</strong> double-click → Install Certificate → <em>Local Machine</em> → place in <em>Trusted Root Certification Authorities</em>.
+            <strong>macOS:</strong> open in Keychain Access → System → set to <em>Always Trust</em>.
+            <strong>Linux:</strong> copy to <code>/usr/local/share/ca-certificates/</code> and run <code>sudo update-ca-certificates</code>.
+          </p>
+        </div>
         </div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>

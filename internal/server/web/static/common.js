@@ -8,6 +8,7 @@ let currentUserId = null;
 let secretsEnabled = false;
 let vaultLocked = false; // vault is passphrase-protected and currently locked
 let zkEnabled = false;   // zero-knowledge mode: all secret crypto is client-side
+let caAvailable = false; // a CA cert is configured for download at /ca.crt
 
 function toast(msg, isError) {
   const t = $('toast');
@@ -71,6 +72,7 @@ async function loadWhoami() {
   currentUserId = u && u.id;
   secretsEnabled = !!data.secrets_enabled;
   zkEnabled = !!data.zk_enabled;
+  caAvailable = !!data.ca_available;
   // In zero-knowledge mode the vault is "locked" until the browser unlocks it
   // with the passphrase this session; otherwise fall back to server-side state.
   vaultLocked = zkEnabled

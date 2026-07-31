@@ -288,6 +288,7 @@ loadWhoami().then((u) => {
   if ($('securityCard')) $('securityCard').hidden = false;
   renderTwoFA(!!(u && u.totp_enabled));
   renderVaultSec();
+  if ($('caSec')) $('caSec').hidden = !caAvailable; // shown only when a CA is configured
   loadChannels();
   loadUsers();
 }).catch(() => {});
