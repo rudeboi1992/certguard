@@ -10,7 +10,8 @@
 #
 # ⚠ This file serves plain HTTP — fine on localhost or a trusted VPN, but if you
 # expose it on a network (especially with the secret vault), use HTTPS instead:
-#   • docker-compose.caddy.yml  — automatic real cert for your domain (recommended)
+#   • docker-compose.internal.yml — trusted cert on a LAN with no public domain
+#   • docker-compose.aio.yml      — automatic Let's Encrypt cert for a public domain
 #   • or set CERTGUARD_TLS_AUTO=true for a self-signed cert on this service.
 #
 # To use Postgres instead, uncomment the two CERTGUARD_DB_* lines below and

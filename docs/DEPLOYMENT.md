@@ -28,9 +28,11 @@ Native (non-Docker) equivalent:
 CERTGUARD_ACME_DOMAIN=certguard.example.com ./certguard serve
 ```
 
-Prefer a reverse proxy instead (e.g. to share Caddy across several apps, or for
-an internal-only domain via `tls internal`)? Use `docker-compose.caddy.yml`
-(bundled Caddy) — see the Caddyfile in `deploy/`.
+No public domain (a LAN / internal deployment)? Use `docker-compose.internal.yml`
+— bundled Caddy issues a trusted certificate from its own local CA, and the
+"Download CA certificate" button in Settings lets users install trust. Already
+run a reverse proxy for several apps? Point it at `certguard:8181` and set
+`CERTGUARD_COOKIE_SECURE=true` (see the reference Caddyfile in `deploy/`).
 
 ### Portainer
 

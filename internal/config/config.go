@@ -63,8 +63,8 @@ type Config struct {
 	// TLS: serve HTTPS directly. TLSCert+TLSKey use a supplied certificate; if
 	// they are empty and TLSAuto is true, a self-signed certificate is generated
 	// and persisted. When any of these serves HTTPS, the Secure cookie flag is
-	// forced on. (For a real domain, terminating TLS at a reverse proxy such as
-	// Caddy — see docker-compose.caddy.yml — is usually preferable.)
+	// forced on. (Terminating TLS at a reverse proxy such as Caddy — see
+	// docker-compose.internal.yml or docker-compose.aio.yml — is usually preferable.)
 	TLSCert  string
 	TLSKey   string
 	TLSAuto  bool

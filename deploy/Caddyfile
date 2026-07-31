@@ -1,9 +1,11 @@
-# Caddy config for certguard. The domain comes from the CERTGUARD_DOMAIN env
-# var (set it in your .env). Caddy fetches and renews a real certificate for it
-# automatically and proxies to the certguard container over the private network.
+# Reference Caddyfile for putting certguard behind Caddy. Add a block like this
+# to your own Caddy (e.g. a proxy you already run for several apps), setting the
+# hostname to whatever resolves to your host. For a self-contained bundled-Caddy
+# stack instead, use docker-compose.internal.yml (LAN) or docker-compose.aio.yml
+# (public domain) — you don't need this file for those.
 #
-# Public domain (default): Let's Encrypt — needs ports 80+443 reachable and the
-# domain's DNS pointing here.
+# Public domain: Let's Encrypt — needs ports 80+443 reachable and the domain's
+# DNS pointing here.
 {$CERTGUARD_DOMAIN} {
 	encode zstd gzip
 	reverse_proxy certguard:8181

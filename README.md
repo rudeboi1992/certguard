@@ -13,18 +13,52 @@ manual registry into a real monitoring tool: **active endpoint scanning**.
 
 ## Quick start
 
-Pick the one that matches you. All of them end the same way: open the page and
-**create your admin account in the browser** — no CLI, no config files to edit.
+certguard is **one app, one image** — the paths below just differ in how HTTPS
+is handled. All of them end the same way: open the page and **create your admin
+account in the browser** (no CLI). Not sure which? Most self-hosters want the
+first one.
 
-### Try it in 60 seconds (localhost)
+### ★ Internal network, no public domain — the usual self-hosted choice
+
+Running this on a LAN with no public domain (homelab, small office)? This is for
+you. One stack gives you certguard **plus a real, trusted green padlock** — not a
+scary self-signed warning — because bundled Caddy issues the certificate from its
+own local CA:
+
+```
+CERTGUARD_DOMAIN=certguard.lan docker compose -f docker-compose.internal.yml up -d
+```
+
+1. Point `certguard.lan` at the host in your internal DNS (or a hosts-file entry).
+2. Open `https://certguard.lan` and create your admin.
+3. Go to **Settings → Download CA certificate** and install it once per device
+   (or push it to all machines via Group Policy). Done — encrypted, trusted, no
+   warnings.
+
+Only use this if nothing else on the host already owns ports 80/443.
+
+### Try it in 60 seconds (localhost, plain HTTP)
+
+Just kicking the tyres on your own machine:
 
 ```
 docker run -d --name certguard -p 8181:8181 -v certguard-data:/data \
   ghcr.io/rudeboi1992/certguard:latest
 ```
 
-Open **http://localhost:8181** and create your admin. That's it. Plain HTTP is
-fine on your own machine or a trusted VPN.
+Open **http://localhost:8181**. Plain HTTP is fine on localhost or a trusted VPN;
+don't expose it on a network without TLS.
+
+### You have a public domain — automatic HTTPS
+
+One container, a real Let's Encrypt certificate, no reverse proxy to run:
+
+```
+CERTGUARD_ACME_DOMAIN=certguard.example.com docker compose -f docker-compose.aio.yml up -d
+```
+
+Needs ports 80 + 443 reachable and the domain's DNS pointing here. Open
+`https://certguard.example.com`.
 
 ### Portainer (one click)
 
@@ -34,37 +68,12 @@ fine on your own machine or a trusted VPN.
 3. Open `http://<host>:8181` and create your admin (or set the Admin email/password
    fields in the form to have it created for you).
 
-### Real deploy with your own domain (automatic HTTPS)
-
-One container, a real certificate, no reverse proxy to run — just point your
-domain at the host and set one variable:
-
-```
-CERTGUARD_ACME_DOMAIN=certguard.example.com docker compose -f docker-compose.aio.yml up -d
-```
-
-Needs ports 80 + 443 reachable and the domain's DNS pointing here. Open
-`https://certguard.example.com`.
-
-### Internal / LAN, no public domain (trusted cert, no warnings)
-
-Want a real green padlock on an internal network where Let's Encrypt can't reach
-you? Bundled Caddy issues a certificate from its own local CA — one stack, then
-you trust its root once:
-
-```
-CERTGUARD_DOMAIN=certguard.lan docker compose -f docker-compose.internal.yml up -d
-```
-
-Point `certguard.lan` at the host in your internal DNS. See the header of
-[docker-compose.internal.yml](docker-compose.internal.yml) for the one-time
-CA-trust step. Only use this if nothing else on the host owns ports 80/443.
-
 ### Behind a reverse proxy you already run
 
-Deploy the `docker run` / Portainer option above, point your proxy (Nginx Proxy
-Manager, Traefik, Caddy…) at `certguard:8181`, and set `CERTGUARD_COOKIE_SECURE=true`
-so the session cookie is marked Secure. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Already run Nginx Proxy Manager, Traefik, or Caddy? Deploy the `docker run` /
+Portainer option above, point your proxy at `certguard:8181`, and set
+`CERTGUARD_COOKIE_SECURE=true` so the session cookie is marked Secure. See
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 > **One rule for all of them:** the `certguard-data` volume holds your database
 > and the secret-vault key. Back it up; don't delete it.
