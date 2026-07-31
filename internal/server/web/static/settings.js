@@ -192,9 +192,9 @@ async function enableZK() {
     // Pull existing secrets as plaintext (needs the current server vault unlocked).
     const migrated = [];
     const listRes = await api('GET', '/api/v1/certs');
-    const list = await listRes.json().catch(() => ({}));
-    const certs = Array.isArray(list) ? list : (list.certs || []);
-    const withSecret = certs.filter((c) => c.has_secret);
+    const list = await listRes.json().catch(() => ([]));
+    // Each list item wraps the cert: { cert: {...}, days_remaining }.
+    const withSecret = (Array.isArray(list) ? list : []).map((it) => it.cert).filter((c) => c && c.has_secret);
     const plaintexts = [];
     for (const c of withSecret) {
       const r = await api('GET', `/api/v1/certs/${c.id}/secret`);
