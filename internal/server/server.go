@@ -94,6 +94,12 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/v1/vault/lock", s.adminOnly(s.handleVaultLock))
 	s.mux.Handle("POST /api/v1/vault/passphrase", s.adminOnly(s.handleVaultPassphrase))
 
+	// Zero-knowledge keyring: the browser produces the wrapped key; the server
+	// only stores/serves it. Reading it needs a login (to then unlock locally).
+	s.mux.Handle("GET /api/v1/vault/keyring", s.authed(s.handleZKKeyringGet))
+	s.mux.Handle("POST /api/v1/vault/keyring", s.adminOnly(s.handleZKKeyringSet))
+	s.mux.Handle("DELETE /api/v1/vault/keyring", s.adminOnly(s.handleZKKeyringDelete))
+
 	// Two-factor (TOTP) — each user manages their own.
 	s.mux.Handle("POST /api/v1/2fa/setup", s.authed(s.handle2FASetup))
 	s.mux.Handle("GET /api/v1/2fa/qr", s.authed(s.handle2FAQR))
@@ -354,26 +360,26 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
 	enabled, unlocked, passphrase := s.vault.status()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"user":            userFrom(r.Context()),
-		"secrets_enabled": enabled,
-		"vault_unlocked":  unlocked,
+		"user":             userFrom(r.Context()),
+		"secrets_enabled":  enabled,
+		"vault_unlocked":   unlocked,
 		"vault_passphrase": passphrase,
+		"zk_enabled":       s.vault.zkOn(),
 	})
 }
 
 type setSecretRequest struct {
-	Value string `json:"value"`
+	Value string `json:"value"`         // plaintext (non-ZK: server encrypts)
+	Enc   string `json:"enc,omitempty"` // client ciphertext (ZK: stored verbatim)
+	Hint  string `json:"hint,omitempty"`
 }
 
-// handleSetSecret stores (or clears, with an empty value) the encrypted secret
-// for an entry. Requires the vault to be enabled (master key set).
+// handleSetSecret stores (or clears) the secret for an entry. In zero-knowledge
+// mode the body carries client-side ciphertext (enc + hint) which is stored as
+// is; otherwise the server encrypts the plaintext value.
 func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
 	if !s.vault.statusEnabled() {
 		writeErr(w, http.StatusServiceUnavailable, "secret vault not enabled")
-		return
-	}
-	if !s.vault.isUnlocked() {
-		writeErr(w, http.StatusLocked, "vault is locked — unlock it first")
 		return
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -386,15 +392,29 @@ func (s *Server) handleSetSecret(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if err := s.storeSecret(id, req.Value); err != nil {
-		if err == store.ErrNotFound {
+	var storeErr error
+	var hasSecret bool
+	var hint string
+	if s.vault.zkOn() {
+		storeErr = s.store.SetSecret(id, req.Enc, req.Hint)
+		hasSecret, hint = req.Enc != "", req.Hint
+	} else {
+		if !s.vault.isUnlocked() {
+			writeErr(w, http.StatusLocked, "vault is locked — unlock it first")
+			return
+		}
+		storeErr = s.storeSecret(id, req.Value)
+		hasSecret, hint = req.Value != "", secret.Hint(req.Value)
+	}
+	if storeErr != nil {
+		if storeErr == store.ErrNotFound {
 			writeErr(w, http.StatusNotFound, "entry not found")
 			return
 		}
-		writeErr(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, http.StatusInternalServerError, storeErr.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"has_secret": req.Value != "", "secret_hint": secret.Hint(req.Value)})
+	writeJSON(w, http.StatusOK, map[string]any{"has_secret": hasSecret, "secret_hint": hint})
 }
 
 // storeSecret seals value (or clears when empty) and persists it.
@@ -416,10 +436,6 @@ func (s *Server) handleRevealSecret(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, "secret vault not enabled")
 		return
 	}
-	if !s.vault.isUnlocked() {
-		writeErr(w, http.StatusLocked, "vault is locked — unlock it first")
-		return
-	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid id")
@@ -434,12 +450,21 @@ func (s *Server) handleRevealSecret(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no secret stored for this entry")
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store")
+	if s.vault.zkOn() {
+		// Zero-knowledge: hand back the ciphertext; the browser decrypts it.
+		writeJSON(w, http.StatusOK, map[string]string{"enc": c.SecretEnc})
+		return
+	}
+	if !s.vault.isUnlocked() {
+		writeErr(w, http.StatusLocked, "vault is locked — unlock it first")
+		return
+	}
 	plain, err := s.vault.open(c.SecretEnc)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]string{"value": plain})
 }
 
@@ -556,8 +581,9 @@ func (s *Server) handleCreateCert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// Attach an optional secret (best-effort; the entry is already created).
-	if req.Secret != "" && s.vault.isUnlocked() {
+	// Attach an optional secret (best-effort; the entry is already created). In
+	// zero-knowledge mode the browser encrypts + stores it in a follow-up call.
+	if req.Secret != "" && !s.vault.zkOn() && s.vault.isUnlocked() {
 		if err := s.storeSecret(stored.ID, req.Secret); err == nil {
 			stored, _ = s.store.GetByID(stored.ID)
 		}
@@ -644,6 +670,10 @@ func (s *Server) handleScanAll(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleBackupKey(w http.ResponseWriter, r *http.Request) {
 	if !s.vault.statusEnabled() {
 		writeErr(w, http.StatusServiceUnavailable, "secret vault not enabled")
+		return
+	}
+	if s.vault.zkOn() {
+		writeErr(w, http.StatusConflict, "zero-knowledge mode — the server has no key; your recovery is the vault passphrase plus a database backup")
 		return
 	}
 	if _, _, passphrase := s.vault.status(); passphrase {

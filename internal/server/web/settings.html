@@ -130,18 +130,18 @@
         </div>
 
         <div id="vaultSec" hidden>
-          <h3 class="sec-h">Secret vault</h3>
+          <h3 class="sec-h">Secret vault — zero-knowledge</h3>
           <p class="muted small" id="vaultSecStatus"></p>
           <div class="sec-fields">
-            <input type="password" id="vaultCur" placeholder="current passphrase (if one is set)" autocomplete="off">
-            <input type="password" id="vaultNew" placeholder="new passphrase (8+ chars)" autocomplete="off">
+            <input type="password" id="vaultCur" placeholder="current passphrase" autocomplete="off" hidden>
+            <input type="password" id="vaultNew" placeholder="vault passphrase (8+ chars)" autocomplete="off">
           </div>
           <div class="backup-btns">
-            <button class="btn primary small" id="vaultSetBtn">Set / change passphrase</button>
-            <button class="btn ghost small" id="vaultRemoveBtn">Remove passphrase</button>
-            <button class="btn ghost small" id="vaultLockBtn">Lock now</button>
+            <button class="btn primary small" id="vaultEnableBtn">Turn on zero-knowledge</button>
+            <button class="btn primary small" id="vaultChangeBtn" hidden>Change passphrase</button>
+            <button class="btn ghost small" id="vaultDisableBtn" hidden>Disable (wipes stored secrets)</button>
           </div>
-          <p class="muted small">In passphrase mode the vault key is derived from your passphrase and never stored on disk — after a restart the vault stays locked until unlocked. <strong>Forget the passphrase and the stored secrets are unrecoverable.</strong></p>
+          <p class="muted small">Your passphrase is turned into a key <strong>in your browser</strong> and never sent to the server, which only ever stores ciphertext. Share the vault by sharing the passphrase — each admin unlocks once per browser session. <strong>Forget the passphrase and the stored secrets are unrecoverable.</strong></p>
         </div>
         </div>
         <span class="widget-resize" title="Drag to resize width"></span>
@@ -152,6 +152,7 @@
   <div id="toast" class="toast" hidden></div>
 
   <script src="/static/common.js"></script>
+  <script src="/static/zk.js"></script>
   <script src="/static/widgets.js"></script>
   <script src="/static/settings.js"></script>
 </body>

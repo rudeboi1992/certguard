@@ -251,6 +251,13 @@ func (s *Store) TouchScanError(id int64, msg string) error {
 	return err
 }
 
+// ClearAllSecrets wipes every stored secret (used when disabling the vault, e.g.
+// leaving zero-knowledge mode, where the old ciphertext becomes unreadable).
+func (s *Store) ClearAllSecrets() error {
+	_, err := s.exec(`UPDATE certs SET secret_enc='', secret_hint=''`)
+	return err
+}
+
 // SetSecret stores (or clears, with empty enc/hint) the encrypted secret for an
 // entry. The store never sees plaintext — enc is already-sealed ciphertext.
 func (s *Store) SetSecret(id int64, enc, hint string) error {

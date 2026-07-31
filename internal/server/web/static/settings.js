@@ -158,29 +158,103 @@ if ($('twofaDisableBtn')) $('twofaDisableBtn').addEventListener('click', async (
   else toast(d.error || 'Could not disable', true);
 });
 
-async function renderVaultSec() {
+// --- zero-knowledge vault controls ---
+function renderVaultSec() {
   if (!isAdmin || !secretsEnabled || !$('vaultSec')) return;
   $('vaultSec').hidden = false;
-  const st = await (await api('GET', '/api/v1/vault/status')).json().catch(() => ({}));
-  $('vaultSecStatus').textContent = st.passphrase
-    ? (st.unlocked ? 'Passphrase-protected (unlocked).' : 'Passphrase-protected (locked).')
-    : 'Auto-unlock via key file. Set a passphrase for stronger, no-key-on-disk protection.';
-  $('vaultRemoveBtn').hidden = !st.passphrase;
+  if (zkEnabled) {
+    $('vaultSecStatus').textContent = ZK.isUnlocked()
+      ? 'Zero-knowledge is ON and unlocked in this browser.'
+      : 'Zero-knowledge is ON. Enter the current and a new passphrase to rotate it.';
+    $('vaultCur').hidden = false;
+    $('vaultCur').placeholder = 'current passphrase';
+    $('vaultEnableBtn').hidden = true;
+    $('vaultChangeBtn').hidden = false;
+    $('vaultDisableBtn').hidden = false;
+  } else {
+    $('vaultSecStatus').textContent = 'Off — turn on to encrypt every secret in your browser. The server never sees your passphrase or plaintext.';
+    $('vaultCur').hidden = true;
+    $('vaultEnableBtn').hidden = false;
+    $('vaultChangeBtn').hidden = true;
+    $('vaultDisableBtn').hidden = true;
+  }
 }
-async function vaultPass(newPass) {
-  const res = await api('POST', '/api/v1/vault/passphrase', {
-    current_passphrase: $('vaultCur').value, new_passphrase: newPass,
-  });
-  const d = await res.json().catch(() => ({}));
-  if (res.ok) { toast(newPass ? 'Passphrase set ✓' : 'Passphrase removed'); $('vaultCur').value = ''; $('vaultNew').value = ''; renderVaultSec(); }
-  else toast(d.error || 'Failed', true);
+
+// Turn on zero-knowledge: re-encrypt any existing (server-side) secrets in the
+// browser under the new passphrase, then hand the server only the keyring +
+// ciphertext. The server drops its own key material.
+async function enableZK() {
+  const pass = $('vaultNew').value;
+  if (pass.length < 8) { toast('Passphrase must be at least 8 characters', true); return; }
+  if (!confirm('Turn on zero-knowledge encryption?\n\nEveryone who needs the vault will need this passphrase. If it is lost, the stored secrets cannot be recovered.')) return;
+  $('vaultEnableBtn').disabled = true;
+  try {
+    // Pull existing secrets as plaintext (needs the current server vault unlocked).
+    const migrated = [];
+    const listRes = await api('GET', '/api/v1/certs');
+    const list = await listRes.json().catch(() => ({}));
+    const certs = Array.isArray(list) ? list : (list.certs || []);
+    const withSecret = certs.filter((c) => c.has_secret);
+    const plaintexts = [];
+    for (const c of withSecret) {
+      const r = await api('GET', `/api/v1/certs/${c.id}/secret`);
+      if (!r.ok) continue;
+      const d = await r.json().catch(() => ({}));
+      if (d.value) plaintexts.push({ id: c.id, value: d.value });
+    }
+    // Create the keyring (sets the browser DEK) then encrypt the plaintexts under it.
+    const keyring = await ZK.create(pass);
+    for (const p of plaintexts) {
+      migrated.push({ id: p.id, enc: await ZK.encrypt(p.value), hint: ZK.hint(p.value) });
+    }
+    const res = await api('POST', '/api/v1/vault/keyring', { ...keyring, secrets: migrated });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'enable failed'); }
+    zkEnabled = true;
+    $('vaultNew').value = '';
+    toast('Zero-knowledge enabled ✓');
+    renderVaultSec();
+  } catch (e) {
+    ZK.lock();
+    toast(e.message || 'Could not enable zero-knowledge', true);
+  } finally {
+    $('vaultEnableBtn').disabled = false;
+  }
 }
-if ($('vaultSetBtn')) $('vaultSetBtn').addEventListener('click', () => vaultPass($('vaultNew').value));
-if ($('vaultRemoveBtn')) $('vaultRemoveBtn').addEventListener('click', () => vaultPass(''));
-if ($('vaultLockBtn')) $('vaultLockBtn').addEventListener('click', async () => {
-  const res = await api('POST', '/api/v1/vault/lock');
-  if (res.ok) { toast('Vault locked'); renderVaultSec(); } else toast('Failed', true);
-});
+
+// Rotate the passphrase: unlock with the current one (if needed), re-wrap the
+// same data key under the new one, store the new keyring. Secrets are untouched.
+async function changeZK() {
+  const cur = $('vaultCur').value;
+  const next = $('vaultNew').value;
+  if (next.length < 8) { toast('New passphrase must be at least 8 characters', true); return; }
+  try {
+    if (!ZK.isUnlocked()) {
+      const kr = await (await api('GET', '/api/v1/vault/keyring')).json();
+      await ZK.unlock(cur, kr);
+    }
+    const keyring = await ZK.rewrap(next);
+    const res = await api('POST', '/api/v1/vault/keyring', keyring);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'change failed'); }
+    $('vaultCur').value = ''; $('vaultNew').value = '';
+    toast('Passphrase changed ✓');
+    renderVaultSec();
+  } catch (e) {
+    toast(e.message === 'change failed' ? e.message : 'Current passphrase is incorrect', true);
+  }
+}
+
+async function disableZK() {
+  if (!confirm('Disable zero-knowledge?\n\nAll stored secret values will be permanently wiped (the server cannot read them). Entries themselves are kept.')) return;
+  const res = await api('DELETE', '/api/v1/vault/keyring');
+  if (!res.ok) { const d = await res.json().catch(() => ({})); toast(d.error || 'Failed', true); return; }
+  ZK.lock();
+  zkEnabled = false;
+  toast('Zero-knowledge disabled — stored secrets wiped');
+  renderVaultSec();
+}
+if ($('vaultEnableBtn')) $('vaultEnableBtn').addEventListener('click', enableZK);
+if ($('vaultChangeBtn')) $('vaultChangeBtn').addEventListener('click', changeZK);
+if ($('vaultDisableBtn')) $('vaultDisableBtn').addEventListener('click', disableZK);
 
 // Sidebar links → smooth-scroll the section to the top.
 document.querySelectorAll('#settingsNav a').forEach((a) => {

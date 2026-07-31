@@ -7,6 +7,7 @@ let isAdmin = false;
 let currentUserId = null;
 let secretsEnabled = false;
 let vaultLocked = false; // vault is passphrase-protected and currently locked
+let zkEnabled = false;   // zero-knowledge mode: all secret crypto is client-side
 
 function toast(msg, isError) {
   const t = $('toast');
@@ -69,7 +70,12 @@ async function loadWhoami() {
   isAdmin = u && u.role === 'admin';
   currentUserId = u && u.id;
   secretsEnabled = !!data.secrets_enabled;
-  vaultLocked = !!data.secrets_enabled && !!data.vault_passphrase && !data.vault_unlocked;
+  zkEnabled = !!data.zk_enabled;
+  // In zero-knowledge mode the vault is "locked" until the browser unlocks it
+  // with the passphrase this session; otherwise fall back to server-side state.
+  vaultLocked = zkEnabled
+    ? !ZK.isUnlocked()
+    : (!!data.secrets_enabled && !!data.vault_passphrase && !data.vault_unlocked);
   $('whoami').textContent = `${u.email} · ${u.role}`;
   return u;
 }

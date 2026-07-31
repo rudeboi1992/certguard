@@ -78,6 +78,66 @@ func (s *Server) handleVaultPassphrase(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// --- zero-knowledge keyring ---
+
+func (s *Server) handleZKKeyringGet(w http.ResponseWriter, r *http.Request) {
+	if !s.vault.zkOn() {
+		writeErr(w, http.StatusNotFound, "zero-knowledge mode is not enabled")
+		return
+	}
+	wrapped, salt, iters := s.vault.zkKeyring()
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]string{"wrapped": wrapped, "salt": salt, "iters": iters})
+}
+
+type zkKeyringReq struct {
+	Wrapped string `json:"wrapped"`
+	Salt    string `json:"salt"`
+	Iters   string `json:"iters"`
+	// Optional: client ciphertext for existing entries, re-encrypted during the
+	// switch to zero-knowledge (so nothing is lost).
+	Secrets []struct {
+		ID   int64  `json:"id"`
+		Enc  string `json:"enc"`
+		Hint string `json:"hint"`
+	} `json:"secrets"`
+}
+
+// handleZKKeyringSet enables zero-knowledge mode (or rotates the passphrase by
+// re-wrapping the same data key). The server stores the client-produced keyring;
+// it never sees the passphrase or any plaintext.
+func (s *Server) handleZKKeyringSet(w http.ResponseWriter, r *http.Request) {
+	var req zkKeyringReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if req.Wrapped == "" || req.Salt == "" || req.Iters == "" {
+		writeErr(w, http.StatusBadRequest, "wrapped, salt, and iters are required")
+		return
+	}
+	if err := s.vault.enableZK(req.Wrapped, req.Salt, req.Iters); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// Store any migrated ciphertext verbatim.
+	for _, sec := range req.Secrets {
+		_ = s.store.SetSecret(sec.ID, sec.Enc, sec.Hint)
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleZKKeyringDelete leaves zero-knowledge mode; secrets are wiped (their
+// ciphertext is unreadable without the client key) and the server keyring is
+// restored.
+func (s *Server) handleZKKeyringDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.vault.disableZK(); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // --- two-factor (TOTP) ---
 
 // handle2FASetup provisions a pending secret (not yet enforced) and returns it

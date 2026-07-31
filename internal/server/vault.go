@@ -15,6 +15,12 @@ const (
 	metaWrapped = "vault.wrapped" // wrapped data key (base64)
 	metaSalt    = "vault.salt"    // Argon2 salt (base64), passphrase mode only
 	metaMode    = "vault.mode"    // "auto" | "passphrase"
+
+	// Zero-knowledge mode: the browser holds the only key. The server stores the
+	// client-produced wrapped key + KDF params and never decrypts anything.
+	metaZKWrapped = "zk.wrapped"
+	metaZKSalt    = "zk.salt"
+	metaZKIters   = "zk.iters"
 )
 
 var errVaultLocked = errors.New("vault is locked")
@@ -29,10 +35,11 @@ type vault struct {
 
 	mu      sync.RWMutex
 	enabled bool
+	zk      bool // zero-knowledge: all crypto is client-side; server has no key
 	mode    string
 	salt    []byte
 	wrapped string
-	dek     [32]byte // valid only while unlocked
+	dek     [32]byte // valid only while unlocked (non-ZK)
 	box     *secret.Box
 }
 
@@ -40,6 +47,12 @@ type vault struct {
 // operator key (env), or "" to fall back to the key file.
 func newVault(st *store.Store, masterMaterial, keyFile string) *vault {
 	v := &vault{store: st, keyFile: keyFile}
+
+	// Zero-knowledge mode: the server never holds a key; all crypto is client-side.
+	if zk, err := st.GetMeta(metaZKWrapped); err == nil && zk != "" {
+		v.enabled, v.zk = true, true
+		return v
+	}
 
 	if wrapped, err := st.GetMeta(metaWrapped); err == nil && wrapped != "" {
 		v.enabled = true
@@ -196,6 +209,63 @@ func (v *vault) setPassphrase(currentPass, newPass string) error {
 	}
 	// Remove the on-disk key so only the passphrase can unwrap the vault.
 	_ = os.Remove(v.keyFile)
+	return nil
+}
+
+func (v *vault) zkOn() bool { v.mu.RLock(); defer v.mu.RUnlock(); return v.zk }
+
+// enableZK switches to zero-knowledge mode: store the client-produced keyring
+// and drop all server-side key material so the server can no longer decrypt.
+func (v *vault) enableZK(wrapped, salt, iters string) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if err := v.store.SetMeta(metaZKWrapped, wrapped); err != nil {
+		return err
+	}
+	_ = v.store.SetMeta(metaZKSalt, salt)
+	_ = v.store.SetMeta(metaZKIters, iters)
+	_ = v.store.SetMeta(metaWrapped, "")
+	_ = v.store.SetMeta(metaMode, "")
+	_ = v.store.SetMeta(metaSalt, "")
+	_ = os.Remove(v.keyFile)
+	v.enabled, v.zk = true, true
+	v.dek = [32]byte{}
+	v.box = nil
+	return nil
+}
+
+func (v *vault) zkKeyring() (wrapped, salt, iters string) {
+	wrapped, _ = v.store.GetMeta(metaZKWrapped)
+	salt, _ = v.store.GetMeta(metaZKSalt)
+	iters, _ = v.store.GetMeta(metaZKIters)
+	return
+}
+
+// disableZK leaves zero-knowledge mode. Old ciphertext is unreadable server-side
+// so all secrets are wiped, and the auto server keyring is re-bootstrapped.
+func (v *vault) disableZK() error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	_ = v.store.SetMeta(metaZKWrapped, "")
+	_ = v.store.SetMeta(metaZKSalt, "")
+	_ = v.store.SetMeta(metaZKIters, "")
+	_ = v.store.ClearAllSecrets()
+	v.zk = false
+	material, err := secret.LoadOrCreateKey(v.keyFile)
+	if err != nil {
+		v.enabled = false
+		return err
+	}
+	dek := secret.KeyFromString(material)
+	wrapped, err := secret.WrapKey(dek, dek)
+	if err != nil {
+		return err
+	}
+	_ = v.store.SetMeta(metaMode, modeAuto)
+	_ = v.store.SetMeta(metaSalt, "")
+	_ = v.store.SetMeta(metaWrapped, wrapped)
+	v.mode, v.wrapped, v.enabled = modeAuto, wrapped, true
+	v.setUnlocked(dek)
 	return nil
 }
 

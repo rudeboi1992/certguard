@@ -230,13 +230,32 @@ function renderCerts() {
   rows.querySelectorAll('.trow').forEach(attachSwipe);
 }
 
-// --- vault unlock (passphrase-protected vault, locked after a restart) ---
+// --- vault unlock ---
+// In zero-knowledge mode the passphrase is stretched in the browser and unwraps
+// the data key locally (nothing is sent to the server). Otherwise it posts to the
+// server-side passphrase vault.
 function showVaultUnlock() {
   const bar = $('vaultLock'); if (!bar) return;
   bar.hidden = false;
   const go = async () => {
     const errEl = $('vaultLockErr');
-    const res = await api('POST', '/api/v1/vault/unlock', { passphrase: $('vaultPass').value });
+    errEl.hidden = true;
+    const pass = $('vaultPass').value;
+    if (zkEnabled) {
+      try {
+        const res = await api('GET', '/api/v1/vault/keyring');
+        if (!res.ok) throw new Error('keyring unavailable');
+        await ZK.unlock(pass, await res.json());
+        vaultLocked = false;
+        bar.hidden = true;
+        loadCerts();
+      } catch (e) {
+        errEl.textContent = 'Incorrect passphrase';
+        errEl.hidden = false;
+      }
+      return;
+    }
+    const res = await api('POST', '/api/v1/vault/unlock', { passphrase: pass });
     if (res.ok) { location.reload(); return; }
     const d = await res.json().catch(() => ({}));
     errEl.textContent = d.error || 'Unlock failed';
@@ -246,16 +265,23 @@ function showVaultUnlock() {
   $('vaultPass').onkeydown = (e) => { if (e.key === 'Enter') go(); };
 }
 
-// Reveal a stored secret: copy to clipboard and show it inline briefly.
+// Reveal a stored secret: copy to clipboard and show it inline briefly. In
+// zero-knowledge mode the server returns ciphertext that we decrypt locally.
 async function revealSecret(id, btn) {
+  if (zkEnabled && !ZK.isUnlocked()) { showVaultUnlock(); toast('Unlock the vault first', true); return; }
   const res = await api('GET', `/api/v1/certs/${id}/secret`);
   const d = await res.json().catch(() => ({}));
   if (!res.ok) { toast(d.error || 'Reveal failed', true); return; }
+  let value = d.value;
+  if (zkEnabled) {
+    try { value = await ZK.decrypt(d.enc); }
+    catch (e) { toast('Could not decrypt — wrong passphrase?', true); return; }
+  }
   let copied = false;
-  try { await navigator.clipboard.writeText(d.value); copied = true; } catch (e) {}
+  try { await navigator.clipboard.writeText(value); copied = true; } catch (e) {}
   const span = btn.closest('.secretline');
-  if (!span) { toast(copied ? 'Secret copied ✓' : d.value); return; }
-  span.innerHTML = `🔑 <code class="secret-reveal">${escapeHtml(d.value)}</code> <button class="secret-btn" data-hide>hide</button>`;
+  if (!span) { toast(copied ? 'Secret copied ✓' : value); return; }
+  span.innerHTML = `🔑 <code class="secret-reveal">${escapeHtml(value)}</code> <button class="secret-btn" data-hide>hide</button>`;
   span.querySelector('[data-hide]').addEventListener('click', () => loadCerts());
   toast(copied ? 'Secret copied to clipboard ✓' : 'Secret revealed');
   setTimeout(() => { if (document.body.contains(span)) loadCerts(); }, 30000);
@@ -395,9 +421,21 @@ async function saveEdit(id, tr) {
   // Secret changes (optional): a new value replaces it; the clear box wipes it.
   const secInput = tr.querySelector('.edit-secret');
   const clearBox = tr.querySelector('.edit-clearsec');
-  if (secInput && secInput.value) await api('PUT', `/api/v1/certs/${id}/secret`, { value: secInput.value });
-  else if (clearBox && clearBox.checked) await api('PUT', `/api/v1/certs/${id}/secret`, { value: '' });
+  if (secInput && secInput.value) {
+    if (zkEnabled && !ZK.isUnlocked()) { showVaultUnlock(); toast('Unlock the vault first', true); return; }
+    await api('PUT', `/api/v1/certs/${id}/secret`, await secretBody(secInput.value));
+  } else if (clearBox && clearBox.checked) {
+    await api('PUT', `/api/v1/certs/${id}/secret`, await secretBody(''));
+  }
   toast('Saved'); loadCerts();
+}
+
+// secretBody builds the /secret PUT payload. In zero-knowledge mode the value is
+// encrypted in the browser and only ciphertext + a masked hint are sent.
+async function secretBody(plaintext) {
+  if (!zkEnabled) return { value: plaintext };
+  if (!plaintext) return { enc: '', hint: '' };
+  return { enc: await ZK.encrypt(plaintext), hint: ZK.hint(plaintext) };
 }
 
 function renderSummary(total, soon, urgent) {
@@ -463,9 +501,17 @@ $('manualForm').addEventListener('submit', async (e) => {
     issuer: $('certIssuer').value,
     sha256: $('certSha256').value,
   };
-  if (secretsEnabled && $('certSecret').value) body.secret = $('certSecret').value;
+  const secretVal = $('certSecret').value;
+  // Non-ZK: the server encrypts the secret it's handed. ZK: the create call can't
+  // take a plaintext secret, so attach it separately as ciphertext after create.
+  if (secretsEnabled && secretVal && !zkEnabled) body.secret = secretVal;
+  if (zkEnabled && secretVal && !ZK.isUnlocked()) { showVaultUnlock(); toast('Unlock the vault first', true); return; }
   const res = await api('POST', '/api/v1/certs', body);
   if (res.status === 201) {
+    if (zkEnabled && secretVal) {
+      const created = await res.json().catch(() => ({}));
+      if (created.id) await api('PUT', `/api/v1/certs/${created.id}/secret`, await secretBody(secretVal));
+    }
     toast('Entry added');
     e.target.reset();
     $('certKind').value = 'manual';
