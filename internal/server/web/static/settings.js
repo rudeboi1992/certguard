@@ -265,16 +265,6 @@ document.querySelectorAll('#settingsNav a').forEach((a) => {
   });
 });
 
-// Draggable / resizable / hideable widget grid (shared module).
-initWidgetGrid($('settingsGrid'), 'certguard-settings-layout', {
-  addSelect: $('addSectionSettings'),
-  resetBtn: $('resetLayout'),
-  defaults: {
-    order: ['notifyCard', 'usersCard', 'backupCard', 'securityCard'],
-    spans: { notifyCard: 2, usersCard: 2, backupCard: 2, securityCard: 2 },
-  },
-});
-
 // initial load
 loadWhoami().then((u) => {
   $('usersCard').hidden = !isAdmin;

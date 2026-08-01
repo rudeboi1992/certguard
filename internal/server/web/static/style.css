@@ -40,7 +40,10 @@
 /* Ensure the `hidden` attribute wins even on elements we give a display value
    (e.g. display:grid), which would otherwise override it. */
 [hidden] { display: none !important; }
-html, body { overflow-x: hidden; max-width: 100%; }
+/* `clip` rather than `hidden`: both stop sideways overflow, but `hidden` makes
+   these a scroll container, which silently kills `position: sticky` on any
+   descendant (the settings sidebar). */
+html, body { overflow-x: clip; max-width: 100%; }
 
 /* Custom, auto-hiding scrollbars: transparent until the element is actively
    scrolled (JS adds `.scrolling`); card bodies also reveal on hover. */
@@ -112,12 +115,18 @@ code { background: rgba(127,127,127,.15); padding: .05em .35em; border-radius: 4
 main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1.25rem; display: grid; gap: 1.25rem; }
 .page-title { font-size: 1.35rem; margin: 0; }
 
-/* settings: sidebar + draggable/resizable widget grid */
+/* settings: pinned sidebar + a fixed single-column stack of sections */
 .settings-layout {
   max-width: 1120px; margin: 1.5rem auto; padding: 0 1.25rem;
   display: grid; grid-template-columns: 172px 1fr; gap: 1.25rem; align-items: start;
 }
-.settings-nav { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: .5rem; }
+/* The sidebar stays put while the sections scroll past it. `align-self: start`
+   keeps the nav content-height so it has room to stick within its grid area. */
+.settings-nav {
+  position: sticky; top: 1rem; align-self: start;
+  max-height: calc(100vh - 2rem); overflow-y: auto;
+  display: flex; flex-direction: column; gap: .5rem;
+}
 .settings-nav .page-title { margin-bottom: .4rem; }
 #settingsNav { display: flex; flex-direction: column; gap: .1rem; }
 #settingsNav a {
@@ -125,8 +134,12 @@ main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1.25rem; display: grid
   border-radius: 8px; font-size: .92rem; font-weight: 500;
 }
 #settingsNav a:hover { background: rgba(127,127,127,.12); color: var(--ink); }
-.layout-hint { margin: .4rem 0; line-height: 1.4; }
-.grip-ex { font-family: monospace; }
+
+/* Settings sections are a fixed, full-width stack in markup order — no drag,
+   resize, hide or add. (The dashboard keeps the interactive widget grid below.) */
+.settings-grid { display: grid; gap: 1.25rem; align-content: start; }
+.settings-card { scroll-margin-top: 1rem; }
+.settings-card-title { font-size: 1.05rem; font-weight: 600; margin: 0 0 .6rem; }
 
 /* generic widget grid (masonry) — cards are absolutely positioned by widgets.js
    so they pack vertically with no big gaps. */
