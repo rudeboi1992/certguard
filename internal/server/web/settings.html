@@ -29,19 +29,11 @@
         <a href="#backupCard" data-nav="backupCard" id="navBackup">Backup</a>
         <a href="#securityCard" data-nav="securityCard">Security</a>
       </nav>
-      <p class="muted small layout-hint">Drag <span class="grip-ex">⠿</span> to reorder · drag a card's right or bottom edge to resize · × to hide.</p>
-      <select id="addSectionSettings" class="add-section"></select>
-      <button id="resetLayout" class="nav-btn">Reset layout</button>
     </aside>
 
-    <div class="widget-grid" id="settingsGrid">
-      <section class="card widget" id="notifyCard" data-title="Notifications">
-        <div class="widget-bar">
-          <span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Notifications</span></span>
-          <span class="spacer"></span>
-          <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
-        </div>
-        <div class="widget-body">
+    <div class="settings-grid" id="settingsGrid">
+      <section class="card settings-card" id="notifyCard">
+        <h2 class="settings-card-title">Notifications</h2>
         <p class="muted">Get alerted as your entries approach expiry (at 30, 7, and 3 days). Channels are yours; alerts cover the whole shared inventory.</p>
         <form id="channelForm" class="channel-row">
           <select id="chType">
@@ -56,17 +48,10 @@
         </form>
         <div class="set-list" id="channelRows"></div>
         <p id="noChannels" class="muted small" hidden>No channels yet — add one above.</p>
-        </div>
-        <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget" id="usersCard" data-title="Users" hidden>
-        <div class="widget-bar">
-          <span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Users</span></span>
-          <span class="spacer"></span>
-          <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
-        </div>
-        <div class="widget-body">
+      <section class="card settings-card" id="usersCard" hidden>
+        <h2 class="settings-card-title">Users</h2>
         <p class="muted">People who can sign in. Accounts are created here — there is no public sign-up. Admins can manage everything; viewers are read-only.</p>
         <form id="userForm" class="channel-row">
           <input type="email" id="uEmail" placeholder="email" required>
@@ -78,34 +63,20 @@
           <button type="submit" class="btn primary">Add user</button>
         </form>
         <div class="set-list" id="userRows"></div>
-        </div>
-        <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget" id="backupCard" data-title="Backup" hidden>
-        <div class="widget-bar">
-          <span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Backup &amp; recovery</span></span>
-          <span class="spacer"></span>
-          <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
-        </div>
-        <div class="widget-body">
+      <section class="card settings-card" id="backupCard" hidden>
+        <h2 class="settings-card-title">Backup &amp; recovery</h2>
         <p class="muted">Keep a copy of your <strong>master key</strong> and database somewhere safe. Restore by putting both files back in the data folder. Lose the key and stored secrets can't be recovered.</p>
         <div class="backup-btns">
           <button class="btn ghost" id="dlKey">⤓ Download master key</button>
           <button class="btn ghost" id="dlDb">⤓ Download database</button>
         </div>
         <p id="backupNote" class="muted small">The master key is sensitive — store it in a password manager, ideally separate from the database, and only download it over HTTPS.</p>
-        </div>
-        <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget" id="securityCard" data-title="Security" hidden>
-        <div class="widget-bar">
-          <span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Security</span></span>
-          <span class="spacer"></span>
-          <button class="widget-hide" title="Hide this section" aria-label="Hide">×</button>
-        </div>
-        <div class="widget-body">
+      <section class="card settings-card" id="securityCard" hidden>
+        <h2 class="settings-card-title">Security</h2>
         <h3 class="sec-h">Two-factor authentication</h3>
         <p class="muted small" id="twofaStatus">Add a time-based code from an authenticator app as a second factor at sign-in.</p>
         <div id="twofaOff">
@@ -152,8 +123,6 @@
             <strong>Linux:</strong> copy to <code>/usr/local/share/ca-certificates/</code> and run <code>sudo update-ca-certificates</code>.
           </p>
         </div>
-        </div>
-        <span class="widget-resize" title="Drag to resize width"></span>
       </section>
     </div>
   </div>
@@ -162,7 +131,6 @@
 
   <script src="/static/common.js"></script>
   <script src="/static/zk.js"></script>
-  <script src="/static/widgets.js"></script>
   <script src="/static/settings.js"></script>
 </body>
 </html>
