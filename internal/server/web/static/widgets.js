@@ -101,9 +101,16 @@ function initWidgetGrid(grid, storageKey, opts) {
         const el = document.getElementById(id);
         if (el) setHeight(el, data.heights[id]);
       }
-      (data.hidden || []).forEach((id) => {
-        const el = document.getElementById(id);
-        if (el) el.classList.add('widget-off');
+      // Hidden state has to be driven both ways. The optional cards ship with
+      // `widget-off` in the markup, so only ever *adding* it meant a section
+      // the user added came back hidden on the next load. Cards the saved
+      // layout has never seen (added by a later release) keep their shipped
+      // default rather than being force-shown.
+      const known = new Set(data.order || []);
+      const hidden = new Set(data.hidden || []);
+      widgets().forEach((c) => {
+        if (hidden.has(c.id)) c.classList.add('widget-off');
+        else if (known.has(c.id)) c.classList.remove('widget-off');
       });
     }
     refreshAdd();
