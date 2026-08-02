@@ -145,7 +145,15 @@ $('logout').addEventListener('click', async () => {
     if (!bodies.length) return;
     const ro = new ResizeObserver(updateAll);
     const mo = new MutationObserver(updateAll);
-    bodies.forEach((b) => { ro.observe(b); mo.observe(b, { childList: true, subtree: true }); });
+    // `hidden`/`style` matter as much as childList: switching a tab (e.g. the
+    // Add-entry panes) only flips `hidden` on a pane, which changes the body's
+    // scrollHeight without resizing the body itself — so neither childList nor
+    // the ResizeObserver fires and the glow would stay stale. `class` is left
+    // out on purpose: markScrolling() toggles it on these very elements.
+    bodies.forEach((b) => {
+      ro.observe(b);
+      mo.observe(b, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'style'] });
+    });
     window.addEventListener('resize', updateAll);
     updateAll();
   }
