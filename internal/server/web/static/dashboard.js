@@ -189,9 +189,15 @@ function renderCerts() {
       ? `<button class="swipe-act edit" data-edit="${c.id}">Edit</button>` +
         `<button class="swipe-act del" data-del="${c.id}">Delete</button>`
       : '';
-    const trustCell = trusted
-      ? '<span class="pill ok">ok</span>'
-      : `<span class="pill untrusted" title="${escapeHtml(c.last_error)}">untrusted</span>`;
+    // Trust is only a real signal for endpoints we actually connect to. A manual
+    // entry is never scanned, so `!last_error` was rendering a reassuring "ok"
+    // that verified nothing — its status is its expiry, carried by the days
+    // pill. Leave the cell empty rather than claim a check that never ran.
+    const trustCell = !isEndpoint
+      ? ''
+      : trusted
+        ? '<span class="pill ok">ok</span>'
+        : `<span class="pill untrusted" title="${escapeHtml(c.last_error)}">untrusted</span>`;
 
     const row = document.createElement('div');
     row.className = 'trow';
@@ -200,12 +206,12 @@ function renderCerts() {
       <div class="trow-actions" aria-hidden="true">${swipeActions}</div>
       <div class="trow-surface">
         <div class="tcol tc-name"><strong>${escapeHtml(c.name)}</strong>${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}${fpLine}${checkLine}${secretLine}${coverToggle}</div>
+        <div class="tcol tc-type">${typeCell}</div>
         <div class="tcol tc-meta">
-          <span class="tc-type">${typeCell}</span>
           <span class="tc-exp">${fmtDate(c.expires_at)}</span>
+          <span class="tc-rem"><span class="pill ${level}">${fmtRemaining(days)}</span></span>
           <span class="tc-trust">${trustCell}</span>
         </div>
-        <div class="tcol tc-rem"><span class="pill ${level}">${fmtRemaining(days)}</span></div>
         <div class="tcol tc-actions">${inlineActions}</div>
       </div>`;
     rows.appendChild(row);

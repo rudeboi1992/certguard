@@ -378,18 +378,26 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .swipe-act.del { background: var(--urgent); }
 .trow-surface {
   position: relative; z-index: 1; background: var(--card);
-  display: grid; grid-template-columns: 1fr auto;
-  grid-template-areas: "name rem" "meta meta";
+  /* Card layout: name with its type alongside on the first line, then a meta
+     line underneath carrying date · days remaining · status. */
+  display: grid; grid-template-columns: minmax(0, auto) 1fr;
+  grid-template-areas: "name type" "meta meta";
   gap: .25rem .6rem; padding: .75rem;
   transform: translateX(var(--sx, 0px)); transition: transform .22s ease;
   touch-action: pan-y;
 }
 .trow.dragging .trow-surface { transition: none; }
 .trow.editing { padding: .7rem .75rem; }
-.tc-name { grid-area: name; min-width: 0; word-break: break-word; }
-.tc-rem { grid-area: rem; justify-self: end; align-self: start; }
+/* break-word split short names mid-token ("*.uniweld.c / om"). break-word only
+   breaks a word that genuinely cannot fit, so long hosts and fingerprints still
+   wrap but ordinary names stay whole. */
+.tc-name { grid-area: name; min-width: 0; overflow-wrap: break-word; word-break: normal; }
+.tc-type { grid-area: type; justify-self: start; align-self: start; }
 .tc-meta { grid-area: meta; display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; }
 .tc-meta .tc-exp { color: var(--muted); }
+/* Manual entries carry no trust badge — collapse the cell so the flex gap
+   doesn't leave a hole after the days pill. */
+.tc-trust:empty { display: none; }
 .tc-actions { display: none; }
 .swipe-hint { display: block; margin: .6rem 0 0; }
 .cover-row { background: rgba(127,127,127,.05); padding: .5rem .75rem .7rem; }
@@ -580,13 +588,17 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 }
 /* Once the tracked card is wide enough, drop the swipe-card layout for a
    proper aligned table grid with a sticky header. */
+/* Note this queries the card's CONTENT box, so a 720px card reads as ~668px.
+   The old tracks ate 528px of that and left the name column at ~84px; the
+   retuned ones leave ~204px, so the switch point can stay at 640. */
 @container (min-width: 640px) {
   .trow-head, .trow-surface {
     /* All non-name tracks are FIXED so the header (empty actions cell) and the
        rows (Edit/Delete buttons) resolve the 1fr name column identically —
        otherwise an `auto` actions column differs between them and every column
-       drifts out of alignment. */
-    grid-template-columns: minmax(0, 1fr) 130px 96px 92px 92px 118px;
+       drifts out of alignment. Each is sized to its widest real content:
+       the Service/Contract pill, a date, "118 days", "untrusted", Edit+Delete. */
+    grid-template-columns: minmax(0, 1fr) 104px 86px 74px 68px 92px;
     grid-template-areas: none;
     gap: .5rem; align-items: center;
   }
@@ -616,5 +628,25 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
   .tc-trust { grid-column: 5; grid-row: 1; }
   .tc-actions { grid-column: 6; grid-row: 1; display: block; text-align: right; white-space: nowrap; }
   .swipe-hint { display: none; }
+
+  /* The secondary detail (host, fingerprint, last-checked, stored secret,
+     "covers N domains") is authored as <br>-separated spans for the mobile
+     card. Stacked inside a table cell it turned a scanned endpoint into a
+     five-line row. Dropping the breaks lets it wrap as one muted line under
+     the name, with spacing rather than punctuation separating the parts. */
+  .tc-name { line-height: 1.35; }
+  .tc-name br { display: none; }
+  .tc-name > strong,
+  .tc-name > .muted,
+  .tc-name > .checkline,
+  .tc-name > .secretline,
+  .tc-name > .cover-toggle { margin-right: .55rem; }
+  /* Keep the truncated SHA-256 in one piece — wrapping it mid-hash ("6" then
+     "88f99185e12…") reads like corruption. It moves to the next line whole. */
+  .tc-name > .mono { white-space: nowrap; }
+  /* Trim the pills and buttons to match the tighter tracks. */
+  .tc-type .pill, .tc-trust .pill { font-size: .74rem; padding: .1rem .42rem; }
+  .tc-rem .pill { font-size: .76rem; padding: .1rem .45rem; }
+  .tc-actions .btn { font-size: .8rem; padding: .25rem .4rem; }
 }
 /* Settings tables: drop the min-width on narrow cards so they never scroll. */
