@@ -154,6 +154,10 @@ main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1.25rem; display: grid
 /* The Add-entry and Calendar cards size to their content instead of capping +
    scrolling — the tabs stay put and the manual form / calendar always fit. */
 #w-add, #w-calendar { max-height: none; }
+/* Belt-and-braces for fit-to-content cards: a layout saved by an older release
+   may still carry an inline pixel height, which would clip the manual form. */
+.widget[data-autoheight] { height: auto !important; max-height: none !important; }
+.widget[data-autoheight] > .widget-body { overflow-y: visible; }
 .widget-off { display: none !important; }
 /* The bar stays put; only the body scrolls (vertically) when a card grows too
    tall. Horizontal scroll is disabled — content reflows to fit the card. */
