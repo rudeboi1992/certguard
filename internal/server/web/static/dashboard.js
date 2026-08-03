@@ -934,13 +934,14 @@ loadWhoami().then(() => {
   initWidgetGrid($('dashGrid'), 'certguard-dash-layout', {
     addSelect: $('addSectionDash'),
     resetBtn: $('resetDashLayout'),
-    // Shipped default arrangement: Add + Tracked side by side at a matched
-    // height (fits the manual-entry form), Calendar full-width below. The
-    // heights are only applied on multi-column (desktop) layouts.
+    // Shipped default arrangement: Add + Tracked side by side, Calendar
+    // full-width below. Add-entry is data-autoheight (it sizes to whichever tab
+    // is open); only Tracked gets a default height, and only on multi-column
+    // (desktop) layouts.
     defaults: {
       order: ['w-add', 'w-tracked', 'w-calendar'],
       spans: { 'w-add': 2, 'w-tracked': 2, 'w-calendar': 4 },
-      heights: { 'w-add': 625, 'w-tracked': 625 },
+      heights: { 'w-tracked': 625 },
       // The optional insight cards ship hidden — add them via "＋ Add section".
       hidden: ['w-soon', 'w-problems', 'w-nextup', 'w-issuers', 'w-audit',
         'w-scanhealth', 'w-renewals', 'w-alerts', 'w-scheduler', 'w-notes'],

@@ -72,8 +72,14 @@ function initWidgetGrid(grid, storageKey, opts) {
     }
     try { localStorage.setItem(storageKey, JSON.stringify({ order, spans, heights: heightsMap, hidden })); } catch (e) {}
   }
+  // Cards marked `data-autoheight` always grow to fit their content: no stored
+  // pixel height is applied and no bottom resize handle is offered. Used by the
+  // Add-entry card, whose tallest tab (manual entry) must never scroll.
+  const autoHeight = (c) => c.hasAttribute('data-autoheight');
+
   // Give a card an explicit height (content scrolls inside); min keeps the bar usable.
   function setHeight(card, h) {
+    if (autoHeight(card)) return;
     h = Math.max(96, Math.round(h));
     card.style.height = h + 'px';
     card.style.maxHeight = 'none';
@@ -206,6 +212,7 @@ function initWidgetGrid(grid, storageKey, opts) {
   // The vertical handle is injected next to each existing width handle so it
   // applies on every resizable card without extra markup.
   widgets().forEach((card) => {
+    if (autoHeight(card)) return;
     if (!card.querySelector('.widget-resize') || card.querySelector('.widget-resize-v')) return;
     const vh = document.createElement('span');
     vh.className = 'widget-resize-v';

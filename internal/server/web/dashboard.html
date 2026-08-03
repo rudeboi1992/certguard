@@ -38,7 +38,7 @@
     </div>
 
     <div class="widget-grid" id="dashGrid">
-      <section class="card widget" id="w-add" data-admin data-title="Add an entry" style="grid-column: span 2">
+      <section class="card widget" id="w-add" data-admin data-autoheight data-title="Add an entry" style="grid-column: span 2">
         <div class="widget-bar">
           <span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Add an entry</span></span>
           <span class="spacer"></span>
@@ -46,11 +46,11 @@
         </div>
         <div class="widget-body">
         <div class="add-tabs" role="tablist">
-          <button type="button" class="add-tab active" data-pane="pane-scan">Scan a live endpoint</button>
-          <button type="button" class="add-tab" data-pane="pane-manual">Enter manually / drop file</button>
+          <button type="button" class="add-tab" data-pane="pane-scan">Scan a live endpoint</button>
+          <button type="button" class="add-tab active" data-pane="pane-manual">Enter manually / drop file</button>
         </div>
 
-        <div class="add-pane" id="pane-scan">
+        <div class="add-pane" id="pane-scan" hidden>
           <p class="muted small">Connect over TLS and read a certificate automatically.</p>
           <form id="scanForm" class="row">
             <input type="text" id="scanTarget" placeholder="example.com or host:8443" required>
@@ -61,7 +61,7 @@
           <div id="scanDetail" class="scan-detail" hidden></div>
         </div>
 
-        <div class="add-pane" id="pane-manual" hidden>
+        <div class="add-pane" id="pane-manual">
           <p class="muted small">A certificate, API key, subscription, domain — anything with an expiry date.</p>
           <div id="dropZone" class="drop-zone">
             <p>Drag &amp; drop or click / tap to parse a <code>.pem .cer .crt .p12 .pfx</code> cert file</p>
