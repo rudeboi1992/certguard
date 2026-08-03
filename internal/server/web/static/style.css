@@ -11,6 +11,10 @@
   --warn: #ea580c;
   --urgent: #dc2626;
   --radius: 10px;
+  /* One page width, shared by the header and the content below it so they stay
+     flush. The dashboard is a 4-column widget grid, so it wants real room;
+     settings is a single stack of forms and overrides this to stay readable. */
+  --page-max: 1500px;
 }
 /* Dark palette, shared by the OS-preference default (when the user hasn't
    chosen) and by an explicit data-theme="dark" choice. */
@@ -95,7 +99,7 @@ code { background: rgba(127,127,127,.15); padding: .05em .35em; border-radius: 4
 /* Constrain header content to the same width as <main> so the logo and
    Sign-out line up with the cards below instead of hugging the window edges. */
 .topbar-inner {
-  max-width: 1000px; margin: 0 auto; padding: 0 1.25rem;
+  max-width: var(--page-max); margin: 0 auto; padding: 0 1.25rem;
   display: flex; align-items: center; gap: .75rem;
 }
 .spacer { flex: 1; }
@@ -112,12 +116,17 @@ code { background: rgba(127,127,127,.15); padding: .05em .35em; border-radius: 4
 .nav-btn svg { width: 18px; height: 18px; display: block; }
 #whoami { margin-left: .25rem; }
 
-main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1.25rem; display: grid; gap: 1.25rem; }
+main { max-width: var(--page-max); margin: 1.5rem auto; padding: 0 1.25rem; display: grid; gap: 1.25rem; }
 .page-title { font-size: 1.35rem; margin: 0; }
+
+/* Settings is forms, not a grid — stretching it to the dashboard width would
+   give unreadably long rows. It keeps a narrower cap, and the header narrows
+   with it so the brand still sits flush with the content on both pages. */
+body:has(.settings-layout) { --page-max: 1120px; }
 
 /* settings: pinned sidebar + a fixed single-column stack of sections */
 .settings-layout {
-  max-width: 1120px; margin: 1.5rem auto; padding: 0 1.25rem;
+  max-width: var(--page-max); margin: 1.5rem auto; padding: 0 1.25rem;
   display: grid; grid-template-columns: 172px 1fr; gap: 1.25rem; align-items: start;
 }
 /* The sidebar stays put while the sections scroll past it. `align-self: start`
@@ -213,6 +222,16 @@ body.dragging-widget { cursor: grabbing; user-select: none; }
 }
 .add-tab:hover { color: var(--ink); }
 .add-tab.active { color: var(--ink); border-bottom-color: var(--primary); }
+/* Both panes share one grid cell, so the card is always as tall as the tallest
+   pane and doesn't jump height when you switch tabs. The inactive pane keeps
+   its space but is visibility:hidden, so it stays out of the tab order and the
+   accessibility tree. `display` has to beat the global [hidden] rule. */
+/* A comfortable measure for the entry form. No effect at the default 2-column
+   span; it only kicks in if the card is dragged wider, where full-bleed inputs
+   would otherwise stretch to the width of the page. */
+.add-panes { display: grid; max-width: 760px; }
+.add-panes > .add-pane { grid-area: 1 / 1; min-width: 0; }
+.add-panes > .add-pane[hidden] { display: block !important; visibility: hidden; }
 
 /* "Add section" toolbar */
 .grid-toolbar { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }

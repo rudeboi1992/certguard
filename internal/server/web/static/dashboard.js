@@ -935,13 +935,13 @@ loadWhoami().then(() => {
     addSelect: $('addSectionDash'),
     resetBtn: $('resetDashLayout'),
     // Shipped default arrangement: Add + Tracked side by side, Calendar
-    // full-width below. Add-entry is data-autoheight (it sizes to whichever tab
-    // is open); only Tracked gets a default height, and only on multi-column
-    // (desktop) layouts.
+    // full-width below. Neither of the top two carries a stored height any
+    // more — Add-entry is data-autoheight (sizes to its content) and Tracked
+    // is data-matchheight="w-add" (follows it), so the pair stays level.
     defaults: {
       order: ['w-add', 'w-tracked', 'w-calendar'],
       spans: { 'w-add': 2, 'w-tracked': 2, 'w-calendar': 4 },
-      heights: { 'w-tracked': 625 },
+      heights: {},
       // The optional insight cards ship hidden — add them via "＋ Add section".
       hidden: ['w-soon', 'w-problems', 'w-nextup', 'w-issuers', 'w-audit',
         'w-scanhealth', 'w-renewals', 'w-alerts', 'w-scheduler', 'w-notes'],

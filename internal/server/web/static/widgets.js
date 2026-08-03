@@ -15,6 +15,11 @@ function initWidgetGrid(grid, storageKey, opts) {
   const visible = () => widgets().filter((c) => !c.classList.contains('widget-off'));
   const spanOf = (c) => Math.max(1, Math.min(COLS, parseInt(c.dataset.span, 10) || 4));
   const heights = new Map();
+  // Cards that follow another card's height (see data-matchheight in layout()).
+  const matchers = widgets()
+    .map((card) => ({ card, target: document.getElementById(card.dataset.matchheight || '') }))
+    .filter((m) => m.target && m.target !== m.card);
+  const isMatcher = (c) => matchers.some((m) => m.card === c);
 
   // Seed span from any initial inline grid-column, then stop using the grid.
   widgets().forEach((c) => {
@@ -40,6 +45,19 @@ function initWidgetGrid(grid, storageKey, opts) {
     const colW = (cw - GAP * (cols - 1)) / cols;
     const spans = cards.map((c) => Math.min(spanOf(c), cols));
     cards.forEach((c, i) => { c.style.width = (spans[i] * colW + (spans[i] - 1) * GAP) + 'px'; });
+    // `data-matchheight="<id>"` pins a card to the live height of another one,
+    // so a pair sitting side by side stays visually level even though the
+    // target sizes to its own content. Only on multi-column layouts — stacked
+    // in one column there is nothing to line up with, and forcing a height
+    // there would just make the follower scroll.
+    matchers.forEach(({ card, target }) => {
+      if (cols === 1 || card.classList.contains('widget-off') || target.classList.contains('widget-off')) {
+        card.style.height = '';
+      } else {
+        card.style.height = target.offsetHeight + 'px';
+        card.style.maxHeight = 'none';
+      }
+    });
     const hs = cards.map((c) => c.offsetHeight); // one reflow after all widths set
     const bottoms = new Array(cols).fill(0);
     cards.forEach((c, i) => {
@@ -79,7 +97,7 @@ function initWidgetGrid(grid, storageKey, opts) {
 
   // Give a card an explicit height (content scrolls inside); min keeps the bar usable.
   function setHeight(card, h) {
-    if (autoHeight(card)) return;
+    if (autoHeight(card) || isMatcher(card)) return;
     h = Math.max(96, Math.round(h));
     card.style.height = h + 'px';
     card.style.maxHeight = 'none';
@@ -212,7 +230,7 @@ function initWidgetGrid(grid, storageKey, opts) {
   // The vertical handle is injected next to each existing width handle so it
   // applies on every resizable card without extra markup.
   widgets().forEach((card) => {
-    if (autoHeight(card)) return;
+    if (autoHeight(card) || isMatcher(card)) return;
     if (!card.querySelector('.widget-resize') || card.querySelector('.widget-resize-v')) return;
     const vh = document.createElement('span');
     vh.className = 'widget-resize-v';

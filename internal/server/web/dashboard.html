@@ -50,6 +50,7 @@
           <button type="button" class="add-tab" data-pane="pane-scan">Scan a live endpoint</button>
         </div>
 
+        <div class="add-panes">
         <div class="add-pane" id="pane-scan" hidden>
           <p class="muted small">Connect over TLS and read a certificate automatically.</p>
           <form id="scanForm" class="row">
@@ -96,6 +97,7 @@
           </form>
         </div>
         </div>
+        </div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
@@ -122,7 +124,7 @@
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget" id="w-tracked" data-title="Tracked expirations" style="grid-column: span 4">
+      <section class="card widget" id="w-tracked" data-matchheight="w-add" data-title="Tracked expirations" style="grid-column: span 4">
         <div class="widget-bar">
           <span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Tracked expirations</span></span>
           <span class="spacer"></span>
