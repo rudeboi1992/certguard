@@ -22,6 +22,11 @@ function daysUntil(iso) {
   return Math.round((new Date(iso) - new Date()) / 86400000);
 }
 
+// Row action icons. Labelled via title + aria-label so they stay accessible
+// without the text; the detail popup keeps worded buttons, where there's room.
+const ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const ICON_DEL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6"/><path d="M10 11v6M14 11v6"/></svg>';
+
 // Pull one RDN value (e.g. "CN") out of a DN string like "CN=foo,O=bar,C=US".
 function dnField(dn, key) {
   for (const part of (dn || '').split(',')) {
@@ -103,9 +108,10 @@ async function loadCerts() {
 }
 
 // Re-render the list (rows only) when the search text or sort order changes.
+// A new query means a new result set, so go back to the first page.
 ['trackedSearch', 'trackedSort'].forEach((id) => {
   const el = $(id);
-  if (el) el.addEventListener('input', renderCerts);
+  if (el) el.addEventListener('input', () => { shownCount = PAGE; renderCerts(); });
 });
 
 // Apply the current search text + sort order to a copy of currentItems.
@@ -131,109 +137,142 @@ function filterSortItems() {
   return items;
 }
 
-// renderCerts (re)draws the list from currentItems. Summary/calendar/fingerprint
-// stats always reflect the FULL set; only the visible rows are filtered/sorted.
+// Build one row element, with its handlers already attached.
+function buildRow(it) {
+  const c = it.cert;
+  const days = it.days_remaining;
+  const trusted = !c.last_error;
+  const level = expiryLevel(days);
+
+  const catCol = categoryColor(c.category);
+  const typeCell = c.category
+    ? `<span class="pill" style="background:${hexA(catCol, 0.15)};color:${catCol}">${escapeHtml(categoryLabel(c.category))}</span>`
+    : `<span class="muted small">${c.kind}</span>`;
+  const isEndpoint = c.kind === 'endpoint' || !!c.host;
+  const inlineActions = isAdmin
+    ? `<button class="icon-btn" data-edit="${c.id}" title="Edit" aria-label="Edit ${escapeHtml(c.name)}">${ICON_EDIT}</button>` +
+      `<button class="icon-btn danger" data-del="${c.id}" title="Delete" aria-label="Delete ${escapeHtml(c.name)}">${ICON_DEL}</button>`
+    : '';
+  const swipeActions = isAdmin
+    ? `<button class="swipe-act edit" data-edit="${c.id}" title="Edit" aria-label="Edit ${escapeHtml(c.name)}">${ICON_EDIT}</button>` +
+      `<button class="swipe-act del" data-del="${c.id}" title="Delete" aria-label="Delete ${escapeHtml(c.name)}">${ICON_DEL}</button>`
+    : '';
+  // Trust is only a real signal for endpoints we actually connect to. A manual
+  // entry is never scanned, so `!last_error` was rendering a reassuring "ok"
+  // that verified nothing — its status is its expiry, carried by the days
+  // pill. Leave the cell empty rather than claim a check that never ran.
+  const trustCell = !isEndpoint
+    ? ''
+    : trusted
+      ? '<span class="pill ok">ok</span>'
+      : `<span class="pill untrusted" title="${escapeHtml(c.last_error)}">untrusted</span>`;
+
+  const row = document.createElement('div');
+  row.className = 'trow';
+  row.dataset.row = c.id;
+  row.innerHTML = `
+    <div class="trow-actions" aria-hidden="true">${swipeActions}</div>
+    <div class="trow-surface">
+      <div class="tcol tc-name"><strong>${escapeHtml(c.name)}</strong></div>
+      <div class="tcol tc-type">${typeCell}</div>
+      <div class="tcol tc-meta">
+        <span class="tc-exp">${fmtDate(c.expires_at)}</span>
+        <span class="tc-rem"><span class="pill ${level}">${fmtRemaining(days)}</span></span>
+        <span class="tc-trust">${trustCell}</span>
+      </div>
+      <div class="tcol tc-actions">${inlineActions}</div>
+    </div>`;
+
+  row.querySelectorAll('[data-del]').forEach((b) =>
+    b.addEventListener('click', () => deleteCert(b.dataset.del)));
+  row.querySelectorAll('[data-edit]').forEach((b) =>
+    b.addEventListener('click', () => startEdit(b.dataset.edit)));
+  attachSwipe(row);
+  // Tap a row for the full readout. Ignore taps on the row's own controls, and
+  // ignore the tap that ends a swipe (or the one that just closes an open row).
+  row.querySelector('.trow-surface').addEventListener('click', (e) => {
+    if (e.target.closest('button, a, input, select, textarea, label')) return;
+    if (row.dataset.swiped) return;
+    if (row.classList.contains('open')) { closeSwipe(row); return; }
+    openDetail(row.dataset.row);
+  });
+  return row;
+}
+
+// The list renders a page at a time. A sentinel after the rows loads the next
+// page whenever it comes into view inside the card, so the card first fills to
+// its own height — leaving the tip visible at the bottom — and only fetches
+// more as you scroll. Long inventories no longer build hundreds of rows up
+// front, which also keeps the masonry re-pack cheap.
+const PAGE = 12;
+let shownCount = PAGE;
+let moreObserver = null;
+
 function renderCerts() {
   const rows = $('certRows');
   rows.innerHTML = '';
 
-  // Group entries by fingerprint so we can flag ones that are the same cert.
-  const fpGroups = {};
-  for (const it of currentItems) {
-    const fp = it.cert.sha256;
-    if (fp) (fpGroups[fp] ||= []).push({ id: it.cert.id, name: it.cert.name });
-  }
-
   const items = filterSortItems();
-  for (const it of items) {
-    const c = it.cert;
-    const days = it.days_remaining;
-    const trusted = !c.last_error;
-    const level = expiryLevel(days);
+  if (shownCount < PAGE) shownCount = PAGE;
+  for (const it of items.slice(0, shownCount)) rows.appendChild(buildRow(it));
+  openRow = null;
+  setupMoreObserver(items.length);
 
-    const catCol = categoryColor(c.category);
-    const typeCell = c.category
-      ? `<span class="pill" style="background:${hexA(catCol, 0.15)};color:${catCol}">${escapeHtml(categoryLabel(c.category))}</span>`
-      : `<span class="muted small">${c.kind}</span>`;
-    const sans = c.dns_names || [];
-    const coverToggle = sans.length > 1
-      ? `<br><button class="cover-toggle" data-cover="${c.id}" aria-expanded="false">▸ covers ${sans.length} domains</button>`
-      : '';
-    let fpLine = '';
-    if (c.sha256) {
-      const others = (fpGroups[c.sha256] || []).filter((g) => g.id !== c.id).map((g) => g.name);
-      const dup = others.length
-        ? ` <span class="pill dup" title="Same certificate as: ${escapeHtml(others.join(', '))}">duplicate</span>`
-        : '';
-      fpLine = `<br><span class="mono muted small" title="SHA-256: ${escapeHtml(c.sha256)}">${c.sha256.slice(0, 12)}…</span>${dup}`;
-    }
-    // Endpoints show when they were last checked, plus a rescan-now button.
-    let checkLine = '';
-    const isEndpoint = c.kind === 'endpoint' || !!c.host;
-    if (isEndpoint) {
-      const checked = c.last_scanned_at ? `checked ${escapeHtml(relTime(c.last_scanned_at))}` : 'never checked';
-      const rescan = isAdmin ? `<button class="rescan-btn" data-rescan="${c.id}" title="Rescan this endpoint now">↻ rescan</button> · ` : '';
-      checkLine = `<br><span class="checkline muted small">${rescan}${checked}</span>`;
-    }
-    // Stored-secret badge with an admin reveal/copy action.
-    let secretLine = '';
-    if (c.has_secret) {
-      const rev = isAdmin ? ` · <button class="secret-btn" data-reveal="${c.id}">reveal</button>` : '';
-      secretLine = `<br><span class="secretline muted small">🔑 ${escapeHtml(c.secret_hint || 'secret set')}${rev}</span>`;
-    }
-    const inlineActions = [
-      isAdmin ? `<button class="btn ghost small" data-edit="${c.id}">Edit</button>` : '',
-      isAdmin ? `<button class="btn link" data-del="${c.id}">Delete</button>` : '',
-    ].join(' ');
-    const swipeActions = isAdmin
-      ? `<button class="swipe-act edit" data-edit="${c.id}">Edit</button>` +
-        `<button class="swipe-act del" data-del="${c.id}">Delete</button>`
-      : '';
-    // Trust is only a real signal for endpoints we actually connect to. A manual
-    // entry is never scanned, so `!last_error` was rendering a reassuring "ok"
-    // that verified nothing — its status is its expiry, carried by the days
-    // pill. Leave the cell empty rather than claim a check that never ran.
-    const trustCell = !isEndpoint
-      ? ''
-      : trusted
-        ? '<span class="pill ok">ok</span>'
-        : `<span class="pill untrusted" title="${escapeHtml(c.last_error)}">untrusted</span>`;
-
-    const row = document.createElement('div');
-    row.className = 'trow';
-    row.dataset.row = c.id;
-    row.innerHTML = `
-      <div class="trow-actions" aria-hidden="true">${swipeActions}</div>
-      <div class="trow-surface">
-        <div class="tcol tc-name"><strong>${escapeHtml(c.name)}</strong>${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}${fpLine}${checkLine}${secretLine}${coverToggle}</div>
-        <div class="tcol tc-type">${typeCell}</div>
-        <div class="tcol tc-meta">
-          <span class="tc-exp">${fmtDate(c.expires_at)}</span>
-          <span class="tc-rem"><span class="pill ${level}">${fmtRemaining(days)}</span></span>
-          <span class="tc-trust">${trustCell}</span>
-        </div>
-        <div class="tcol tc-actions">${inlineActions}</div>
-      </div>`;
-    rows.appendChild(row);
-  }
   $('empty').hidden = currentItems.length !== 0;
   if ($('trackedToolbar')) $('trackedToolbar').hidden = currentItems.length === 0;
   if ($('noMatch')) $('noMatch').hidden = !(currentItems.length !== 0 && items.length === 0);
-  const hint = $('empty').closest('.widget-body').querySelector('.swipe-hint');
+  const hint = $('swipeHint');
   if (hint) hint.hidden = items.length === 0 || !isAdmin;
 
-  openRow = null;
-  rows.querySelectorAll('[data-del]').forEach((b) =>
-    b.addEventListener('click', () => deleteCert(b.dataset.del)));
-  rows.querySelectorAll('[data-edit]').forEach((b) =>
-    b.addEventListener('click', () => startEdit(b.dataset.edit)));
-  rows.querySelectorAll('[data-cover]').forEach((b) =>
-    b.addEventListener('click', () => toggleCover(b)));
-  rows.querySelectorAll('[data-rescan]').forEach((b) =>
-    b.addEventListener('click', () => rescanCert(b.dataset.rescan, b)));
-  rows.querySelectorAll('[data-reveal]').forEach((b) =>
-    b.addEventListener('click', () => revealSecret(b.dataset.reveal, b)));
-  rows.querySelectorAll('.trow').forEach(attachSwipe);
+  // Keep an open popup in step with the data it was built from.
+  if (detailId !== null) {
+    const still = currentItems.find((x) => String(x.cert.id) === String(detailId));
+    if (still) renderDetail(still); else closeDetail();
+  }
+}
+
+// Watch a sentinel just below the last row, scoped to the card's scroll box.
+// While it's on screen we keep appending — that fills a tall card on load —
+// and once it's pushed out of view the next page waits for a scroll.
+function setupMoreObserver(total) {
+  const rows = $('certRows');
+  const body = rows.closest('.widget-body');
+  let sentinel = $('moreSentinel');
+  if (!sentinel) {
+    sentinel = document.createElement('div');
+    sentinel.id = 'moreSentinel';
+    sentinel.className = 'more-sentinel';
+    sentinel.innerHTML = '<span class="muted small">Loading more…</span>';
+  }
+  rows.after(sentinel);
+  if (moreObserver) { moreObserver.disconnect(); moreObserver = null; }
+  if (shownCount >= total) { sentinel.hidden = true; return; }
+  sentinel.hidden = false;
+  moreObserver = new IntersectionObserver((entries) => {
+    if (!entries.some((e) => e.isIntersecting)) return;
+    const all = filterSortItems();
+    const next = all.slice(shownCount, shownCount + PAGE);
+    if (!next.length) { moreObserver.disconnect(); sentinel.hidden = true; return; }
+    // Each row in the batch rises a beat after the one above it, so a page
+    // arrives as a wave rather than a block. Only on rows paged in by a scroll
+    // — a full re-render (rescan, search, delete) must not re-animate.
+    next.forEach((it, i) => {
+      const row = buildRow(it);
+      row.classList.add('flow-in');
+      row.style.setProperty('--i', i);
+      row.addEventListener('animationend', () => {
+        row.classList.remove('flow-in');
+        row.style.removeProperty('--i');
+      }, { once: true });
+      rows.appendChild(row);
+    });
+    shownCount += next.length;
+    rows.after(sentinel);
+    if (shownCount >= all.length) { moreObserver.disconnect(); sentinel.hidden = true; }
+    // No rootMargin: stop as soon as the sentinel clears the bottom edge, so the
+    // first load is about one card's worth rather than two.
+  }, { root: body });
+  moreObserver.observe(sentinel);
 }
 
 // --- vault unlock ---
@@ -357,6 +396,10 @@ function attachSwipe(row) {
     active = false;
     row.classList.remove('dragging');
     if (!horiz) return;
+    // A swipe ends with a click event on the surface; flag the row briefly so
+    // the tap-for-details handler ignores it.
+    row.dataset.swiped = '1';
+    setTimeout(() => { delete row.dataset.swiped; }, 350);
     const t = base + (e.clientX - x0);
     if (t < -swipeReveal(row) / 2) openSwipe(row);
     else closeSwipe(row);
@@ -369,27 +412,105 @@ document.addEventListener('pointerdown', (e) => {
   if (openRow && !openRow.contains(e.target)) closeSwipe(openRow);
 }, true);
 
-// Expand/collapse the full list of domains (SANs) a cert covers.
-function toggleCover(btn) {
-  const id = btn.dataset.cover;
-  const it = currentItems.find((x) => String(x.cert.id) === String(id));
-  const sans = (it && it.cert.dns_names) || [];
-  const row = document.querySelector(`.trow[data-row="${id}"]`);
-  const next = row && row.nextElementSibling;
-  if (next && next.classList.contains('cover-row')) {
-    next.remove();
-    btn.setAttribute('aria-expanded', 'false');
-    btn.textContent = `▸ covers ${sans.length} domains`;
-    return;
+// --- entry detail popup ---
+// Rows carry only name / type / date / days / status so the card stays usable
+// in a narrow column. Everything else — host, fingerprint, SANs, scan state,
+// stored secret — lives here and opens on tap.
+let detailId = null;
+
+// Other entries sharing this fingerprint, i.e. literally the same certificate.
+function duplicatesOf(c) {
+  if (!c.sha256) return [];
+  return currentItems
+    .filter((x) => x.cert.sha256 === c.sha256 && x.cert.id !== c.id)
+    .map((x) => x.cert.name);
+}
+
+function renderDetail(it) {
+  const c = it.cert;
+  const days = it.days_remaining;
+  const isEndpoint = c.kind === 'endpoint' || !!c.host;
+  const out = [];
+  const add = (k, v) => { if (v) out.push(`<div class="sd-row"><span class="sd-k">${k}</span><span class="sd-v">${v}</span></div>`); };
+
+  const catCol = categoryColor(c.category);
+  add('Type', c.category
+    ? `<span class="pill" style="background:${hexA(catCol, 0.15)};color:${catCol}">${escapeHtml(categoryLabel(c.category))}</span>`
+    : `<span class="muted">${escapeHtml(c.kind || '')}</span>`);
+  add('Expires', `${fmtDate(c.expires_at)} <span class="pill ${expiryLevel(days)}">${fmtRemaining(days)}</span>`);
+  if (isEndpoint) add('Endpoint', `<span class="mono">${escapeHtml(c.host)}:${c.port}</span>`);
+  // Manual entries serialize a zero not_before; only show a real one.
+  if (c.not_before && new Date(c.not_before).getUTCFullYear() > 2000) add('Valid from', fmtDate(c.not_before));
+  add('Subject', escapeHtml(dnField(c.subject, 'CN') || c.subject || ''));
+  add('Issuer', escapeHtml(dnField(c.issuer, 'O') || dnField(c.issuer, 'CN') || c.issuer || ''));
+  const sans = c.dns_names || [];
+  if (sans.length) {
+    add(`Covers ${sans.length > 1 ? `(${sans.length})` : ''}`.trim(),
+      `<div class="cover-list">${sans.map((s) => `<span class="cover-chip">${escapeHtml(s)}</span>`).join('')}</div>`);
   }
-  const cr = document.createElement('div');
-  cr.className = 'cover-row';
-  cr.innerHTML = `<div class="cover-list">${
-    sans.map((s) => `<span class="cover-chip">${escapeHtml(s)}</span>`).join('')
-  }</div>`;
-  row.after(cr);
-  btn.setAttribute('aria-expanded', 'true');
-  btn.textContent = `▾ covers ${sans.length} domains`;
+  add('Key', escapeHtml([c.key_type, c.signature_algorithm].filter(Boolean).join(' · ')));
+  add('Serial', c.serial ? `<span class="mono sd-fp">${escapeHtml(c.serial)}</span>` : '');
+  if (c.sha256) {
+    const dups = duplicatesOf(c);
+    const note = dups.length
+      ? `<div class="muted small dup-note">Same certificate as ${escapeHtml(dups.join(', '))}</div>`
+      : '';
+    add('SHA-256', `<span class="mono sd-fp">${escapeHtml(c.sha256)}</span>${note}`);
+  }
+  if (isEndpoint) {
+    add('Trust', c.last_error
+      ? `<span class="pill untrusted">untrusted</span> <span class="muted small">${escapeHtml(c.last_error)}</span>`
+      : '<span class="pill ok">ok</span>');
+    const checked = c.last_scanned_at ? `checked ${escapeHtml(relTime(c.last_scanned_at))}` : 'never checked';
+    const rescan = isAdmin ? ` · <button class="rescan-btn" data-drescan="${c.id}" title="Rescan this endpoint now">↻ rescan now</button>` : '';
+    add('Last checked', `<span class="muted">${checked}</span>${rescan}`);
+  }
+  if (c.has_secret) {
+    const rev = isAdmin ? ` · <button class="secret-btn" data-dreveal="${c.id}">reveal</button>` : '';
+    add('Secret', `<span class="secretline">🔑 ${escapeHtml(c.secret_hint || 'secret set')}${rev}</span>`);
+  }
+  add('Notes', escapeHtml(c.notes || ''));
+  // Always last, and the one thing a bare manual entry can always show.
+  add('Added', fmtDate(c.created_at));
+
+  $('detailTitle').textContent = c.name;
+  $('detailBody').innerHTML = out.join('');
+  $('detailActions').innerHTML = [
+    `<a class="btn ghost small" href="/api/v1/certs/${c.id}/calendar.ics">📆 Add to calendar</a>`,
+    isAdmin ? `<span class="spacer"></span><button class="btn ghost small" data-dedit="${c.id}">Edit</button>` : '',
+    isAdmin ? `<button class="btn link" data-ddel="${c.id}">Delete</button>` : '',
+  ].join(' ');
+
+  const body = $('detailBody'), acts = $('detailActions');
+  const on = (sel, fn) => { const b = body.querySelector(sel) || acts.querySelector(sel); if (b) b.addEventListener('click', () => fn(b)); };
+  on('[data-drescan]', (b) => rescanCert(b.dataset.drescan, b));
+  on('[data-dreveal]', (b) => revealSecret(b.dataset.dreveal, b));
+  on('[data-dedit]', (b) => { const id = b.dataset.dedit; closeDetail(); startEdit(id); });
+  on('[data-ddel]', (b) => deleteCert(b.dataset.ddel));
+}
+
+function openDetail(id) {
+  const it = currentItems.find((x) => String(x.cert.id) === String(id));
+  if (!it) return;
+  detailId = it.cert.id;
+  renderDetail(it);
+  const dlg = $('entryDetail');
+  if (!dlg.open) dlg.showModal();
+}
+
+function closeDetail() {
+  detailId = null;
+  const dlg = $('entryDetail');
+  if (dlg && dlg.open) dlg.close();
+}
+
+// Close via the ×, a click on the backdrop, or Esc (which <dialog> handles for
+// us and surfaces as a `close` event) — all have to clear the tracked id.
+if ($('entryDetail')) {
+  const dlg = $('entryDetail');
+  $('detailClose').addEventListener('click', () => closeDetail());
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) closeDetail(); });
+  dlg.addEventListener('close', () => { detailId = null; });
 }
 
 // Inline rename / re-label a row.
@@ -938,8 +1059,12 @@ loadWhoami().then(() => {
     document.querySelectorAll('#dashGrid .widget[data-admin]').forEach((w) => w.remove());
   }
   initWidgetGrid($('dashGrid'), 'certguard-dash-layout', {
-    addSelect: $('addSectionDash'),
+    addButton: $('addSectionDash'),
+    addDialog: $('addSectionDialog'),
+    addGrid: $('addSectionGrid'),
     resetBtn: $('resetDashLayout'),
+    centerToggle: $('centerDashLayout'),
+    compactToggle: $('compactDashLayout'),
     // Shipped default arrangement: Add + Tracked side by side, Calendar
     // full-width below. Neither of the top two carries a stored height any
     // more — Add-entry is data-autoheight (sizes to its content) and Tracked

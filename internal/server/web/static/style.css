@@ -164,9 +164,11 @@ body:has(.settings-layout) { --page-max: 1120px; }
    scrolling — the tabs stay put and the manual form / calendar always fit. */
 #w-add, #w-calendar { max-height: none; }
 /* Belt-and-braces for fit-to-content cards: a layout saved by an older release
-   may still carry an inline pixel height, which would clip the manual form. */
-.widget[data-autoheight] { height: auto !important; max-height: none !important; }
-.widget[data-autoheight] > .widget-body { overflow-y: visible; }
+   may still carry an inline pixel height, which would clip the manual form.
+   Scoped to :not([data-sized]) so that once the user drags or double-clicks the
+   card's bottom edge, their height wins and the body scrolls again. */
+.widget[data-autoheight]:not([data-sized]) { height: auto !important; max-height: none !important; }
+.widget[data-autoheight]:not([data-sized]) > .widget-body { overflow-y: visible; }
 .widget-off { display: none !important; }
 /* The bar stays put; only the body scrolls (vertically) when a card grows too
    tall. Horizontal scroll is disabled — content reflows to fit the card. */
@@ -184,8 +186,25 @@ body.dragging-widget { cursor: grabbing; user-select: none; }
   font-size: 1.2rem; line-height: 1; padding: 0 .35rem; border-radius: 6px;
 }
 .widget-hide:hover { background: rgba(127,127,127,.14); color: var(--ink); }
-.widget.dragging { opacity: .45; }
-.widget.drop-target { outline: 2px dashed var(--primary); outline-offset: -2px; }
+/* The card being dragged lifts off and tracks the pointer, so it must not
+   animate to its packed position like the others do. */
+.widget.dragging {
+  z-index: 50; opacity: .92; transition: none !important;
+  box-shadow: 0 20px 44px rgba(0, 0, 0, .38); cursor: grabbing;
+}
+/* The slot it would drop into. Animates with the rest of the grid so the
+   outline slides to each new candidate position as you move. */
+.widget-ghost {
+  position: absolute; z-index: 1; pointer-events: none;
+  border: 2px dashed var(--primary); border-radius: var(--radius);
+  background: rgba(37, 99, 235, .08);
+  transition: top .18s ease, left .18s ease, width .18s ease, height .18s ease;
+}
+/* Shown across the grid while a height drag is locked onto an edge. */
+.snap-guide {
+  position: absolute; left: 0; right: 0; height: 0; z-index: 60; pointer-events: none;
+  border-top: 1px dashed var(--primary);
+}
 .widget-resize {
   position: absolute; top: 0; right: 0; bottom: 14px; width: 12px; cursor: ew-resize;
   border-radius: 0 var(--radius) 0 0;
@@ -222,23 +241,62 @@ body.dragging-widget { cursor: grabbing; user-select: none; }
 }
 .add-tab:hover { color: var(--ink); }
 .add-tab.active { color: var(--ink); border-bottom-color: var(--primary); }
-/* Both panes share one grid cell, so the card is always as tall as the tallest
-   pane and doesn't jump height when you switch tabs. The inactive pane keeps
-   its space but is visibility:hidden, so it stays out of the tab order and the
-   accessibility tree. `display` has to beat the global [hidden] rule. */
-/* A comfortable measure for the entry form. No effect at the default 2-column
-   span; it only kicks in if the card is dragged wider, where full-bleed inputs
-   would otherwise stretch to the width of the page. */
-.add-panes { display: grid; max-width: 760px; }
-.add-panes > .add-pane { grid-area: 1 / 1; min-width: 0; }
-.add-panes > .add-pane[hidden] { display: block !important; visibility: hidden; }
+/* The panes used to share one grid cell so the card kept a constant height
+   across tabs. That stretched the short Scan pane to the tall manual pane's
+   height, so the card claimed ~590px of content on a tab that needs ~200 — and
+   a hand-sized card then offered a scrollbar into 266px of nothing. The
+   container now sizes to whichever pane is open: the card shrinks on the Scan
+   tab, and there is never more to scroll to than there is content.
+   max-width is a comfortable measure for the form — no effect at the default
+   2-column span, it only bites if the card is dragged wider, where full-bleed
+   inputs would otherwise stretch across the page. */
+.add-panes { max-width: 760px; }
+.add-panes > .add-pane { min-width: 0; }
 
 /* "Add section" toolbar */
 .grid-toolbar { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
-.add-section {
-  padding: .4rem .6rem; border: 1px solid var(--border); border-radius: 8px;
-  background: var(--bg); color: var(--ink); font: inherit;
+
+/* Section picker: three tiles across, each saying what the card shows. */
+.section-modal { width: min(860px, calc(100vw - 2rem)); }
+.section-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+.section-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: .3rem;
+  text-align: left; font: inherit; cursor: pointer;
+  padding: .8rem .85rem; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); color: var(--ink);
+  transition: border-color .12s, background .12s, transform .12s;
 }
+.section-card:hover, .section-card:focus-visible {
+  border-color: var(--primary); background: rgba(37,99,235,.06); transform: translateY(-1px);
+}
+.section-card-title { font-weight: 600; }
+.section-card-desc { color: var(--muted); font-size: .82rem; line-height: 1.4; flex: 1; }
+.section-card-cta { color: var(--primary); font-size: .82rem; font-weight: 600; margin-top: .15rem; }
+@media (max-width: 760px) { .section-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .section-grid { grid-template-columns: 1fr; } }
+/* A nav-btn that stays lit while its setting is on. */
+.toggle-btn.on { background: rgba(37,99,235,.14); color: var(--primary); }
+
+/* ⓘ that reveals its text on hover — and on keyboard focus, since hover alone
+   would put the tips out of reach without a mouse. */
+.info-tip { position: relative; display: inline-flex; align-items: center; outline: none; }
+.info-dot {
+  display: block; width: 19px; height: 19px;
+  color: var(--muted); cursor: help; transition: color .12s;
+}
+.info-tip:hover .info-dot,
+.info-tip:focus-visible .info-dot { color: var(--primary); }
+.info-pop {
+  position: absolute; left: 0; top: calc(100% + .45rem); z-index: 30;
+  width: max-content; max-width: min(380px, 78vw);
+  padding: .55rem .7rem; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card); color: var(--ink);
+  font-size: .82rem; line-height: 1.45; font-weight: 400;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .22);
+  opacity: 0; visibility: hidden; transition: opacity .12s;
+}
+.info-tip:hover .info-pop,
+.info-tip:focus-visible .info-pop { opacity: 1; visibility: visible; }
 
 @media (max-width: 820px) {
   .settings-layout { grid-template-columns: 1fr; }
@@ -307,12 +365,17 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .drop-zone.dragover { border-color: var(--primary); background: rgba(37,99,235,.06); }
 .drop-zone.parsed { border-color: var(--ok); }
 
-.summary { display: flex; gap: 1rem; }
-.summary .stat {
-  flex: 1; background: var(--card); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: .9rem 1.1rem;
+/* Headline figures, not cards — no surface, centered, and large enough to read
+   at a glance from across the room. */
+.summary { display: flex; gap: 1rem; margin-top: 1.1rem; }
+.summary .stat { flex: 1; padding: .35rem .5rem; text-align: center; }
+.summary .stat .n { font-size: 2.75rem; font-weight: 700; line-height: 1.05; letter-spacing: -.02em; }
+.summary .stat .muted { font-size: .9rem; }
+@media (max-width: 520px) {
+  .summary { gap: .5rem; }
+  .summary .stat .n { font-size: 2rem; }
+  .summary .stat .muted { font-size: .78rem; }
 }
-.summary .stat .n { font-size: 1.6rem; font-weight: 700; }
 
 /* Tracked-entries list. Mobile-first: each row is a card whose surface can be
    swiped left to reveal Edit/Delete. At >=640px card width it becomes a table-
@@ -370,10 +433,14 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .trow-head { display: none; }
 .trow { position: relative; overflow: hidden; border-bottom: 1px solid var(--border); }
 .trow-actions { position: absolute; top: 0; right: 0; bottom: 0; display: flex; }
+/* Icon-only, matching the table's row actions. Narrower than the old worded
+   buttons, so a shorter swipe reveals them — swipeReveal() measures the strip
+   at runtime, so the gesture distance follows automatically. */
 .swipe-act {
-  border: none; font: inherit; font-weight: 600; width: 78px; cursor: pointer;
+  border: none; font: inherit; width: 62px; cursor: pointer;
   color: #fff; display: flex; align-items: center; justify-content: center;
 }
+.swipe-act svg { width: 20px; height: 20px; display: block; }
 .swipe-act.edit { background: var(--primary); }
 .swipe-act.del { background: var(--urgent); }
 .trow-surface {
@@ -399,8 +466,82 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
    doesn't leave a hole after the days pill. */
 .tc-trust:empty { display: none; }
 .tc-actions { display: none; }
-.swipe-hint { display: block; margin: .6rem 0 0; }
-.cover-row { background: rgba(127,127,127,.05); padding: .5rem .75rem .7rem; }
+/* Card footer, outside the scrolling body — stays put however far down the
+   paged list you are. */
+.swipe-hint {
+  display: block; flex: 0 0 auto; margin: 0;
+  padding: .55rem .1rem 0; border-top: 1px solid var(--border);
+}
+.more-sentinel { padding: .55rem .5rem; text-align: center; }
+
+/* Rows paged in on scroll. Each rises from slightly below and slightly
+   transparent, staggered by index, so the batch reads as a swell moving down
+   the list rather than a dozen rows snapping in at once. The easing is
+   back-loaded — quick to appear, slow to settle — which is what gives it the
+   sense of flowing rather than sliding. */
+@keyframes row-flow {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.trow.flow-in {
+  animation: row-flow .62s cubic-bezier(.16, .84, .32, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 38ms);
+  will-change: transform, opacity;
+}
+/* The "Loading more…" line breathes while it waits, on the same slow cadence. */
+@keyframes sentinel-breathe {
+  0%, 100% { opacity: .45; }
+  50% { opacity: .9; }
+}
+.more-sentinel > span { animation: sentinel-breathe 2.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .trow.flow-in { animation: none; }
+  .more-sentinel > span { animation: none; opacity: .7; }
+}
+/* A row is tappable for its detail popup, so give it a pointer + hover tint.
+   Tint via background-image only: the surface's opaque background-color is what
+   hides the swipe Edit/Delete buttons sitting behind it, and overriding it with
+   a translucent colour let them show through on hover. */
+.trow-surface { cursor: pointer; }
+.trow-surface:hover {
+  background-image: linear-gradient(rgba(127,127,127,.07), rgba(127,127,127,.07));
+}
+
+/* entry detail popup */
+.detail-modal {
+  width: min(560px, calc(100vw - 2rem));
+  max-height: min(82vh, 760px); overflow-y: auto;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--card); color: var(--ink);
+  padding: 1.1rem 1.25rem 1.25rem;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .3);
+}
+.detail-modal::backdrop { background: rgba(0, 0, 0, .5); }
+.detail-head { display: flex; align-items: flex-start; gap: .75rem; margin-bottom: .7rem; }
+.detail-title { flex: 1; margin: 0; font-size: 1.12rem; font-weight: 600; overflow-wrap: break-word; }
+/* Wider key column than the scan readout — labels here run to "Last checked". */
+.detail-modal .sd-row { grid-template-columns: 108px 1fr; }
+.dup-note { margin-top: .2rem; }
+.detail-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
+  margin-top: 1rem; padding-top: .85rem; border-top: 1px solid var(--border);
+}
+@media (max-width: 520px) {
+  .detail-modal { padding: .9rem 1rem 1rem; }
+  .detail-modal .sd-row { grid-template-columns: 1fr; gap: .05rem; }
+}
+
+/* Icon-only row actions (edit / delete). */
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0; border: none; border-radius: 7px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.icon-btn svg { width: 16px; height: 16px; display: block; }
+.icon-btn:hover { background: rgba(127,127,127,.16); color: var(--ink); }
+.icon-btn.danger:hover { background: rgba(220,38,38,.15); color: var(--urgent); }
 
 .pill { display: inline-block; padding: .1rem .55rem; border-radius: 999px;
   font-size: .8rem; font-weight: 600; }
@@ -412,10 +553,7 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .pill.cat { background: rgba(37,99,235,.14); color: var(--primary); }
 .pill.dup { background: rgba(148,163,184,.22); color: var(--muted); border: 1px solid var(--border); cursor: help; }
 
-/* expandable "covers N domains" list on a tracked entry */
-.cover-toggle { background: none; border: none; padding: 0; margin-top: .2rem;
-  color: var(--primary); font: inherit; font-size: .78rem; cursor: pointer; }
-.cover-toggle:hover { text-decoration: underline; }
+/* the domains (SANs) a cert covers, listed in the detail popup */
 .cover-list { display: flex; flex-wrap: wrap; gap: .35rem; }
 .cover-chip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem;
   background: rgba(127,127,127,.14); padding: .18rem .5rem; border-radius: 5px; word-break: break-all; }
@@ -597,8 +735,8 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
        rows (Edit/Delete buttons) resolve the 1fr name column identically —
        otherwise an `auto` actions column differs between them and every column
        drifts out of alignment. Each is sized to its widest real content:
-       the Service/Contract pill, a date, "118 days", "untrusted", Edit+Delete. */
-    grid-template-columns: minmax(0, 1fr) 104px 86px 74px 68px 92px;
+       the Service/Contract pill, a date, "118 days", "untrusted", two icons. */
+    grid-template-columns: minmax(0, 1fr) 104px 86px 74px 68px 64px;
     grid-template-areas: none;
     gap: .5rem; align-items: center;
   }
@@ -627,26 +765,13 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
   .tc-rem { grid-column: 4; grid-row: 1; justify-self: start; align-self: center; }
   .tc-trust { grid-column: 5; grid-row: 1; }
   .tc-actions { grid-column: 6; grid-row: 1; display: block; text-align: right; white-space: nowrap; }
-  .swipe-hint { display: none; }
+  /* Rows don't swipe in the table layout, but they still open on click, so the
+     footer stays — only the swipe half of the sentence goes. */
+  .swipe-only { display: none; }
 
-  /* The secondary detail (host, fingerprint, last-checked, stored secret,
-     "covers N domains") is authored as <br>-separated spans for the mobile
-     card. Stacked inside a table cell it turned a scanned endpoint into a
-     five-line row. Dropping the breaks lets it wrap as one muted line under
-     the name, with spacing rather than punctuation separating the parts. */
   .tc-name { line-height: 1.35; }
-  .tc-name br { display: none; }
-  .tc-name > strong,
-  .tc-name > .muted,
-  .tc-name > .checkline,
-  .tc-name > .secretline,
-  .tc-name > .cover-toggle { margin-right: .55rem; }
-  /* Keep the truncated SHA-256 in one piece — wrapping it mid-hash ("6" then
-     "88f99185e12…") reads like corruption. It moves to the next line whole. */
-  .tc-name > .mono { white-space: nowrap; }
   /* Trim the pills and buttons to match the tighter tracks. */
   .tc-type .pill, .tc-trust .pill { font-size: .74rem; padding: .1rem .42rem; }
   .tc-rem .pill { font-size: .76rem; padding: .1rem .45rem; }
-  .tc-actions .btn { font-size: .8rem; padding: .25rem .4rem; }
 }
 /* Settings tables: drop the min-width on narrow cards so they never scroll. */

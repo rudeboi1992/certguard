@@ -32,13 +32,25 @@
     <section class="summary" id="summary"></section>
 
     <div class="grid-toolbar">
-      <select id="addSectionDash" class="add-section"></select>
+      <button id="addSectionDash" class="nav-btn">＋ Add section</button>
+      <button id="compactDashLayout" class="nav-btn toggle-btn" aria-pressed="true" title="On: fill gaps with whichever card fits, densest layout. Off: strict order, gaps left visible.">Compact</button>
+      <button id="centerDashLayout" class="nav-btn toggle-btn" aria-pressed="false" title="Center the cards instead of packing them left">Center cards</button>
       <button id="resetDashLayout" class="nav-btn">Reset layout</button>
-      <span class="muted small">Drag ⠿ to reorder · drag a card's right or bottom edge to resize · × to hide.</span>
+      <span class="info-tip" tabindex="0" role="note" aria-label="How to arrange the cards">
+        <!-- Drawn rather than typeset: a glyph sits on its own baseline and
+             side bearings, so an "i" in a round box never looks truly centred.
+             This one is centred by geometry. -->
+        <svg class="info-dot" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+          <circle cx="12" cy="12" r="9.4"/>
+          <path d="M12 11.1v5.4"/>
+          <circle cx="12" cy="7.7" r="1.05" fill="currentColor" stroke="none"/>
+        </svg>
+        <span class="info-pop">Drag ⠿ to reorder · drag a card's right or bottom edge to resize · double-click the bottom edge to match the tallest card in the row · × to hide.</span>
+      </span>
     </div>
 
     <div class="widget-grid" id="dashGrid">
-      <section class="card widget" id="w-add" data-admin data-autoheight data-title="Add an entry" style="grid-column: span 2">
+      <section class="card widget" id="w-add" data-admin data-autoheight data-desc="Scan a live endpoint, or record anything with an expiry date by hand." data-title="Add an entry" style="grid-column: span 2">
         <div class="widget-bar">
           <span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Add an entry</span></span>
           <span class="spacer"></span>
@@ -101,7 +113,7 @@
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget" id="w-calendar" data-title="Calendar" style="grid-column: span 4">
+      <section class="card widget" id="w-calendar" data-desc="Year and month view of when everything expires, with an .ics export." data-title="Calendar" style="grid-column: span 4">
         <div class="widget-bar">
           <span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Calendar</span></span>
           <span class="spacer"></span>
@@ -124,7 +136,7 @@
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget" id="w-tracked" data-matchheight="w-add" data-title="Tracked expirations" style="grid-column: span 4">
+      <section class="card widget" id="w-tracked" data-matchheight="w-add" data-desc="The full inventory — search, sort, and open any entry for detail." data-title="Tracked expirations" style="grid-column: span 4">
         <div class="widget-bar">
           <span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Tracked expirations</span></span>
           <span class="spacer"></span>
@@ -148,72 +160,96 @@
         </div>
         <p id="empty" class="muted" hidden>Nothing tracked yet.</p>
         <p id="noMatch" class="muted small" hidden>No entries match your search.</p>
-        <p class="muted small swipe-hint">Tip: swipe a row left to edit or delete it.</p>
         </div>
+        <!-- Outside .widget-body on purpose: the body is the scroll box, so a
+             tip inside it only appears once you reach the end of a paged list.
+             As a sibling it's a fixed card footer, always visible. -->
+        <p id="swipeHint" class="muted small swipe-hint">Tip: tap a row for full details.<span class="swipe-only"> Swipe it left to edit or delete.</span></p>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget widget-off" id="w-soon" data-title="Expiring soon" style="grid-column: span 2">
+      <section class="card widget widget-off" id="w-soon" data-desc="Just the entries expiring inside the next 30 days." data-title="Expiring soon" style="grid-column: span 2">
         <div class="widget-bar"><span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Expiring soon</span></span><span class="spacer"></span><button class="widget-hide" title="Hide this section" aria-label="Hide">×</button></div>
         <div class="widget-body"><div id="soonBody"></div></div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget widget-off" id="w-problems" data-title="Problems" style="grid-column: span 2">
+      <section class="card widget widget-off" id="w-problems" data-desc="Anything expired, untrusted, or failing its last scan." data-title="Problems" style="grid-column: span 2">
         <div class="widget-bar"><span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Problems</span></span><span class="spacer"></span><button class="widget-hide" title="Hide this section" aria-label="Hide">×</button></div>
         <div class="widget-body"><div id="problemsBody"></div></div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget widget-off" id="w-nextup" data-title="Next up" style="grid-column: span 1">
+      <section class="card widget widget-off" id="w-nextup" data-desc="The single next thing due, in large type." data-title="Next up" style="grid-column: span 1">
         <div class="widget-bar"><span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Next up</span></span><span class="spacer"></span><button class="widget-hide" title="Hide this section" aria-label="Hide">×</button></div>
         <div class="widget-body"><div id="nextupBody"></div></div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget widget-off" id="w-issuers" data-title="Issuers" style="grid-column: span 2">
+      <section class="card widget widget-off" id="w-issuers" data-desc="Which certificate authorities your certs come from." data-title="Issuers" style="grid-column: span 2">
         <div class="widget-bar"><span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Issuers</span></span><span class="spacer"></span><button class="widget-hide" title="Hide this section" aria-label="Hide">×</button></div>
         <div class="widget-body"><div id="issuersBody"></div></div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget widget-off" id="w-audit" data-title="Security audit" style="grid-column: span 2">
+      <section class="card widget widget-off" id="w-audit" data-desc="Weak keys, weak signatures, and over-long validity periods." data-title="Security audit" style="grid-column: span 2">
         <div class="widget-bar"><span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Security audit</span></span><span class="spacer"></span><button class="widget-hide" title="Hide this section" aria-label="Hide">×</button></div>
         <div class="widget-body"><div id="auditBody"></div></div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget widget-off" id="w-scanhealth" data-title="Scan health" style="grid-column: span 2">
+      <section class="card widget widget-off" id="w-scanhealth" data-desc="How recently each endpoint was checked, and what failed." data-title="Scan health" style="grid-column: span 2">
         <div class="widget-bar"><span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Scan health</span></span><span class="spacer"></span><button class="widget-hide" title="Hide this section" aria-label="Hide">×</button></div>
         <div class="widget-body"><div id="scanhealthBody"></div></div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget widget-off" id="w-renewals" data-title="Renewal watch" style="grid-column: span 2">
+      <section class="card widget widget-off" id="w-renewals" data-desc="Certificates issued in the last 14 days — recently renewed." data-title="Renewal watch" style="grid-column: span 2">
         <div class="widget-bar"><span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Renewal watch</span></span><span class="spacer"></span><button class="widget-hide" title="Hide this section" aria-label="Hide">×</button></div>
         <div class="widget-body"><div id="renewalsBody"></div></div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget widget-off" id="w-alerts" data-title="Alert preview" style="grid-column: span 2">
+      <section class="card widget widget-off" id="w-alerts" data-desc="What your notification channels would send right now." data-title="Alert preview" style="grid-column: span 2">
         <div class="widget-bar"><span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Alert preview</span></span><span class="spacer"></span><button class="widget-hide" title="Hide this section" aria-label="Hide">×</button></div>
         <div class="widget-body"><div id="alertsBody"></div></div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget widget-off" id="w-scheduler" data-title="Scheduler" style="grid-column: span 2">
+      <section class="card widget widget-off" id="w-scheduler" data-desc="Background scan status, with a run-now button." data-title="Scheduler" style="grid-column: span 2">
         <div class="widget-bar"><span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Scheduler</span></span><span class="spacer"></span><button class="widget-hide" title="Hide this section" aria-label="Hide">×</button></div>
         <div class="widget-body"><div id="schedulerBody"></div></div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
 
-      <section class="card widget widget-off" id="w-notes" data-title="Notes" style="grid-column: span 2">
+      <section class="card widget widget-off" id="w-notes" data-desc="A scratchpad kept in this browser." data-title="Notes" style="grid-column: span 2">
         <div class="widget-bar"><span class="widget-drag" title="Drag to move"><span class="widget-grip">⠿</span><span class="widget-title">Notes</span></span><span class="spacer"></span><button class="widget-hide" title="Hide this section" aria-label="Hide">×</button></div>
         <div class="widget-body"><textarea id="notesInput" class="notes-input" placeholder="Reminders, runbook links, renewal notes… (saved in this browser)"></textarea></div>
         <span class="widget-resize" title="Drag to resize width"></span>
       </section>
     </div>
   </main>
+
+  <!-- Section picker: every hidden card, three across, with what it shows. -->
+  <dialog id="addSectionDialog" class="detail-modal section-modal" aria-labelledby="addSectionTitle">
+    <div class="detail-head">
+      <h2 id="addSectionTitle" class="detail-title">Add a section</h2>
+      <button type="button" class="widget-hide" id="addSectionClose" title="Close" aria-label="Close">×</button>
+    </div>
+    <div id="addSectionGrid" class="section-grid"></div>
+  </dialog>
+
+  <!-- Full readout for one entry. Rows stay minimal (name, type, date, days,
+       status) so the card works in a narrow column; everything else lives here
+       and opens on tap. -->
+  <dialog id="entryDetail" class="detail-modal" aria-labelledby="detailTitle">
+    <div class="detail-head">
+      <h2 id="detailTitle" class="detail-title"></h2>
+      <button type="button" class="widget-hide" id="detailClose" title="Close" aria-label="Close">×</button>
+    </div>
+    <div id="detailBody"></div>
+    <div id="detailActions" class="detail-actions"></div>
+  </dialog>
 
   <div id="toast" class="toast" hidden></div>
 
