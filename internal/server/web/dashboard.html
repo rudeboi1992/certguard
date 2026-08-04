@@ -246,7 +246,7 @@
   </dialog>
 
   <!-- Section picker: every hidden card, three across, with what it shows. -->
-  <dialog id="addSectionDialog" class="detail-modal section-modal" aria-labelledby="addSectionTitle">
+  <dialog id="addSectionDialog" class="detail-modal section-modal" tabindex="-1" aria-labelledby="addSectionTitle">
     <div class="detail-head">
       <h2 id="addSectionTitle" class="detail-title">Add a section</h2>
       <button type="button" class="widget-hide" id="addSectionClose" title="Close" aria-label="Close">×</button>
@@ -257,7 +257,7 @@
   <!-- Full readout for one entry. Rows stay minimal (name, type, date, days,
        status) so the card works in a narrow column; everything else lives here
        and opens on tap. -->
-  <dialog id="entryDetail" class="detail-modal" aria-labelledby="detailTitle">
+  <dialog id="entryDetail" class="detail-modal" tabindex="-1" aria-labelledby="detailTitle">
     <div class="detail-head">
       <h2 id="detailTitle" class="detail-title"></h2>
       <button type="button" class="widget-hide" id="detailClose" title="Close" aria-label="Close">×</button>

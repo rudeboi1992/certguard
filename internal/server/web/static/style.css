@@ -48,6 +48,14 @@
    these a scroll container, which silently kills `position: sticky` on any
    descendant (the settings sidebar). */
 html, body { overflow-x: clip; max-width: 100%; }
+/* iOS Safari zooms the page whenever you focus a field whose text is under
+   16px, and it does not zoom back out. Several controls here sit at .88–.92rem
+   for density, so on touch devices they all go to 16px. !important because the
+   per-component rules are single-class and would otherwise win — this is a
+   blanket rule that has to beat every one of them. */
+@media (pointer: coarse) {
+  input, select, textarea { font-size: 16px !important; }
+}
 
 /* Custom, auto-hiding scrollbars: transparent until the element is actively
    scrolled (JS adds `.scrolling`); card bodies also reveal on hover. */

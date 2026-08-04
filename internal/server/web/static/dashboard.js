@@ -567,6 +567,10 @@ function openDetail(id) {
   renderDetail(it);
   const dlg = $('entryDetail');
   if (!dlg.open) dlg.showModal();
+  // showModal() focuses the first focusable descendant, which here is the ×.
+  // iOS paints a focus ring on it, so the close button opens looking selected.
+  // Focus the dialog itself instead (it carries tabindex="-1").
+  dlg.focus();
 }
 
 function closeDetail() {

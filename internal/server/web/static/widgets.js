@@ -244,29 +244,51 @@ function initWidgetGrid(grid, storageKey, opts) {
   // and each frame re-applies the drag — the pointer is still, but the content
   // moves under it, so the card keeps growing. Speed ramps with depth into the
   // band so a nudge creeps and a firm push moves.
-  const EDGE_BAND = 90, EDGE_MAX = 24;
-  let edgeRaf = null, edgePointerY = 0, edgeApply = null;
-  function edgeFrame() {
-    edgeRaf = null;
+  // Speed ramps with the SQUARE of how far into the band the pointer is, and
+  // tops out low. Resizing the last card on the page is a feedback loop — every
+  // pixel it grows extends the document, which creates the scroll room for the
+  // next frame — so it never runs out of room and whatever speed is set here is
+  // simply how fast the card grows, indefinitely. A linear ramp at 24px/frame
+  // meant ~1400px/s, far too fast to land on a size. Squared, the first third of
+  // the band barely creeps and you have to push deliberately to go quickly.
+  // Measured in pixels per SECOND, not per frame: a per-frame budget is silently
+  // multiplied by the refresh rate, and on a 120Hz screen the same constant
+  // moved twice as fast as intended. Fractional pixels are carried over between
+  // frames too — scrollBy(0.4) rounds to nothing, so the shallow end of the band
+  // did precisely nothing however long you held it there.
+  const EDGE_BAND = 90, EDGE_SPEED = 300;
+  let edgeRaf = null, edgePointerY = 0, edgeApply = null, edgeLast = 0, edgeAcc = 0;
+  function edgeFrame(ts) {
+    const dt = edgeLast ? Math.min(50, ts - edgeLast) : 16;
+    edgeLast = ts;
     const h = window.innerHeight;
-    let v = 0;
-    if (edgePointerY > h - EDGE_BAND) v = ((edgePointerY - (h - EDGE_BAND)) / EDGE_BAND) * EDGE_MAX;
-    else if (edgePointerY < EDGE_BAND) v = -((EDGE_BAND - edgePointerY) / EDGE_BAND) * EDGE_MAX;
-    if (v) {
-      const before = window.scrollY;
-      window.scrollBy(0, Math.max(-EDGE_MAX, Math.min(EDGE_MAX, v)));
-      if (window.scrollY !== before && edgeApply) edgeApply();
+    let dir = 0, depth = 0;
+    if (edgePointerY > h - EDGE_BAND) { dir = 1; depth = (edgePointerY - (h - EDGE_BAND)) / EDGE_BAND; }
+    else if (edgePointerY < EDGE_BAND) { dir = -1; depth = (EDGE_BAND - edgePointerY) / EDGE_BAND; }
+    if (dir) {
+      // Squared ramp: the first third of the band creeps, and you have to push
+      // deliberately to move quickly.
+      edgeAcc += dir * Math.min(1, depth) ** 2 * EDGE_SPEED * (dt / 1000);
+      const step = Math.trunc(edgeAcc);
+      if (step) {
+        edgeAcc -= step;
+        const before = window.scrollY;
+        window.scrollBy(0, step);
+        if (window.scrollY !== before && edgeApply) edgeApply();
+      }
+    } else {
+      edgeAcc = 0;
     }
     edgeRaf = requestAnimationFrame(edgeFrame);
   }
   function edgeScrollOn(apply, y) {
-    edgeApply = apply; edgePointerY = y;
+    edgeApply = apply; edgePointerY = y; edgeLast = 0; edgeAcc = 0;
     if (!edgeRaf) edgeRaf = requestAnimationFrame(edgeFrame);
   }
   const edgeTrack = (y) => { edgePointerY = y; };
   function edgeScrollOff() {
     if (edgeRaf) cancelAnimationFrame(edgeRaf);
-    edgeRaf = null; edgeApply = null;
+    edgeRaf = null; edgeApply = null; edgeLast = 0; edgeAcc = 0;
   }
 
   // A line across the grid at the edge a snap has locked onto.
@@ -488,7 +510,8 @@ function initWidgetGrid(grid, storageKey, opts) {
       refreshAdd(); save(); layout();
     }));
   if (addButton && addDialog) {
-    addButton.addEventListener('click', () => { refreshAdd(); addDialog.showModal(); });
+    // Focus the dialog, not its × — see the note in openDetail().
+    addButton.addEventListener('click', () => { refreshAdd(); addDialog.showModal(); addDialog.focus(); });
     addDialog.addEventListener('click', (e) => { if (e.target === addDialog) addDialog.close(); });
     const close = addDialog.querySelector('#addSectionClose');
     if (close) close.addEventListener('click', () => addDialog.close());
