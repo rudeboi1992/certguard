@@ -46,6 +46,15 @@ function fmtDate(iso) {
   return d.toISOString().slice(0, 10);
 }
 
+// Short form for narrow layouts: mm/dd/yy. UTC to match fmtDate, so a row can
+// show either without the two disagreeing near midnight.
+function fmtDateShort(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getUTCMonth() + 1)}/${p(d.getUTCDate())}/${p(d.getUTCFullYear() % 100)}`;
+}
+
 // relTime renders a compact "how long ago" label, e.g. "just now", "5m ago".
 function relTime(iso) {
   if (!iso) return '';

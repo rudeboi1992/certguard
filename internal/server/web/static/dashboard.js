@@ -174,9 +174,9 @@ function buildRow(it) {
     <div class="trow-actions" aria-hidden="true">${swipeActions}</div>
     <div class="trow-surface">
       <div class="tcol tc-name"><strong>${escapeHtml(c.name)}</strong></div>
-      <div class="tcol tc-type">${typeCell}</div>
       <div class="tcol tc-meta">
-        <span class="tc-exp">${fmtDate(c.expires_at)}</span>
+        <span class="tc-exp"><span class="d-long">${fmtDate(c.expires_at)}</span><span class="d-short">${fmtDateShort(c.expires_at)}</span></span>
+        <span class="tc-type">${typeCell}</span>
         <span class="tc-rem"><span class="pill ${level}">${fmtRemaining(days)}</span></span>
         <span class="tc-trust">${trustCell}</span>
       </div>

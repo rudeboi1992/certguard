@@ -514,10 +514,10 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .swipe-act.del { background: var(--urgent); }
 .trow-surface {
   position: relative; z-index: 1; background: var(--card);
-  /* Card layout: name with its type alongside on the first line, then a meta
-     line underneath carrying date · days remaining · status. */
-  display: grid; grid-template-columns: minmax(0, auto) 1fr;
-  grid-template-areas: "name type" "meta meta";
+  /* Card layout: the name gets its own line, then everything else underneath —
+     date first, then the coloured pills. */
+  display: grid; grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "name" "meta";
   gap: .25rem .6rem; padding: .75rem;
   transform: translateX(var(--sx, 0px)); transition: transform .22s ease;
   touch-action: pan-y;
@@ -528,9 +528,12 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
    breaks a word that genuinely cannot fit, so long hosts and fingerprints still
    wrap but ordinary names stay whole. */
 .tc-name { grid-area: name; min-width: 0; overflow-wrap: break-word; word-break: normal; }
-.tc-type { grid-area: type; justify-self: start; align-self: start; }
 .tc-meta { grid-area: meta; display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; }
 .tc-meta .tc-exp { color: var(--muted); }
+/* Two spellings of the same date; the layout picks one. mm/dd/yy in the card,
+   ISO in the table where the column is sortable-looking and wide enough. */
+.d-long { display: none; }
+.d-short { display: inline; }
 /* Manual entries carry no trust badge — collapse the cell so the flex gap
    doesn't leave a hole after the days pill. */
 .tc-trust:empty { display: none; }
@@ -828,6 +831,8 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
   .tc-meta { display: contents; }
   /* Pin every cell to row 1 — otherwise sparse auto-placement can't backfill an
      earlier column once a later one is taken, and cells spill to a 2nd row. */
+  .d-long { display: inline; }
+  .d-short { display: none; }
   .tc-name { grid-column: 1; grid-row: 1; }
   .tc-type { grid-column: 2; grid-row: 1; }
   .tc-exp { grid-column: 3; grid-row: 1; color: inherit; }
