@@ -12,6 +12,7 @@
   <header class="topbar">
     <div class="topbar-inner">
       <span class="brand">certguard</span>
+      <button id="vaultLockBtn" class="nav-btn vault-btn" hidden></button>
       <span class="spacer"></span>
       <span id="whoami" class="muted"></span>
       <button id="themeToggle" class="nav-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
@@ -23,12 +24,6 @@
   </header>
 
   <main>
-    <div id="vaultLock" class="vault-lock" hidden>
-      <span class="vault-msg">🔒 The secret vault is locked.</span>
-      <input type="password" id="vaultPass" placeholder="Passphrase" autocomplete="off">
-      <button class="btn primary small" id="vaultUnlockBtn">Unlock</button>
-      <span id="vaultLockErr" class="error small" hidden></span>
-    </div>
     <section class="summary" id="summary"></section>
 
     <div class="grid-toolbar">
@@ -229,6 +224,26 @@
       </section>
     </div>
   </main>
+
+  <!-- Unlock prompt. A dialog rather than an inline banner so it can also open
+       on top of the entry detail popup, which is where Reveal lives. -->
+  <dialog id="vaultDialog" class="detail-modal vault-modal" aria-labelledby="vaultTitle">
+    <div class="vault-head">
+      <span class="vault-badge" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10" rx="2.2"/><path d="M8 10.5V7.6a4 4 0 0 1 8 0v2.9"/></svg>
+      </span>
+      <span class="vault-copy">
+        <strong class="vault-title" id="vaultTitle">Vault locked</strong>
+        <span class="vault-sub muted">Enter your passphrase to reveal or store secrets.</span>
+      </span>
+      <button type="button" class="widget-hide" id="vaultClose" title="Close" aria-label="Close">×</button>
+    </div>
+    <div class="vault-form">
+      <input type="password" id="vaultPass" placeholder="Passphrase" autocomplete="current-password">
+      <button class="btn primary" id="vaultUnlockBtn">Unlock</button>
+    </div>
+    <p id="vaultLockErr" class="error small" hidden></p>
+  </dialog>
 
   <!-- Section picker: every hidden card, three across, with what it shows. -->
   <dialog id="addSectionDialog" class="detail-modal section-modal" aria-labelledby="addSectionTitle">

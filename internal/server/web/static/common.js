@@ -7,6 +7,7 @@ let isAdmin = false;
 let currentUserId = null;
 let secretsEnabled = false;
 let vaultLocked = false; // vault is passphrase-protected and currently locked
+let vaultLockable = false; // a passphrase is set, so it can be locked on demand
 let zkEnabled = false;   // zero-knowledge mode: all secret crypto is client-side
 let caAvailable = false; // a CA cert is available for download
 let caUrl = '/ca.crt';   // where the CA download button points
@@ -80,6 +81,9 @@ async function loadWhoami() {
   vaultLocked = zkEnabled
     ? !ZK.isUnlocked()
     : (!!data.secrets_enabled && !!data.vault_passphrase && !data.vault_unlocked);
+  // Auto mode (key file on disk) has nothing to lock — only a passphrase vault,
+  // or zero-knowledge mode, can be closed again on demand.
+  vaultLockable = zkEnabled || (!!data.secrets_enabled && !!data.vault_passphrase);
   $('whoami').textContent = `${u.email} · ${u.role}`;
   return u;
 }

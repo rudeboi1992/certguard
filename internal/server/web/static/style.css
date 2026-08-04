@@ -95,7 +95,13 @@ code { background: rgba(127,127,127,.15); padding: .05em .35em; border-radius: 4
 
 .brand { font-weight: 700; letter-spacing: -.02em; font-size: 1.15rem; }
 
-.topbar { padding: .75rem 0; background: var(--card); border-bottom: 1px solid var(--border); }
+/* Pinned: the vault state, theme and settings stay reachable however far down
+   a long tracked list you are. Above dragged cards (z 50) and the snap guide
+   (z 60) so nothing floats over it; dialogs sit in the top layer regardless. */
+.topbar {
+  position: sticky; top: 0; z-index: 70;
+  padding: .75rem 0; background: var(--card); border-bottom: 1px solid var(--border);
+}
 /* Constrain header content to the same width as <main> so the logo and
    Sign-out line up with the cards below instead of hugging the window edges. */
 .topbar-inner {
@@ -443,23 +449,48 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .twofa-qr { display: block; width: 200px; height: 200px; margin: .6rem 0; border-radius: 8px;
   background: #fff; padding: 8px; }
 #vaultSec { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .4rem; }
-/* A slim inline notice, not a panel: lock, message, field and button on one
-   row. The passphrase input needs an explicit width — the global
-   input[type=password] rule is width:100%, which made every child claim a full
-   line and turned this into a three-row block taller than the stats. */
-.vault-lock {
-  display: flex; align-items: center; gap: .55rem; flex-wrap: wrap;
-  background: rgba(234, 179, 8, .08);
-  border: 1px solid rgba(234, 179, 8, .25); border-left: 3px solid var(--notice);
-  border-radius: var(--radius);
-  padding: .5rem .75rem; margin-bottom: 1rem; font-size: .9rem;
+/* Vault notice: a card on the page surface, not a coloured warning strip. The
+   only accent is the amber lock badge, which carries the state without
+   shouting. Note the passphrase field needs an explicit width — the global
+   input[type=password] rule is width:100%, which otherwise makes every sibling
+   claim its own line. */
+.detail-modal.vault-modal { width: min(420px, calc(100vw - 2rem)); }
+.vault-head { display: flex; align-items: flex-start; gap: .8rem; margin-bottom: 1rem; }
+/* Beside the wordmark: the icon alone carries the state — no chip, no fill.
+   Unlocked is the state worth noticing (secrets are readable right now), so
+   that one is red; locked is neutral. --ink rather than literal white, since a
+   white icon would vanish against the light theme's topbar.
+   Selectors are compounded with .nav-btn deliberately: .nav-btn:hover is
+   (0,2,0), so a lone .vault-btn at (0,1,0) loses to it.
+   The colour goes on the <svg>, not the button: the icon strokes with
+   currentColor, and .nav-btn svg sets only geometry, so there is nothing to
+   fight — unlike the button itself, where the .nav-btn rules kept winning. */
+.vault-btn svg { width: 18px; height: 18px; display: block; color: var(--urgent); }
+.vault-btn.locked svg { color: var(--ink); }
+.nav-btn.vault-btn, .nav-btn.vault-btn:hover { background: none; }
+.nav-btn.vault-btn:hover { opacity: .75; }
+.vault-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 auto; width: 38px; height: 38px; border-radius: 11px;
+  background: rgba(234, 179, 8, .14); color: var(--notice);
 }
-.vault-msg { margin-right: .15rem; }
-.vault-lock input[type=password] {
-  width: auto; flex: 0 1 220px; min-width: 140px;
-  padding: .34rem .55rem; border: 1px solid var(--border); border-radius: 7px;
-  background: var(--card); color: var(--ink); font: inherit; font-size: .88rem;
+.vault-badge svg { width: 20px; height: 20px; display: block; }
+.vault-copy { display: flex; flex-direction: column; gap: .15rem; min-width: 0; flex: 1; }
+.vault-title { font-size: 1.02rem; font-weight: 600; letter-spacing: -.01em; }
+.vault-sub { font-size: .85rem; line-height: 1.45; }
+/* Field and button read as one control. */
+.vault-form { display: flex; align-items: center; gap: .5rem; }
+.vault-modal input[type=password] {
+  width: auto; flex: 1 1 auto; min-width: 0;
+  padding: .55rem .7rem; border: 1px solid var(--border); border-radius: 9px;
+  background: var(--bg); color: var(--ink); font: inherit; font-size: .92rem;
+  transition: border-color .12s, box-shadow .12s;
 }
+.vault-modal input[type=password]:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .16);
+}
+.vault-modal .error { margin: .6rem 0 0; }
 .trow-head { display: none; }
 .trow { position: relative; overflow: hidden; border-bottom: 1px solid var(--border); }
 .trow-actions { position: absolute; top: 0; right: 0; bottom: 0; display: flex; }
