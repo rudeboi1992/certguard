@@ -256,22 +256,40 @@ body.dragging-widget { cursor: grabbing; user-select: none; }
 /* "Add section" toolbar */
 .grid-toolbar { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 
-/* Section picker: three tiles across, each saying what the card shows. */
-.section-modal { width: min(860px, calc(100vw - 2rem)); }
+/* Section picker: three tiles across, each saying what the card shows.
+   Compound selector so this beats .detail-modal's narrower width regardless of
+   which rule comes later in the file — it shares the class for its chrome. */
+.detail-modal.section-modal { width: min(920px, calc(100vw - 2rem)); }
 .section-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
 .section-card {
-  display: flex; flex-direction: column; align-items: flex-start; gap: .3rem;
+  display: flex; flex-direction: column; align-items: stretch; gap: .55rem;
   text-align: left; font: inherit; cursor: pointer;
-  padding: .8rem .85rem; border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--bg); color: var(--ink);
+  padding: .55rem .55rem .7rem; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg); color: var(--ink); outline: none;
   transition: border-color .12s, background .12s, transform .12s;
 }
 .section-card:hover, .section-card:focus-visible {
   border-color: var(--primary); background: rgba(37,99,235,.06); transform: translateY(-1px);
 }
+/* Thumbnail: the card's real body, scaled down and clipped. The inner span is
+   sized 1/scale wide so the shrunken copy still fills the box edge to edge. */
+.section-card-preview {
+  display: block; position: relative; overflow: hidden;
+  height: 148px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--card); pointer-events: none;
+}
+.section-card-preview-inner {
+  display: block; position: absolute; top: 0; left: 0;
+  transform-origin: top left; padding: .5rem .6rem;
+}
+/* Fade the cut-off bottom so the clip reads as intentional. */
+.section-card-preview::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 26px;
+  background: linear-gradient(to bottom, transparent, var(--card));
+}
+.section-card-meta { display: flex; flex-direction: column; gap: .2rem; padding: 0 .3rem; }
 .section-card-title { font-weight: 600; }
-.section-card-desc { color: var(--muted); font-size: .82rem; line-height: 1.4; flex: 1; }
-.section-card-cta { color: var(--primary); font-size: .82rem; font-weight: 600; margin-top: .15rem; }
+.section-card-desc { color: var(--muted); font-size: .8rem; line-height: 1.4; }
 @media (max-width: 760px) { .section-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 480px) { .section-grid { grid-template-columns: 1fr; } }
 /* A nav-btn that stays lit while its setting is on. */
@@ -425,11 +443,23 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .twofa-qr { display: block; width: 200px; height: 200px; margin: .6rem 0; border-radius: 8px;
   background: #fff; padding: 8px; }
 #vaultSec { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .4rem; }
-.vault-lock { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
-  background: rgba(234,179,8,.12); border: 1px solid rgba(234,179,8,.4);
-  border-radius: var(--radius); padding: .7rem .9rem; margin-bottom: 1.25rem; font-size: .92rem; }
-.vault-lock input { padding: .4rem .6rem; border: 1px solid var(--border); border-radius: 8px;
-  background: var(--bg); color: var(--ink); font: inherit; }
+/* A slim inline notice, not a panel: lock, message, field and button on one
+   row. The passphrase input needs an explicit width — the global
+   input[type=password] rule is width:100%, which made every child claim a full
+   line and turned this into a three-row block taller than the stats. */
+.vault-lock {
+  display: flex; align-items: center; gap: .55rem; flex-wrap: wrap;
+  background: rgba(234, 179, 8, .08);
+  border: 1px solid rgba(234, 179, 8, .25); border-left: 3px solid var(--notice);
+  border-radius: var(--radius);
+  padding: .5rem .75rem; margin-bottom: 1rem; font-size: .9rem;
+}
+.vault-msg { margin-right: .15rem; }
+.vault-lock input[type=password] {
+  width: auto; flex: 0 1 220px; min-width: 140px;
+  padding: .34rem .55rem; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--card); color: var(--ink); font: inherit; font-size: .88rem;
+}
 .trow-head { display: none; }
 .trow { position: relative; overflow: hidden; border-bottom: 1px solid var(--border); }
 .trow-actions { position: absolute; top: 0; right: 0; bottom: 0; display: flex; }

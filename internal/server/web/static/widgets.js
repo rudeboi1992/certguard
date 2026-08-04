@@ -314,22 +314,139 @@ function initWidgetGrid(grid, storageKey, opts) {
       addButton.textContent = off.length ? `＋ Add section (${off.length})` : '＋ Add section';
     }
     if (!addGrid) return;
-    addGrid.innerHTML = off.length
-      ? off.map((c) => `
-          <button type="button" class="section-card" data-add="${c.id}">
-            <span class="section-card-title">${escapeHtml(c.dataset.title || c.id)}</span>
-            <span class="section-card-desc">${escapeHtml(c.dataset.desc || '')}</span>
-            <span class="section-card-cta">＋ Add</span>
-          </button>`).join('')
-      : '<p class="muted">Every section is already on the dashboard.</p>';
-    addGrid.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => {
-      const el = document.getElementById(b.dataset.add);
-      if (!el) return;
-      el.classList.remove('widget-off');
-      refreshAdd(); save(); layout();
-      if (!addGrid.querySelector('[data-add]') && addDialog && addDialog.open) addDialog.close();
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }));
+    addGrid.innerHTML = '';
+    if (!off.length) {
+      addGrid.innerHTML = '<p class="muted">Every section is already on the dashboard.</p>';
+      return;
+    }
+    for (const c of off) {
+      const tile = document.createElement('div');
+      // Not a <button>: the preview clones real card bodies, which contain form
+      // controls, and interactive content nested in a button is invalid and
+      // swallows clicks. role + keyboard handler give the same behaviour.
+      tile.className = 'section-card';
+      tile.setAttribute('role', 'button');
+      tile.tabIndex = 0;
+      tile.dataset.add = c.id;
+      tile.appendChild(sectionPreview(c));
+      const meta = document.createElement('span');
+      meta.className = 'section-card-meta';
+      meta.innerHTML =
+        `<span class="section-card-title">${escapeHtml(c.dataset.title || c.id)}</span>` +
+        `<span class="section-card-desc">${escapeHtml(c.dataset.desc || '')}</span>`;
+      tile.appendChild(meta);
+      const add = () => {
+        c.classList.remove('widget-off');
+        refreshAdd(); save(); layout();
+        if (!addGrid.querySelector('[data-add]') && addDialog && addDialog.open) addDialog.close();
+        c.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      };
+      tile.addEventListener('click', add);
+      tile.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); add(); }
+      });
+      addGrid.appendChild(tile);
+    }
+  }
+
+  // Illustrative thumbnails. Cloning the live body was honest but useless for
+  // exactly the cards worth previewing: Problems, Security audit and Scan
+  // health are all a single "✓ nothing wrong" line on a healthy install, so the
+  // picker showed an empty box for the sections that matter most. These samples
+  // use each renderer's own markup and classes, so they look like the real card
+  // in the state you'd want to be warned about. Anything without a sample —
+  // Add, Tracked, Calendar — still clones its live body, which is always
+  // populated and recognisable.
+  // 0.6 renders the sample at ~1.7x tile width, close to a real card column, and
+  // keeps the pill text legible — the point is to read the outcome, not just
+  // recognise a shape.
+  const PREVIEW_SCALE = 0.6;
+  const row = (name, sub, pill, cls) =>
+    `<div class="mini-row"><span class="mini-name">${name}` +
+    (sub ? `<br><span class="muted small">${sub}</span>` : '') +
+    `</span><span class="pill ${cls}">${pill}</span></div>`;
+  const SAMPLES = {
+    'w-soon':
+      row('vpn.example.com', '', '3 days', 'urgent') +
+      row('Cloudflare API token', '', '11 days', 'warn') +
+      row('*.internal.lan', '', '24 days', 'notice') +
+      row('billing.example.com', '', '29 days', 'notice'),
+    'w-problems':
+      row('legacy.example.com', 'legacy.example.com:8443', 'self-signed', 'untrusted') +
+      row('mail.example.com', 'mail.example.com:993', 'expired', 'untrusted') +
+      row('vpn.example.com', 'vpn.example.com:443', 'hostname mismatch', 'untrusted'),
+    'w-nextup':
+      '<div class="nextup"><div class="nextup-num urgent">3 days</div>' +
+      '<div class="nextup-name">vpn.example.com</div>' +
+      '<div class="muted small">2026-08-07</div></div>',
+    'w-issuers':
+      ['Let\'s Encrypt 24', 'DigiCert Inc 6', 'Google Trust 3', 'Internal CA 1']
+        .map((s, i) => {
+          const n = s.split(' ').pop();
+          return `<div class="kv"><span class="kv-label">${s.slice(0, -n.length - 1)}</span>` +
+            `<span class="kv-bar"><span style="width:${[100, 25, 13, 4][i]}%"></span></span>` +
+            `<span class="kv-num">${n}</span></div>`;
+        }).join(''),
+    'w-audit':
+      `<div class="mini-row"><span class="mini-name">legacy.example.com</span>` +
+      `<span class="audit-flags"><span class="pill warn">weak key (RSA-1024)</span></span></div>` +
+      `<div class="mini-row"><span class="mini-name">old-appliance.lan</span>` +
+      `<span class="audit-flags"><span class="pill warn">weak signature</span></span></div>` +
+      `<div class="mini-row"><span class="mini-name">*.internal.lan</span>` +
+      `<span class="audit-flags"><span class="pill warn">long validity (825d)</span></span></div>`,
+    'w-scanhealth':
+      row('mail.example.com', 'mail.example.com:993', 'connection refused', 'untrusted') +
+      row('nas.internal.lan', 'nas.internal.lan:5001', 'checked 6d ago', 'notice') +
+      row('backup.example.com', 'backup.example.com:443', 'never checked', 'notice'),
+    'w-renewals':
+      `<div class="mini-row"><span class="mini-name">www.example.com</span>` +
+      `<span class="muted small mini-date">exp 2026-11-04</span>` +
+      `<span class="pill ok">issued 2d ago</span></div>` +
+      `<div class="mini-row"><span class="mini-name">api.example.com</span>` +
+      `<span class="muted small mini-date">exp 2026-11-01</span>` +
+      `<span class="pill ok">issued 5d ago</span></div>` +
+      `<div class="mini-row"><span class="mini-name">*.internal.lan</span>` +
+      `<span class="muted small mini-date">exp 2027-01-19</span>` +
+      `<span class="pill ok">issued 11d ago</span></div>`,
+    'w-alerts':
+      row('vpn.example.com', '3-day alert → email, slack', 'today', 'urgent') +
+      row('Cloudflare API token', '7-day alert → email', 'in 4d', 'notice') +
+      row('*.internal.lan', '30-day alert → webhook', 'in 9d', 'notice'),
+    'w-scheduler':
+      '<div class="kv2"><span class="muted">Auto-scan</span><span><span class="pill ok">on</span> · every 6h</span></div>' +
+      '<div class="kv2"><span class="muted">Last scan</span><span>18m ago</span></div>' +
+      '<div class="kv2"><span class="muted">Next scan</span><span>in 5h</span></div>' +
+      '<button class="btn primary small" tabindex="-1">Scan all now</button>',
+    'w-notes':
+      '<div class="notes-input" style="min-height:0;padding:.6rem .7rem">' +
+      'Renew the wildcard before the 12th — Sam has the DNS token.<br><br>' +
+      'FortiGate contract quote: see ticket #4192.</div>',
+  };
+
+  function sectionPreview(card) {
+    const box = document.createElement('span');
+    box.className = 'section-card-preview';
+    const inner = document.createElement('span');
+    inner.className = 'section-card-preview-inner';
+    inner.style.width = (100 / PREVIEW_SCALE) + '%';
+    inner.style.transform = `scale(${PREVIEW_SCALE})`;
+    inner.setAttribute('aria-hidden', 'true');
+    if (SAMPLES[card.id]) {
+      inner.innerHTML = SAMPLES[card.id];
+    } else {
+      const body = card.querySelector('.widget-body');
+      if (!body) return box;
+      const clone = body.cloneNode(true);
+      // Ids would duplicate live ones and break getElementById across the page.
+      clone.removeAttribute('id');
+      clone.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
+      // A long list would clone hundreds of rows for a box that shows a few.
+      clone.querySelectorAll('.trow').forEach((r, i) => { if (i >= 6) r.remove(); });
+      clone.querySelectorAll('input, select, textarea, button, a').forEach((n) => { n.tabIndex = -1; });
+      inner.appendChild(clone);
+    }
+    box.appendChild(inner);
+    return box;
   }
 
   // --- hide / add / reset ---
