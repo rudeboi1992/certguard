@@ -274,7 +274,10 @@ function initWidgetGrid(grid, storageKey, opts) {
         edgeAcc -= step;
         const before = window.scrollY;
         window.scrollBy(0, step);
-        if (window.scrollY !== before && edgeApply) edgeApply();
+        // Report what actually moved. Callers add up only the scrolling we
+        // asked for, never what the browser did on its own (see below).
+        const moved = window.scrollY - before;
+        if (moved && edgeApply) edgeApply(moved);
       }
     } else {
       edgeAcc = 0;
@@ -551,11 +554,11 @@ function initWidgetGrid(grid, storageKey, opts) {
       if (e.button !== 0) return;
       e.preventDefault();
       const card = handle.closest('.widget');
-      const x0 = e.clientX, y0 = e.clientY + window.scrollY; // page-space, see below
+      const x0 = e.clientX, y0 = e.clientY;
       const left0 = parseFloat(card.style.left) || 0;
       const top0 = parseFloat(card.style.top) || 0;
       let moved = false, ghost = null, index = -1, sizes = null;
-      let lastX = e.clientX, lastY = e.clientY;
+      let lastX = e.clientX, lastY = e.clientY, autoScrolled = 0;
 
       const begin = () => {
         moved = true;
@@ -583,13 +586,15 @@ function initWidgetGrid(grid, storageKey, opts) {
           ghost.style.width = p.w + 'px';
           ghost.style.height = p.h + 'px';
         }
-        // The card itself tracks the pointer, offset from where it started.
+        // The card itself tracks the pointer, offset from where it started,
+        // plus any scrolling we performed — same reasoning as the height drag.
         card.style.left = (left0 + lastX - x0) + 'px';
-        card.style.top = (top0 + lastY + window.scrollY - y0) + 'px';
+        card.style.top = (top0 + lastY - y0 + autoScrolled) + 'px';
       };
       // Re-evaluated each auto-scroll frame: the pointer is still, but rows are
       // sliding past it, so the drop slot genuinely changes.
-      const apply = () => {
+      const apply = (delta) => {
+        if (delta) autoScrolled += delta;
         if (!moved) return;
         const next = dropIndex(lastX, lastY, card);
         if (next !== index) index = next;
@@ -600,7 +605,7 @@ function initWidgetGrid(grid, storageKey, opts) {
         lastX = ev.clientX; lastY = ev.clientY;
         edgeTrack(ev.clientY);
         if (!moved) {
-          if (Math.abs(ev.clientX - x0) < 5 && Math.abs(ev.clientY + window.scrollY - y0) < 5) return;
+          if (Math.abs(ev.clientX - x0) < 5 && Math.abs(ev.clientY - y0) < 5) return;
           begin();
         }
         apply();
@@ -673,15 +678,18 @@ function initWidgetGrid(grid, storageKey, opts) {
     vh.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       markSized(card);
-      // Page coordinates, not viewport: while the page auto-scrolls the pointer
-      // holds still but the content slides under it, and only pageY captures
-      // that as continued dragging.
-      const startPageY = e.clientY + window.scrollY;
+      // Height tracks pointer movement plus the scrolling WE performed — never
+      // window.scrollY directly. Shrinking the last card on the page makes the
+      // document shorter, so the browser clamps the scroll position up, and
+      // reading scrollY fed that back in as more shrinking: a 100px drag took
+      // 294px off. Counting only deliberate auto-scroll breaks the loop.
+      const startClientY = e.clientY;
       const startH = card.offsetHeight;
       const natural = contentHeight(card); // measured once — it forces a reflow
-      let lastClientY = e.clientY;
-      const apply = () => {
-        const raw = Math.max(96, startH + (lastClientY + window.scrollY - startPageY));
+      let lastClientY = e.clientY, autoScrolled = 0;
+      const apply = (delta) => {
+        if (delta) autoScrolled += delta;
+        const raw = Math.max(96, startH + (lastClientY - startClientY) + autoScrolled);
         const snapped = applySnap(card, raw, natural);
         setHeight(card, snapped.h);
         layout();
