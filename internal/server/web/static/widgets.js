@@ -237,6 +237,38 @@ function initWidgetGrid(grid, storageKey, opts) {
     return best === null ? { h, hit: false } : { h: best, hit: true };
   }
 
+  // --- edge auto-scroll ---
+  // A drag that reaches the bottom of the window used to stop there: you cannot
+  // move the pointer any further, so a card near the foot of the page could not
+  // be made taller. While the pointer sits in an edge band the page now scrolls,
+  // and each frame re-applies the drag — the pointer is still, but the content
+  // moves under it, so the card keeps growing. Speed ramps with depth into the
+  // band so a nudge creeps and a firm push moves.
+  const EDGE_BAND = 90, EDGE_MAX = 24;
+  let edgeRaf = null, edgePointerY = 0, edgeApply = null;
+  function edgeFrame() {
+    edgeRaf = null;
+    const h = window.innerHeight;
+    let v = 0;
+    if (edgePointerY > h - EDGE_BAND) v = ((edgePointerY - (h - EDGE_BAND)) / EDGE_BAND) * EDGE_MAX;
+    else if (edgePointerY < EDGE_BAND) v = -((EDGE_BAND - edgePointerY) / EDGE_BAND) * EDGE_MAX;
+    if (v) {
+      const before = window.scrollY;
+      window.scrollBy(0, Math.max(-EDGE_MAX, Math.min(EDGE_MAX, v)));
+      if (window.scrollY !== before && edgeApply) edgeApply();
+    }
+    edgeRaf = requestAnimationFrame(edgeFrame);
+  }
+  function edgeScrollOn(apply, y) {
+    edgeApply = apply; edgePointerY = y;
+    if (!edgeRaf) edgeRaf = requestAnimationFrame(edgeFrame);
+  }
+  const edgeTrack = (y) => { edgePointerY = y; };
+  function edgeScrollOff() {
+    if (edgeRaf) cancelAnimationFrame(edgeRaf);
+    edgeRaf = null; edgeApply = null;
+  }
+
   // A line across the grid at the edge a snap has locked onto.
   let guideEl = null;
   function showGuide(y) {
@@ -496,10 +528,11 @@ function initWidgetGrid(grid, storageKey, opts) {
       if (e.button !== 0) return;
       e.preventDefault();
       const card = handle.closest('.widget');
-      const x0 = e.clientX, y0 = e.clientY;
+      const x0 = e.clientX, y0 = e.clientY + window.scrollY; // page-space, see below
       const left0 = parseFloat(card.style.left) || 0;
       const top0 = parseFloat(card.style.top) || 0;
       let moved = false, ghost = null, index = -1, sizes = null;
+      let lastX = e.clientX, lastY = e.clientY;
 
       const begin = () => {
         moved = true;
@@ -513,7 +546,7 @@ function initWidgetGrid(grid, storageKey, opts) {
         sizes = visible().map((c) => ({ el: c, span: Math.min(spanOf(c), cols), h: c.offsetHeight }));
       };
 
-      const preview = (ev) => {
+      const preview = () => {
         const { cw, cols, colW } = metrics();
         const others = sizes.filter((s) => s.el !== card);
         const mine = sizes.find((s) => s.el === card);
@@ -528,23 +561,32 @@ function initWidgetGrid(grid, storageKey, opts) {
           ghost.style.height = p.h + 'px';
         }
         // The card itself tracks the pointer, offset from where it started.
-        card.style.left = (left0 + ev.clientX - x0) + 'px';
-        card.style.top = (top0 + ev.clientY - y0) + 'px';
+        card.style.left = (left0 + lastX - x0) + 'px';
+        card.style.top = (top0 + lastY + window.scrollY - y0) + 'px';
+      };
+      // Re-evaluated each auto-scroll frame: the pointer is still, but rows are
+      // sliding past it, so the drop slot genuinely changes.
+      const apply = () => {
+        if (!moved) return;
+        const next = dropIndex(lastX, lastY, card);
+        if (next !== index) index = next;
+        preview();
       };
 
       const move = (ev) => {
+        lastX = ev.clientX; lastY = ev.clientY;
+        edgeTrack(ev.clientY);
         if (!moved) {
-          if (Math.abs(ev.clientX - x0) < 5 && Math.abs(ev.clientY - y0) < 5) return;
+          if (Math.abs(ev.clientX - x0) < 5 && Math.abs(ev.clientY + window.scrollY - y0) < 5) return;
           begin();
         }
-        const next = dropIndex(ev.clientX, ev.clientY, card);
-        if (next !== index) index = next;
-        preview(ev);
+        apply();
       };
 
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
+        edgeScrollOff();
         card.classList.remove('dragging');
         document.body.classList.remove('dragging-widget');
         if (ghost) { ghost.remove(); ghost = null; }
@@ -582,6 +624,7 @@ function initWidgetGrid(grid, storageKey, opts) {
         window.removeEventListener('pointerup', up);
         save();
       };
+      edgeScrollOn(apply, e.clientY);
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
     });
@@ -607,22 +650,29 @@ function initWidgetGrid(grid, storageKey, opts) {
     vh.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       markSized(card);
-      const startY = e.clientY;
+      // Page coordinates, not viewport: while the page auto-scrolls the pointer
+      // holds still but the content slides under it, and only pageY captures
+      // that as continued dragging.
+      const startPageY = e.clientY + window.scrollY;
       const startH = card.offsetHeight;
       const natural = contentHeight(card); // measured once — it forces a reflow
-      const move = (ev) => {
-        const raw = Math.max(96, startH + (ev.clientY - startY));
+      let lastClientY = e.clientY;
+      const apply = () => {
+        const raw = Math.max(96, startH + (lastClientY + window.scrollY - startPageY));
         const snapped = applySnap(card, raw, natural);
         setHeight(card, snapped.h);
         layout();
         showGuide(snapped.hit ? (parseFloat(card.style.top) || 0) + snapped.h : null);
       };
+      const move = (ev) => { lastClientY = ev.clientY; edgeTrack(ev.clientY); apply(); };
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
+        edgeScrollOff();
         showGuide(null);
         save();
       };
+      edgeScrollOn(apply, e.clientY);
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
     });
