@@ -627,6 +627,31 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 
 /* the domains (SANs) a cert covers, listed in the detail popup */
 .cover-list { display: flex; flex-wrap: wrap; gap: .35rem; }
+.cover-actions { margin-top: .45rem; }
+.cover-summary { margin: .1rem 0 .5rem; }
+.cover-results { margin-top: .55rem; border-top: 1px solid var(--border); padding-top: .5rem; }
+.cover-row {
+  display: flex; align-items: flex-start; gap: .5rem;
+  padding: .3rem 0; border-bottom: 1px solid var(--border);
+}
+.cover-row:last-child { border-bottom: none; }
+.cover-row .pill { flex: 0 0 auto; font-size: .72rem; }
+.cover-row-body { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+.cover-row-body .mono { font-size: .8rem; overflow-wrap: anywhere; }
+
+/* "add the other certificates too" prompt */
+.detail-modal.cover-add-modal { width: min(560px, calc(100vw - 2rem)); }
+.cover-add-list { display: flex; flex-direction: column; gap: .5rem; margin-top: .75rem; }
+.cover-add-item {
+  display: flex; align-items: flex-start; gap: .6rem; cursor: pointer;
+  padding: .6rem .7rem; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg);
+}
+.cover-add-item:hover { border-color: var(--primary); }
+.cover-add-item input { margin-top: .2rem; flex: 0 0 auto; }
+.cover-add-body { display: flex; flex-direction: column; gap: .12rem; min-width: 0; }
+.cover-add-title { font-weight: 600; overflow-wrap: anywhere; }
+.cover-add-body .small { overflow-wrap: anywhere; }
 .cover-chip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem;
   background: rgba(127,127,127,.14); padding: .18rem .5rem; border-radius: 5px; word-break: break-all; }
 

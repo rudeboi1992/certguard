@@ -245,6 +245,23 @@
     <p id="vaultLockErr" class="error small" hidden></p>
   </dialog>
 
+  <!-- Offered after a scan when the names a certificate covers turn out to be
+       served by other certificates. Those are separate things with separate
+       expiry dates, so they are worth tracking in their own right. -->
+  <dialog id="coverAddDialog" class="detail-modal cover-add-modal" tabindex="-1" aria-labelledby="coverAddTitle">
+    <div class="detail-head">
+      <h2 id="coverAddTitle" class="detail-title">Other certificates found</h2>
+      <button type="button" class="widget-hide" id="coverAddClose" title="Close" aria-label="Close">×</button>
+    </div>
+    <p id="coverAddIntro" class="muted small"></p>
+    <div id="coverAddList" class="cover-add-list"></div>
+    <div class="detail-actions">
+      <span class="spacer"></span>
+      <button type="button" class="btn ghost small" id="coverAddSkip">Not now</button>
+      <button type="button" class="btn primary" id="coverAddGo">Add selected</button>
+    </div>
+  </dialog>
+
   <!-- Section picker: every hidden card, three across, with what it shows. -->
   <dialog id="addSectionDialog" class="detail-modal section-modal" tabindex="-1" aria-labelledby="addSectionTitle">
     <div class="detail-head">

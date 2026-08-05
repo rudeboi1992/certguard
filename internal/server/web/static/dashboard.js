@@ -364,6 +364,14 @@ async function lockVault() {
 }
 if ($('vaultLockBtn')) $('vaultLockBtn').addEventListener('click', toggleVault);
 if ($('vaultClose')) $('vaultClose').addEventListener('click', closeVaultDialog);
+['coverAddClose', 'coverAddSkip'].forEach((id) => {
+  if ($(id)) $(id).addEventListener('click', () => $('coverAddDialog').close());
+});
+if ($('coverAddDialog')) {
+  $('coverAddDialog').addEventListener('click', (e) => {
+    if (e.target === $('coverAddDialog')) $('coverAddDialog').close();
+  });
+}
 if ($('vaultDialog')) {
   $('vaultDialog').addEventListener('click', (e) => {
     if (e.target === $('vaultDialog')) closeVaultDialog();
@@ -516,8 +524,15 @@ function renderDetail(it) {
   add('Issuer', escapeHtml(dnField(c.issuer, 'O') || dnField(c.issuer, 'CN') || c.issuer || ''));
   const sans = c.dns_names || [];
   if (sans.length) {
+    // Covering a name is not the same as serving it: a host picks a certificate
+    // per vhost via SNI, so any of these may be answered by something else.
+    const check = isAdmin
+      ? `<button class="rescan-btn cover-check" data-coverage="${c.id}" title="Connect to each name and report the certificate it actually serves">↻ check what each serves</button>`
+      : '';
     add(`Covers ${sans.length > 1 ? `(${sans.length})` : ''}`.trim(),
-      `<div class="cover-list">${sans.map((s) => `<span class="cover-chip">${escapeHtml(s)}</span>`).join('')}</div>`);
+      `<div class="cover-list">${sans.map((s) => `<span class="cover-chip">${escapeHtml(s)}</span>`).join('')}</div>` +
+      (check ? `<div class="cover-actions">${check}</div>` : '') +
+      '<div class="cover-results" hidden></div>');
   }
   add('Key', escapeHtml([c.key_type, c.signature_algorithm].filter(Boolean).join(' · ')));
   add('Serial', c.serial ? `<span class="mono sd-fp">${escapeHtml(c.serial)}</span>` : '');
@@ -555,9 +570,151 @@ function renderDetail(it) {
   const body = $('detailBody'), acts = $('detailActions');
   const on = (sel, fn) => { const b = body.querySelector(sel) || acts.querySelector(sel); if (b) b.addEventListener('click', () => fn(b)); };
   on('[data-drescan]', (b) => rescanCert(b.dataset.drescan, b));
+  on('[data-coverage]', (b) => checkCoverage(b.dataset.coverage, b));
   on('[data-dreveal]', (b) => revealSecret(b.dataset.dreveal, b));
   on('[data-dedit]', (b) => { const id = b.dataset.dedit; closeDetail(); startEdit(id); });
   on('[data-ddel]', (b) => deleteCert(b.dataset.ddel));
+}
+
+// Connect to every name this certificate covers and report what each actually
+// serves. Results are grouped, because the interesting ones are the mismatches:
+// a name covered here but answered by a different certificate is a renewal trap
+// — letting this one lapse still breaks that host.
+const COVER_LABEL = {
+  match: 'serving this certificate',
+  different: 'serving a DIFFERENT certificate',
+  wildcard: 'wildcard — nothing to connect to',
+  unreachable: 'could not connect',
+};
+async function checkCoverage(id, btn) {
+  const box = btn.closest('.sd-v').querySelector('.cover-results');
+  btn.disabled = true;
+  btn.textContent = '↻ checking…';
+  const res = await api('POST', `/api/v1/certs/${id}/coverage`);
+  const d = await res.json().catch(() => ({}));
+  btn.disabled = false;
+  btn.textContent = '↻ check what each serves';
+  if (!res.ok) { toast(d.error || 'Coverage check failed', true); return; }
+
+  const rows = (d.names || []).map((n) => {
+    const cls = { match: 'ok', different: 'warn', wildcard: 'dup', unreachable: 'untrusted' }[n.status] || 'dup';
+    let sub = COVER_LABEL[n.status] || n.status;
+    if (n.status === 'different' && n.subject) {
+      sub = `served by <strong>${escapeHtml(dnField(n.subject, 'CN') || n.subject)}</strong>` +
+        (n.issuer ? ` · ${escapeHtml(dnField(n.issuer, 'O') || n.issuer)}` : '') +
+        (n.not_after ? ` · expires ${fmtDate(n.not_after)}` : '');
+    } else if (n.status === 'unreachable' && n.detail) {
+      sub = escapeHtml(n.detail);
+    } else if (n.status === 'match' && n.not_after) {
+      sub = `serving this certificate · expires ${fmtDate(n.not_after)}`;
+    }
+    return `<div class="cover-row"><span class="pill ${cls}">${n.status}</span>` +
+      `<span class="cover-row-body"><span class="mono">${escapeHtml(n.name)}</span>` +
+      `<span class="muted small">${sub}</span></span></div>`;
+  }).join('');
+
+  const diff = (d.names || []).filter((n) => n.status === 'different').length;
+  const bad = (d.names || []).filter((n) => n.status === 'unreachable').length;
+  const summary = diff || bad
+    ? `<p class="muted small cover-summary">${diff} name${diff === 1 ? '' : 's'} served by a different certificate` +
+      (bad ? `, ${bad} unreachable` : '') + ` — port ${d.port}.</p>`
+    : `<p class="muted small cover-summary">Every reachable name serves this certificate — port ${d.port}.</p>`;
+  box.innerHTML = summary + rows;
+  box.hidden = false;
+}
+
+// After a scan, check whether the names this certificate covers are actually
+// served by it. Where they are not, offer to track those certificates too —
+// they are separate things with separate expiry dates, and nothing about the
+// scanned entry would ever warn you about them.
+async function offerCoverageAdds(saved, status) {
+  if (!isAdmin || !saved || !saved.id) return;
+  const sans = (saved.dns_names || []).filter((n) => !n.startsWith('*.'));
+  if (sans.length < 2) return; // only itself — nothing else to look at
+  if (status) { status.className = 'status'; status.textContent = `Checking the ${sans.length} names it covers…`; }
+  const res = await api('POST', `/api/v1/certs/${saved.id}/coverage`);
+  if (!res.ok) { if (status) status.hidden = true; return; }
+  const d = await res.json().catch(() => ({}));
+
+  // One entry per distinct certificate, not per name: four hostnames served by
+  // the same certificate are one thing to track, not four.
+  const known = new Set(currentItems.map((i) => i.cert.sha256).filter(Boolean));
+  const groups = new Map();
+  for (const n of d.names || []) {
+    if (n.status !== 'different' || !n.sha256 || known.has(n.sha256)) continue;
+    if (!groups.has(n.sha256)) groups.set(n.sha256, { ...n, names: [] });
+    groups.get(n.sha256).names.push(n.name);
+  }
+  const found = [...groups.values()];
+  if (status) {
+    status.className = 'status ok';
+    status.textContent = found.length
+      ? `${found.length} other certificate${found.length === 1 ? '' : 's'} found behind those names`
+      : 'Every reachable name it covers serves this certificate';
+  }
+  if (found.length) showCoverageAdd(found, saved.name);
+}
+
+// Where to actually track a certificate we found behind an alias. The alias
+// works, but tracking cpigauges.com beats tracking
+// www.cpigaugescom.uniweldproducts.com — same certificate, and the entry says
+// what the thing IS. Taken from the certificate's own CN/SANs rather than
+// derived from the alias, which cannot be reversed reliably.
+function canonicalHost(g) {
+  const cn = dnField(g.subject, 'CN');
+  if (cn && !cn.startsWith('*.')) return cn;
+  const real = (g.dns_names || []).find((n) => !n.startsWith('*.'));
+  return real || g.names[0];
+}
+
+function showCoverageAdd(found, fromName) {
+  const dlg = $('coverAddDialog');
+  if (!dlg) return;
+  $('coverAddIntro').textContent =
+    `${fromName} lists names that are answered by ${found.length} other certificate` +
+    `${found.length === 1 ? '' : 's'}. They expire on their own schedule — track them too?`;
+  $('coverAddList').innerHTML = found.map((g, i) => {
+    const host = canonicalHost(g);
+    const also = (g.dns_names || []).filter((n) => !n.startsWith('*.') && n !== host);
+    return `
+    <label class="cover-add-item">
+      <input type="checkbox" data-pick="${i}" checked>
+      <span class="cover-add-body">
+        <span class="cover-add-title">${escapeHtml(host)}</span>
+        <span class="muted small">${escapeHtml(dnField(g.issuer, 'O') || g.issuer || '')}${g.not_after ? ` · expires ${fmtDate(g.not_after)}` : ''}</span>
+        <span class="muted small">found behind ${g.names.map((n) => escapeHtml(n)).join(', ')}</span>
+        ${also.length ? `<span class="muted small">also covers ${also.map((n) => escapeHtml(n)).join(', ')}</span>` : ''}
+      </span>
+    </label>`;
+  }).join('');
+
+  $('coverAddGo').onclick = async () => {
+    const picks = [...$('coverAddList').querySelectorAll('[data-pick]')]
+      .filter((cb) => cb.checked).map((cb) => found[+cb.dataset.pick]);
+    if (!picks.length) { dlg.close(); return; }
+    $('coverAddGo').disabled = true;
+    $('coverAddGo').textContent = 'Adding…';
+    let ok = 0;
+    for (const g of picks) {
+      // Scan one hostname per certificate — the same path a manual scan takes,
+      // so these are ordinary endpoint entries that rescan on their own. Try the
+      // real domain first; fall back to the alias we found it behind, since the
+      // canonical name is only a claim on the certificate until it resolves.
+      const host = canonicalHost(g);
+      let r = await api('POST', '/api/v1/scan', { target: host, name: host });
+      if (!r.ok && host !== g.names[0]) {
+        r = await api('POST', '/api/v1/scan', { target: g.names[0], name: host });
+      }
+      if (r.ok) ok++;
+    }
+    $('coverAddGo').disabled = false;
+    $('coverAddGo').textContent = 'Add selected';
+    dlg.close();
+    toast(`Added ${ok} certificate${ok === 1 ? '' : 's'}`);
+    loadCerts();
+  };
+  if (!dlg.open) dlg.showModal();
+  dlg.focus();
 }
 
 function openDetail(id) {
@@ -681,6 +838,7 @@ $('scanForm').addEventListener('submit', async (e) => {
       $('scanTarget').value = '';
       $('scanName').value = '';
       loadCerts();
+      offerCoverageAdds(data.saved, status);
     } else {
       status.className = 'status err';
       status.textContent = data.error || 'Scan failed';
