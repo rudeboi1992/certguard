@@ -1217,6 +1217,24 @@ function renderDerivedCards() {
 
 // small formatting helpers
 function shortErr(s) { s = (s || '').replace(/\s+/g, ' ').trim(); return s.length > 44 ? s.slice(0, 44) + '…' : s; }
+
+// A pill has to stay short. Go's network errors are long and repeat the host —
+// "dial ameriflame.net:443: dial tcp: lookup ameriflame.net: no such host" —
+// and a pill that long squeezes the name beside it down to one character per
+// line. Reduce the common failures to a few words; the full text stays in the
+// title attribute.
+function netErrLabel(s) {
+  const t = (s || '').toLowerCase();
+  if (/no such host|server misbehaving|dns/.test(t)) return 'no DNS';
+  if (/connection refused/.test(t)) return 'refused';
+  if (/i\/o timeout|deadline exceeded|timed? ?out/.test(t)) return 'timed out';
+  if (/connection reset/.test(t)) return 'reset';
+  if (/no route to host/.test(t)) return 'no route';
+  if (/network is unreachable/.test(t)) return 'unreachable';
+  if (/certificate|x509/.test(t)) return 'untrusted';
+  const short = (s || '').replace(/\s+/g, ' ').trim();
+  return short.length > 22 ? short.slice(0, 22) + '…' : (short || 'failed');
+}
 // Pull a friendly issuer name (Organization, else Common Name) out of the DN,
 // coping with escaped commas inside a value like "O=Cloudflare\, Inc.".
 function shortIssuer(dn) {
@@ -1258,7 +1276,7 @@ function renderProblems() {
     const c = it.cert;
     if (!c.last_error) continue;
     rows.push({ name: c.name, sub: c.host ? `${c.host}${c.port ? ':' + c.port : ''}` : '',
-      note: shortErr(c.last_error), title: c.last_error, cls: 'untrusted' });
+      note: netErrLabel(c.last_error), title: c.last_error, cls: 'untrusted' });
   }
 
   // A covered name that no longer resolves. This is the quiet one: the
@@ -1269,8 +1287,8 @@ function renderProblems() {
     const c = it.cert;
     for (const n of c.coverage || []) {
       if (n.status !== 'unreachable') continue;
-      rows.push({ name: n.name, sub: `covered by ${c.name} — will fail its renewal`,
-        note: shortErr(n.detail || 'unreachable'), title: n.detail || '', cls: 'untrusted' });
+      rows.push({ name: n.name, sub: `breaks renewal of ${c.name}`,
+        note: netErrLabel(n.detail), title: n.detail || '', cls: 'untrusted' });
     }
   }
 

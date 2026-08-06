@@ -764,7 +764,16 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .mini-row:last-child { border-bottom: none; }
 .mini-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .mini-date { flex: 0 0 auto; white-space: nowrap; margin-left: auto; }
-.mini-row .pill { flex: 0 0 auto; }
+/* A pill must never be allowed to starve the name beside it. `flex: 0 0 auto`
+   meant a long one took the whole row and the name — which wraps anywhere —
+   collapsed to a single character per line. It can shrink now, and is capped so
+   at least half the row always belongs to the name. */
+.mini-row .pill {
+  flex: 0 1 auto; max-width: 50%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* And a floor under the name, so it can narrow but never vanish. */
+.mini-name { min-width: 5.5rem; }
 .audit-flags { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: .3rem; justify-content: flex-end; }
 .empty-ok { color: var(--ok); font-weight: 500; margin: .2rem 0; }
 .kv { display: flex; align-items: center; gap: .55rem; padding: .32rem 0; font-size: .9rem; }
