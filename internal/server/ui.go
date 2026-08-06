@@ -12,7 +12,7 @@ import (
 //go:embed all:web
 var webFS embed.FS
 
-// registerUI wires the browser-facing routes: static assets and the two HTML
+// registerUI wires the browser-facing routes: static assets and the HTML
 // pages. Data is fetched by the pages themselves from the JSON API, so these
 // handlers only gate access and serve files.
 func (s *Server) registerUI() {
@@ -24,7 +24,19 @@ func (s *Server) registerUI() {
 
 	s.mux.HandleFunc("GET /login", s.handleLoginPage)
 	s.mux.HandleFunc("GET /settings", s.handleSettingsPage)
+	s.mux.HandleFunc("GET /inventory", s.handleInventoryPage)
 	s.mux.HandleFunc("GET /{$}", s.handleDashboardPage)
+}
+
+// handleInventoryPage serves the full tracked-entry table to authenticated
+// users. Like the other pages it carries no data — the table is filled from
+// GET /api/v1/certs, the same endpoint the dashboard reads.
+func (s *Server) handleInventoryPage(w http.ResponseWriter, r *http.Request) {
+	if s.resolveUser(r) == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	s.serveEmbedded(w, "web/inventory.html")
 }
 
 // handleSettingsPage serves the settings page to authenticated users.

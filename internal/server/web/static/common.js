@@ -73,6 +73,56 @@ function relTime(iso) {
   return Math.floor(mo / 12) + 'y ago';
 }
 
+// --- shared inventory vocabulary ---
+// These describe what a tracked entry *is* and how close it is to expiring, so
+// every page that shows entries agrees. They started out in dashboard.js and
+// moved here when the inventory page needed the same categories and the same
+// urgency thresholds — two copies would have drifted, and a category that is
+// amber on one page and grey on another is worse than no colour at all.
+
+// [value, label, colour]. The colour keys the calendar legend and the type
+// pills; "other" grey is also the fallback for an unlabeled entry.
+const CATEGORIES = [
+  ['certificate', 'Certificate', '#3b82f6'],
+  ['api-key', 'API key', '#8b5cf6'],
+  ['subscription', 'Subscription', '#14b8a6'],
+  ['domain', 'Domain', '#f59e0b'],
+  ['service', 'Service/Contract', '#ec4899'],
+  ['other', 'Other', '#94a3b8'],
+];
+function categoryLabel(v) {
+  const f = CATEGORIES.find((c) => c[0] === v);
+  return f ? f[1] : (v || '');
+}
+function categoryColor(v) {
+  const f = CATEGORIES.find((c) => c[0] === v);
+  return f ? f[2] : '#94a3b8'; // unlabeled → "other" grey
+}
+// hex "#rrggbb" → "rgba(r,g,b,a)" for tinted backgrounds.
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+// expiryLevel classifies purely by days remaining (expired counts as urgent).
+function expiryLevel(days) {
+  if (days <= 3) return 'urgent'; // includes expired (days < 0)
+  if (days <= 7) return 'warn';
+  if (days <= 30) return 'notice';
+  return 'ok';
+}
+
+function fmtRemaining(days) {
+  if (days < 0) return `expired ${Math.abs(days)}d ago`;
+  if (days === 0) return 'today';
+  if (days === 1) return '1 day';
+  return `${days} days`;
+}
+
+function daysUntil(iso) {
+  return Math.round((new Date(iso) - new Date()) / 86400000);
+}
+
 // loadWhoami sets isAdmin/currentUserId and fills the header. Each page decides
 // what to show based on isAdmin after this resolves.
 async function loadWhoami() {

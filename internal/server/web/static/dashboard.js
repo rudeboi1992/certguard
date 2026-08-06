@@ -4,23 +4,8 @@
 
 let currentItems = [];
 
-// expiryLevel classifies purely by days remaining (expired counts as urgent).
-function expiryLevel(days) {
-  if (days <= 3) return 'urgent'; // includes expired (days < 0)
-  if (days <= 7) return 'warn';
-  if (days <= 30) return 'notice';
-  return 'ok';
-}
-
-function fmtRemaining(days) {
-  if (days < 0) return `expired ${Math.abs(days)}d ago`;
-  if (days === 0) return 'today';
-  return `${days} days`;
-}
-
-function daysUntil(iso) {
-  return Math.round((new Date(iso) - new Date()) / 86400000);
-}
+// expiryLevel, fmtRemaining, daysUntil, CATEGORIES, categoryLabel,
+// categoryColor and hexA now live in common.js, shared with the inventory page.
 
 // Row action icons. Labelled via title + aria-label so they stay accessible
 // without the text; the detail popup keeps worded buttons, where there's room.
@@ -59,30 +44,11 @@ function renderScanDetail(s) {
   el.hidden = false;
 }
 
-const CATEGORIES = [
-  ['certificate', 'Certificate', '#3b82f6'],
-  ['api-key', 'API key', '#8b5cf6'],
-  ['subscription', 'Subscription', '#14b8a6'],
-  ['domain', 'Domain', '#f59e0b'],
-  ['service', 'Service/Contract', '#ec4899'],
-  ['other', 'Other', '#94a3b8'],
-];
-function categoryLabel(v) {
-  const f = CATEGORIES.find((c) => c[0] === v);
-  return f ? f[1] : (v || '');
-}
-function categoryColor(v) {
-  const f = CATEGORIES.find((c) => c[0] === v);
-  return f ? f[2] : '#94a3b8'; // unlabeled → "other" grey
-}
+// categoryOptions stays here — it builds the <select> for the add/edit forms,
+// which only this page has. CATEGORIES itself comes from common.js.
 function categoryOptions(selected) {
   return CATEGORIES.map(([v, l]) =>
     `<option value="${v}"${v === selected ? ' selected' : ''}>${l}</option>`).join('');
-}
-// hex "#rrggbb" → "rgba(r,g,b,a)" for tinted backgrounds.
-function hexA(hex, a) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
 function renderLegend() {
   const el = $('calLegend');

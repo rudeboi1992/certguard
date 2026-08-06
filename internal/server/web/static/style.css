@@ -893,3 +893,154 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
   .tc-rem .pill { font-size: .76rem; padding: .1rem .45rem; }
 }
 /* Settings tables: drop the min-width on narrow cards so they never scroll. */
+
+/* ---------------------------------------------------------------------------
+   Inventory page — every tracked entry in one sortable table.
+
+   Unlike the dashboard's tracked list, which lives in a resizable card and so
+   has to survive arbitrary widths, this table owns the page. It can afford a
+   real <table> with sticky headers; what it drops on narrow screens are whole
+   columns, chosen by how much each one earns its width.
+   --------------------------------------------------------------------------- */
+
+.inv-page { gap: .9rem; }
+.inv-head { display: grid; gap: .15rem; }
+.inv-sub { margin: 0; font-size: .9rem; }
+
+/* Status tiles: a count and a label, doubling as the status filter. */
+.inv-tiles { display: flex; flex-wrap: wrap; gap: .5rem; }
+.inv-tile {
+  font: inherit; cursor: pointer; text-align: left; display: grid; gap: .1rem;
+  padding: .45rem .8rem; min-width: 5.5rem; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--card); color: var(--ink);
+}
+.inv-tile:hover { border-color: var(--primary); }
+.inv-tile.on { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+/* An empty bucket stays clickable but recedes — it is information, not a target. */
+.inv-tile.zero { opacity: .55; }
+.inv-tile-n { font-size: 1.3rem; font-weight: 650; line-height: 1.1; }
+.inv-tile-n.urgent { color: var(--urgent); }
+.inv-tile-n.warn { color: var(--warn); }
+.inv-tile-n.notice { color: var(--notice); }
+.inv-tile-n.ok { color: var(--ok); }
+.inv-tile-n.untrusted { color: var(--urgent); }
+.inv-tile-l { font-size: .78rem; color: var(--muted); }
+
+.inv-toolbar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+.inv-toolbar-spacer { flex: 1 1 auto; }
+.inv-f { display: flex; align-items: center; gap: .35rem; font-size: .85rem; color: var(--muted); }
+.inv-f select {
+  font: inherit; padding: .4rem .5rem; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg); color: var(--ink);
+}
+.inv-search { position: relative; flex: 1 1 18rem; max-width: 26rem; }
+.inv-search input { width: 100%; padding-right: 2rem; }
+.inv-clear {
+  position: absolute; right: .4rem; top: 50%; transform: translateY(-50%);
+  border: none; background: none; color: var(--muted); cursor: pointer;
+  font-size: 1.1rem; line-height: 1; padding: .1rem .3rem;
+}
+.inv-clear:hover { color: var(--ink); }
+
+.inv-card { padding: 0; overflow: hidden; }
+/* The table scrolls inside the card rather than the page, so the toolbar and
+   tiles above stay put while a wide table is panned sideways. */
+.inv-scroll { overflow-x: auto; }
+.inv-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.inv-table th, .inv-table td { padding: .5rem .7rem; text-align: left; vertical-align: middle; }
+.inv-table thead th {
+  position: sticky; top: 0; z-index: 2; background: var(--card);
+  border-bottom: 1px solid var(--border); font-size: .78rem; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .03em;
+  white-space: nowrap;
+}
+.th-sort { cursor: pointer; user-select: none; }
+.th-sort:hover { color: var(--ink); }
+/* The caret is drawn only on the sorted column: an indicator on every header
+   is just noise, and a permanently-visible neutral arrow reads as "sortable
+   but unsorted", which is the one state we never need to show. */
+.th-sort.sorted { color: var(--ink); }
+.th-sort.sorted::after {
+  content: ''; display: inline-block; margin-left: .35rem; vertical-align: middle;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-bottom: 5px solid currentColor;
+}
+.th-sort.sorted.desc::after { border-bottom: none; border-top: 5px solid currentColor; }
+
+.inv-row { border-top: 1px solid var(--border); cursor: pointer; }
+.inv-row:first-child { border-top: none; }
+.inv-row:hover { background: var(--bg); }
+.inv-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.inv-row.open { background: var(--bg); }
+.inv-name { max-width: 22rem; }
+.inv-exp { white-space: nowrap; }
+/* "expired 18d ago" is the longest label a pill carries; letting it wrap makes
+   the row two lines tall for the one entry you most want to skim past. */
+.inv-table td.col-rem { white-space: nowrap; }
+.inv-table td.col-issuer { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-table td.col-target { white-space: nowrap; }
+
+/* Caret marks a row as expandable and turns to point down when it is open. */
+.inv-caret {
+  display: inline-block; width: 0; height: 0; margin-right: .5rem;
+  border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--muted); transition: transform .12s ease;
+  vertical-align: middle;
+}
+.inv-row.open .inv-caret { transform: rotate(90deg); }
+
+.inv-detail td { padding: 0; background: var(--bg); border-top: 1px solid var(--border); }
+.inv-d-wrap { padding: .8rem 1rem 1rem 1.9rem; display: grid; gap: .8rem; }
+.inv-d-grid {
+  display: grid; grid-template-columns: max-content minmax(0, 1fr);
+  gap: .3rem .9rem; align-items: baseline; font-size: .85rem;
+}
+.inv-d-k { color: var(--muted); white-space: nowrap; }
+.inv-d-v { min-width: 0; overflow-wrap: anywhere; }
+.inv-sha { font-size: .78rem; }
+.inv-err { color: var(--urgent); }
+.inv-san {
+  display: inline-block; padding: .05rem .4rem; margin: .1rem .15rem .1rem 0;
+  border: 1px solid var(--border); border-radius: 999px; font-size: .78rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.inv-cov { display: grid; gap: .3rem; font-size: .85rem; }
+.inv-cov-list { display: grid; gap: .25rem; }
+.inv-cov-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+
+.inv-note { padding: .8rem 1rem; margin: 0; }
+.inv-note:empty { display: none; }
+
+/* Progressive column drop. Each breakpoint sheds the column that carries the
+   least per pixel at that width — "checked" is a relative timestamp available
+   in the detail row, the issuer DN is long and rarely the reason you are
+   scanning the list, and the source kind is implied by the target. Name, type,
+   expiry, remaining, and state survive to the narrowest layout because they
+   are what the page is for. */
+@media (max-width: 1100px) {
+  .inv-table .col-checked { display: none; }
+}
+@media (max-width: 900px) {
+  .inv-table .col-issuer { display: none; }
+}
+@media (max-width: 720px) {
+  .inv-table .col-src { display: none; }
+  .inv-table th, .inv-table td { padding: .45rem .5rem; }
+  .inv-d-wrap { padding-left: 1rem; }
+  /* One column reads better than a cramped two on a phone. */
+  .inv-d-grid { grid-template-columns: minmax(0, 1fr); gap: .1rem; }
+  .inv-d-k { margin-top: .45rem; }
+}
+@media (max-width: 560px) {
+  .inv-table .col-target { display: none; }
+  /* Expires and Remaining say the same thing twice. On a phone the countdown
+     is the one worth the width — an absolute date you have to subtract from
+     today is the less useful half. */
+  .inv-table .col-expires { display: none; }
+  /* Type goes last of all: at 130px it was the widest remaining droppable
+     column, and it is the only one still reachable another way — the Type
+     filter stays in the toolbar, and the label is in the expanded row. That
+     leaves name, remaining, and state, which is the actionable trio. */
+  .inv-table .col-type { display: none; }
+  .inv-tile { flex: 1 1 4.5rem; min-width: 0; }
+}

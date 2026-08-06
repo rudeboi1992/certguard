@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>certguard — inventory</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛡️</text></svg>">
+  <script src="/static/theme-init.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <span class="brand">certguard</span>
+      <span class="spacer"></span>
+      <span id="whoami" class="muted"></span>
+      <button id="themeToggle" class="nav-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
+      <a href="/" class="nav-btn">Dashboard</a>
+      <a href="/settings" class="nav-btn">Settings</a>
+      <button id="logout" class="nav-btn">Sign out</button>
+    </div>
+  </header>
+
+  <main class="inv-page">
+    <div class="inv-head">
+      <h1 class="page-title">Everything tracked</h1>
+      <p class="muted inv-sub" id="invSub">Loading…</p>
+    </div>
+
+    <!-- Counts double as filters: the number you want to act on is the thing
+         you want the list narrowed to, so clicking a tile does that. -->
+    <section class="inv-tiles" id="invTiles" role="group" aria-label="Filter by status"></section>
+
+    <section class="inv-toolbar" id="invToolbar">
+      <div class="inv-search">
+        <input type="text" id="invSearch" placeholder="Search name, host, issuer, SAN…"
+               autocomplete="off" aria-label="Search tracked entries">
+        <button type="button" id="invSearchClear" class="inv-clear" title="Clear search"
+                aria-label="Clear search" hidden>&times;</button>
+      </div>
+      <label class="inv-f">Type
+        <select id="invCategory" aria-label="Filter by type"><option value="">All</option></select>
+      </label>
+      <label class="inv-f">Source
+        <select id="invKind" aria-label="Filter by source">
+          <option value="">All</option>
+          <option value="endpoint">Endpoint</option>
+          <option value="domain">Domain</option>
+          <option value="file">File</option>
+          <option value="manual">Manual</option>
+        </select>
+      </label>
+      <span class="inv-toolbar-spacer"></span>
+      <button type="button" id="invReset" class="nav-btn" hidden>Clear filters</button>
+      <button type="button" id="invCsv" class="nav-btn" title="Download the rows currently shown as CSV">⤓ CSV</button>
+    </section>
+
+    <section class="card inv-card">
+      <div class="inv-scroll">
+        <table class="inv-table" id="invTable">
+          <thead>
+            <tr id="invHead">
+              <th class="th-sort" data-sort="name" scope="col">Name</th>
+              <th class="th-sort col-type" data-sort="category" scope="col">Type</th>
+              <th class="th-sort col-src" data-sort="kind" scope="col">Source</th>
+              <th class="th-sort col-target" data-sort="target" scope="col">Target</th>
+              <th class="th-sort col-issuer" data-sort="issuer" scope="col">Issuer / registrar</th>
+              <th class="th-sort col-expires" data-sort="expires" scope="col">Expires</th>
+              <th class="th-sort col-rem" data-sort="remaining" scope="col">Remaining</th>
+              <th class="th-sort col-state" data-sort="state" scope="col">State</th>
+              <th class="th-sort col-checked" data-sort="checked" scope="col">Checked</th>
+            </tr>
+          </thead>
+          <tbody id="invRows"></tbody>
+        </table>
+      </div>
+      <p id="invEmpty" class="muted inv-note" hidden>Nothing is tracked yet. Add an entry from the <a href="/">dashboard</a>.</p>
+      <p id="invNoMatch" class="muted inv-note" hidden>No entries match these filters.</p>
+      <p id="invCount" class="muted small inv-note"></p>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/static/common.js"></script>
+  <script src="/static/inventory.js"></script>
+</body>
+</html>
