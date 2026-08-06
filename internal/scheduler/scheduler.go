@@ -10,6 +10,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/bfalcher/certguard/internal/coverage"
 	"github.com/bfalcher/certguard/internal/notify"
 	"github.com/bfalcher/certguard/internal/rdap"
 	"github.com/bfalcher/certguard/internal/scanner"
@@ -96,10 +97,22 @@ func (s *Scheduler) rescan(ctx context.Context) (scanned, errs int) {
 			s.logger.Printf("scheduler: rescan %s:%d failed: %v", c.Host, c.Port, err)
 			continue
 		}
-		if _, err := s.store.UpsertScan(c.Name, res); err != nil {
+		stored, err := s.store.UpsertScan(c.Name, res)
+		if err != nil {
 			errs++
 			s.logger.Printf("scheduler: store rescan %s:%d: %v", c.Host, c.Port, err)
 			continue
+		}
+		// Refresh coverage while we are here. A SAN that no longer resolves
+		// will fail the next HTTP-01 renewal for the WHOLE certificate, so it
+		// needs to surface on its own rather than only when someone thinks to
+		// press the check button. Only worth doing when there is more than the
+		// host itself to look at.
+		if stored != nil && len(stored.DNSNames) > 1 {
+			names, _ := coverage.Check(ctx, stored, s.scanTimeout)
+			if err := s.store.SaveCoverage(stored.ID, names); err != nil {
+				s.logger.Printf("scheduler: save coverage %d: %v", stored.ID, err)
+			}
 		}
 		scanned++
 	}

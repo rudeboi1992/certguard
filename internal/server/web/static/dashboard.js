@@ -1251,12 +1251,34 @@ function renderSoon() {
 
 function renderProblems() {
   const el = $('problemsBody'); if (!el) return;
-  const items = currentItems.filter((it) => it.cert.last_error);
-  if (!items.length) { el.innerHTML = '<p class="empty-ok">✓ No trust or scan problems.</p>'; return; }
-  el.innerHTML = items.map((it) => {
+  const rows = [];
+
+  // A failed scan or a failed registry lookup.
+  for (const it of currentItems) {
     const c = it.cert;
-    return `<div class="mini-row"><span class="mini-name">${escapeHtml(c.name)}${c.host ? `<br><span class="muted small">${escapeHtml(c.host)}:${c.port}</span>` : ''}</span><span class="pill untrusted" title="${escapeHtml(c.last_error)}">${escapeHtml(shortErr(c.last_error))}</span></div>`;
-  }).join('');
+    if (!c.last_error) continue;
+    rows.push({ name: c.name, sub: c.host ? `${c.host}${c.port ? ':' + c.port : ''}` : '',
+      note: shortErr(c.last_error), title: c.last_error, cls: 'untrusted' });
+  }
+
+  // A covered name that no longer resolves. This is the quiet one: the
+  // certificate scans clean, so nothing else notices — but HTTP-01 validation
+  // of a dead name fails the renewal for the WHOLE certificate, taking the
+  // names that do work down with it.
+  for (const it of currentItems) {
+    const c = it.cert;
+    for (const n of c.coverage || []) {
+      if (n.status !== 'unreachable') continue;
+      rows.push({ name: n.name, sub: `covered by ${c.name} — will fail its renewal`,
+        note: shortErr(n.detail || 'unreachable'), title: n.detail || '', cls: 'untrusted' });
+    }
+  }
+
+  if (!rows.length) { el.innerHTML = '<p class="empty-ok">✓ No trust, scan, or coverage problems.</p>'; return; }
+  el.innerHTML = rows.map((r) =>
+    `<div class="mini-row"><span class="mini-name">${escapeHtml(r.name)}` +
+    (r.sub ? `<br><span class="muted small">${escapeHtml(r.sub)}</span>` : '') +
+    `</span><span class="pill ${r.cls}" title="${escapeHtml(r.title)}">${escapeHtml(r.note)}</span></div>`).join('');
 }
 
 function renderNextUp() {
@@ -1283,6 +1305,10 @@ function renderAudit() {
   const issues = [];
   for (const it of currentItems) {
     const c = it.cert, probs = [];
+    // Domain registrations are not certificates. Every one of these checks is
+    // a TLS notion — the 398-day cap is a CA/Browser Forum rule — so auditing a
+    // domain registered for a decade flagged it as "long validity (9131d)".
+    if (c.kind === 'domain') continue;
     const m = /RSA[- ]?(\d+)/i.exec(c.key_type || '');
     if (m && +m[1] < 2048) probs.push('weak key (' + escapeHtml(c.key_type) + ')');
     if (/sha1|md5/i.test(c.signature_algorithm || '')) probs.push('weak signature');

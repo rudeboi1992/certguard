@@ -21,6 +21,7 @@ import (
 
 	"github.com/bfalcher/certguard/internal/auth"
 	"github.com/bfalcher/certguard/internal/config"
+	"github.com/bfalcher/certguard/internal/coverage"
 	"github.com/bfalcher/certguard/internal/model"
 	"github.com/bfalcher/certguard/internal/notify"
 	"github.com/bfalcher/certguard/internal/rdap"
@@ -824,34 +825,6 @@ func (s *Server) handleRescanCert(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, stored)
 }
 
-// coveredName is what one of a certificate's SAN entries actually serves.
-type coveredName struct {
-	Name string `json:"name"`
-	// match | different | wildcard | unreachable
-	Status  string `json:"status"`
-	Detail  string `json:"detail,omitempty"`
-	Subject string `json:"subject,omitempty"`
-	Issuer  string `json:"issuer,omitempty"`
-	SHA256  string `json:"sha256,omitempty"`
-	// DNSNames is what the certificate ANSWERING here covers — not what the
-	// entry being checked covers. It is the authoritative way to find the real
-	// domain behind a hosting alias: www.cpigaugescom.uniweldproducts.com is a
-	// cPanel addon-domain name, and de-squashing it is ambiguous (hyphens are
-	// stripped too, so fastflocom could be fastflo.com or fast-flo.com). The
-	// certificate simply states it.
-	DNSNames   []string   `json:"dns_names,omitempty"`
-	NotAfter   *time.Time `json:"not_after,omitempty"`
-	TrustError string     `json:"trust_error,omitempty"`
-}
-
-// handleCoverage connects to every name a certificate covers and reports the
-// certificate each one actually serves.
-//
-// A SAN list says what a certificate is valid FOR, not what is deployed. One
-// host can serve a different certificate per vhost via SNI, and two certificates
-// may legitimately cover the same name — so a name being listed here is no
-// guarantee that this is the certificate answering for it. That gap is invisible
-// from the entry alone and is exactly what this checks.
 func (s *Server) handleCoverage(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -867,50 +840,12 @@ func (s *Server) handleCoverage(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "this entry does not list any covered names")
 		return
 	}
-	port := c.Port
-	if port == 0 {
-		port = scanner.DefaultPort
-	}
-
-	// Bounded fan-out: a wildcard cert can carry a lot of names, and each one is
-	// a dial plus a handshake.
-	out := make([]coveredName, len(c.DNSNames))
-	sem := make(chan struct{}, 6)
-	var wg sync.WaitGroup
 	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ScanTimeout+30*time.Second)
 	defer cancel()
-
-	for i, name := range c.DNSNames {
-		// A wildcard is not a host — there is nothing to connect to. Report it
-		// rather than silently dropping it, so the list still adds up.
-		if strings.HasPrefix(name, "*.") {
-			out[i] = coveredName{Name: name, Status: "wildcard",
-				Detail: "not a hostname — nothing to connect to"}
-			continue
-		}
-		wg.Add(1)
-		go func(i int, name string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			res, err := scanner.Scan(ctx, name, port, scanner.Options{Timeout: s.cfg.ScanTimeout})
-			if err != nil {
-				out[i] = coveredName{Name: name, Status: "unreachable", Detail: err.Error()}
-				return
-			}
-			status := "different"
-			if res.SHA256 == c.SHA256 {
-				status = "match"
-			}
-			na := res.NotAfter
-			out[i] = coveredName{
-				Name: name, Status: status,
-				Subject: res.Subject, Issuer: res.Issuer, SHA256: res.SHA256,
-				DNSNames: res.DNSNames, NotAfter: &na, TrustError: res.TrustError,
-			}
-		}(i, name)
-	}
-	wg.Wait()
+	out, port := coverage.Check(ctx, c, s.cfg.ScanTimeout)
+	// Persisted so the dashboard can surface a broken name without the user
+	// having to press this button again.
+	_ = s.store.SaveCoverage(c.ID, out)
 	writeJSON(w, http.StatusOK, map[string]any{"port": port, "names": out})
 }
 

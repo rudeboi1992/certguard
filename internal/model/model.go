@@ -46,6 +46,14 @@ type Cert struct {
 	KeyType   string    `json:"key_type,omitempty"`
 	SigAlg    string    `json:"signature_algorithm,omitempty"`
 
+	// Coverage is the last observed answer to "which certificate actually
+	// serves each name this one covers". Persisted so a broken name — a SAN
+	// that no longer resolves, and will fail the next HTTP-01 renewal for the
+	// whole certificate — shows up on the dashboard instead of only when
+	// somebody presses the check button.
+	Coverage   []CoveredName `json:"coverage,omitempty"`
+	CoverageAt *time.Time    `json:"coverage_at,omitempty"`
+
 	// Operational state.
 	AutoRescan    bool       `json:"auto_rescan"`
 	LastScannedAt *time.Time `json:"last_scanned_at,omitempty"`
@@ -72,4 +80,14 @@ type Cert struct {
 // DaysRemaining reports whole days from now until expiry (may be negative).
 func (c *Cert) DaysRemaining(now time.Time) int {
 	return int(c.ExpiresAt.Sub(now).Hours() / 24)
+}
+
+// CoveredName records what one of a certificate's SAN entries actually serves.
+// Status is match | different | wildcard | unreachable.
+type CoveredName struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Detail  string `json:"detail,omitempty"`
+	Subject string `json:"subject,omitempty"`
+	SHA256  string `json:"sha256,omitempty"`
 }

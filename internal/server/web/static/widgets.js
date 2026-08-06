@@ -593,12 +593,22 @@ function initWidgetGrid(grid, storageKey, opts) {
       };
       // Re-evaluated each auto-scroll frame: the pointer is still, but rows are
       // sliding past it, so the drop slot genuinely changes.
+      // Repacking the whole grid on every pointermove made the drag feel
+      // unsteady: pointer events fire far faster than the screen refreshes, so
+      // the layout was recomputed several times per painted frame and the
+      // cards visibly stuttered. Coalesce to one repack per frame — the
+      // pointer position is still read live, it is just applied once per paint.
+      let frame = null;
       const apply = (delta) => {
         if (delta) autoScrolled += delta;
         if (!moved) return;
-        const next = dropIndex(lastX, lastY, card);
-        if (next !== index) index = next;
-        preview();
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+          frame = null;
+          const next = dropIndex(lastX, lastY, card);
+          if (next !== index) index = next;
+          preview();
+        });
       };
 
       const move = (ev) => {
@@ -614,6 +624,7 @@ function initWidgetGrid(grid, storageKey, opts) {
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
+        if (frame) { cancelAnimationFrame(frame); frame = null; }
         edgeScrollOff();
         card.classList.remove('dragging');
         document.body.classList.remove('dragging-widget');
@@ -716,7 +727,35 @@ function initWidgetGrid(grid, storageKey, opts) {
     }
   });
   widgets().forEach((c) => ro.observe(c));
-  window.addEventListener('resize', relayout);
+
+  // A hand-set height is only correct for the width it was chosen at: narrow
+  // the window and the same content reflows taller, so the card starts hiding
+  // rows it used to show. Rather than leave the user to fix every card by hand
+  // after every resize, grow a sized card back to its content when the column
+  // width changes. It is only ever grown — never shrunk — so deliberate extra
+  // whitespace is preserved, and it is capped so one long list cannot produce a
+  // card taller than the window.
+  let lastColW = 0;
+  function refitSized() {
+    const { cw, cols, colW } = metrics();
+    if (!cw) return;
+    if (Math.abs(colW - lastColW) < 1) return;
+    lastColW = colW;
+    let changed = false;
+    for (const c of visible()) {
+      if (!c.dataset.sized) continue;
+      const body = c.querySelector('.widget-body');
+      if (!body) continue;
+      const hidden = body.scrollHeight - body.clientHeight;
+      if (hidden <= 2) continue;
+      const cap = Math.round(window.innerHeight * 0.78);
+      const want = Math.min(c.offsetHeight + hidden, cap);
+      if (want > c.offsetHeight + 1) { setHeight(c, want); changed = true; }
+    }
+    if (changed) save();
+  }
+
+  window.addEventListener('resize', () => { refitSized(); relayout(); });
 
   apply();
 }

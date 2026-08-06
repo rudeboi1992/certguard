@@ -390,7 +390,8 @@ func (s *Store) List() ([]*model.Cert, error) {
 const selectCols = `SELECT id, name, kind, category, host, port, server_name, subject, issuer,
 	serial, sha256, not_before, expires_at, dns_names, key_type, sig_alg,
 	auto_rescan, last_scanned_at, last_error, notes, active, created_at,
-	last_notified_threshold, last_notified_on, secret_enc, secret_hint FROM certs`
+	last_notified_threshold, last_notified_on, secret_enc, secret_hint,
+	coverage_json, coverage_at FROM certs`
 
 type rowScanner interface{ Scan(dest ...any) error }
 
@@ -407,12 +408,14 @@ func scanRowValues(r rowScanner) (*model.Cert, error) {
 		createdAt             string
 		lastNotifiedThreshold int
 		lastNotifiedOn        sql.NullString
+		coverageJSON          string
+		coverageAt            string
 	)
 	err := r.Scan(&c.ID, &c.Name, &c.Kind, &c.Category, &c.Host, &c.Port, &c.ServerName,
 		&c.Subject, &c.Issuer, &c.Serial, &c.SHA256, &notBefore, &expiresAt,
 		&dnsJSON, &c.KeyType, &c.SigAlg, &autoRescan, &lastScanned, &c.LastError,
 		&c.Notes, &active, &createdAt, &lastNotifiedThreshold, &lastNotifiedOn,
-		&c.SecretEnc, &c.SecretHint)
+		&c.SecretEnc, &c.SecretHint, &coverageJSON, &coverageAt)
 	if err != nil {
 		return nil, err
 	}
@@ -434,6 +437,13 @@ func scanRowValues(r rowScanner) (*model.Cert, error) {
 		t := parseTime(lastNotifiedOn.String)
 		c.LastNotifiedOn = &t
 	}
+	if coverageJSON != "" {
+		_ = json.Unmarshal([]byte(coverageJSON), &c.Coverage)
+	}
+	if coverageAt != "" {
+		t := parseTime(coverageAt)
+		c.CoverageAt = &t
+	}
 	return &c, nil
 }
 
@@ -453,4 +463,15 @@ func nullTime(t *time.Time) any {
 		return nil
 	}
 	return t.UTC().Format(rfc3339)
+}
+
+// SaveCoverage records the result of a coverage check against an entry.
+func (s *Store) SaveCoverage(id int64, names []model.CoveredName) error {
+	b, err := json.Marshal(names)
+	if err != nil {
+		return err
+	}
+	_, err = s.exec(`UPDATE certs SET coverage_json=?, coverage_at=? WHERE id=?`,
+		string(b), time.Now().UTC().Format(rfc3339), id)
+	return err
 }
