@@ -13,6 +13,10 @@ const (
 	KindFile Kind = "file"
 	// KindManual is a hand-entered expiry (API keys, offline certs, anything).
 	KindManual Kind = "manual"
+	// KindDomain is a domain registration refreshed over RDAP. It is a Kind
+	// rather than just a Category because it changes how the entry is
+	// refreshed: the scheduler asks a registry instead of opening a socket.
+	KindDomain Kind = "domain"
 )
 
 // Cert is a tracked certificate or credential. It generalizes the original

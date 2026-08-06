@@ -10,6 +10,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -22,6 +23,7 @@ import (
 	"github.com/bfalcher/certguard/internal/config"
 	"github.com/bfalcher/certguard/internal/model"
 	"github.com/bfalcher/certguard/internal/notify"
+	"github.com/bfalcher/certguard/internal/rdap"
 	"github.com/bfalcher/certguard/internal/scanner"
 	"github.com/bfalcher/certguard/internal/secret"
 	"github.com/bfalcher/certguard/internal/store"
@@ -41,12 +43,14 @@ type Server struct {
 	vault        *vault // envelope-encrypted secret vault (may be locked)
 	mux          *http.ServeMux
 	loginLimiter *rateLimiter // slows credential guessing on auth endpoints
+	rdap         *rdapCache   // short-lived memo of registry lookups
 }
 
 func New(cfg config.Config, st *store.Store, sender notify.Sender) *Server {
 	s := &Server{cfg: cfg, store: st, sender: sender, mux: http.NewServeMux()}
 	s.loginLimiter = newRateLimiter(10, 15*time.Minute) // 10 attempts / IP / 15 min
 	s.vault = newVault(st, cfg.MasterKey, cfg.KeyFile)
+	s.rdap = newRDAPCache(10 * time.Minute)
 	s.routes()
 	return s
 }
@@ -117,6 +121,8 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/v1/certs", s.adminOnly(s.handleCreateCert))
 	s.mux.Handle("POST /api/v1/certs/{id}/rescan", s.adminOnly(s.handleRescanCert))
 	s.mux.Handle("POST /api/v1/certs/{id}/coverage", s.adminOnly(s.handleCoverage))
+	s.mux.Handle("POST /api/v1/domains", s.adminOnly(s.handleTrackDomain))
+	s.mux.Handle("POST /api/v1/domains/candidates", s.adminOnly(s.handleDomainCandidates))
 	s.mux.Handle("PATCH /api/v1/certs/{id}", s.adminOnly(s.handleUpdateCert))
 	s.mux.Handle("DELETE /api/v1/certs/{id}", s.adminOnly(s.handleDeleteCert))
 
@@ -777,6 +783,23 @@ func (s *Server) handleRescanCert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "entry not found")
 		return
 	}
+	// A domain registration refreshes by asking the registry, not by opening a
+	// socket, but from the UI it is the same "refresh this now" button.
+	if c.Kind == model.KindDomain {
+		res, err := s.rdap.Lookup(r.Context(), c.Host, s.cfg.ScanTimeout, true)
+		if err != nil {
+			_ = s.store.TouchScanError(id, err.Error())
+			writeErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		stored, err := s.store.UpsertDomain(c.Name, res)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, stored)
+		return
+	}
 	if c.Kind != model.KindEndpoint || c.Host == "" {
 		writeErr(w, http.StatusBadRequest, "only live endpoint entries can be rescanned")
 		return
@@ -805,8 +828,8 @@ func (s *Server) handleRescanCert(w http.ResponseWriter, r *http.Request) {
 type coveredName struct {
 	Name string `json:"name"`
 	// match | different | wildcard | unreachable
-	Status     string     `json:"status"`
-	Detail     string     `json:"detail,omitempty"`
+	Status  string `json:"status"`
+	Detail  string `json:"detail,omitempty"`
 	Subject string `json:"subject,omitempty"`
 	Issuer  string `json:"issuer,omitempty"`
 	SHA256  string `json:"sha256,omitempty"`
@@ -889,6 +912,137 @@ func (s *Server) handleCoverage(w http.ResponseWriter, r *http.Request) {
 	}
 	wg.Wait()
 	writeJSON(w, http.StatusOK, map[string]any{"port": port, "names": out})
+}
+
+// handleTrackDomain looks a domain up over RDAP and stores it as a tracked
+// registration. The input may be any hostname; it is reduced to the registrable
+// domain, so scanning a subdomain and tracking its registration both work from
+// whatever the user happens to have typed.
+func (s *Server) handleTrackDomain(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Domain string `json:"domain"`
+		Name   string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(req.Domain) == "" {
+		writeErr(w, http.StatusBadRequest, "domain is required")
+		return
+	}
+	res, err := s.rdap.Lookup(r.Context(), req.Domain, s.cfg.ScanTimeout, false)
+	if err != nil {
+		// Not registered / no published expiry are ordinary answers about the
+		// domain, not server faults, so they read as 4xx.
+		if errors.Is(err, rdap.ErrNotRegistered) || errors.Is(err, rdap.ErrNoExpiry) {
+			writeErr(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	stored, err := s.store.UpsertDomain(req.Name, res)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"lookup": res, "saved": stored})
+}
+
+// domainCandidate is one registrable domain found behind a set of hostnames.
+type domainCandidate struct {
+	Domain    string     `json:"domain"`
+	Tracked   bool       `json:"tracked"`
+	Registrar string     `json:"registrar,omitempty"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	Status    []string   `json:"status,omitempty"`
+	Error     string     `json:"error,omitempty"`
+	// FromHosts is which of the submitted names reduced to this domain, so the
+	// UI can explain where a suggestion came from.
+	FromHosts []string `json:"from_hosts,omitempty"`
+}
+
+// handleDomainCandidates turns a pile of hostnames — a certificate's SANs, the
+// hosts behind them — into the set of registrable domains they belong to, and
+// looks each one up.
+//
+// The reduction has to happen here rather than in the browser because it needs
+// the Public Suffix List: www.cpigaugescom.uniweldproducts.com belongs to
+// uniweldproducts.com, and taking the last two labels would turn a .co.uk name
+// into the unregistrable "co.uk".
+func (s *Server) handleDomainCandidates(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Hosts []string `json:"hosts"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if len(req.Hosts) == 0 {
+		writeErr(w, http.StatusBadRequest, "hosts is required")
+		return
+	}
+
+	// Collapse to unique domains first — a certificate with a dozen SANs on one
+	// domain must produce one lookup, not a dozen.
+	order := []string{}
+	from := map[string][]string{}
+	for _, h := range req.Hosts {
+		d, err := rdap.Registrable(h)
+		if err != nil {
+			continue
+		}
+		if _, seen := from[d]; !seen {
+			order = append(order, d)
+		}
+		from[d] = append(from[d], h)
+	}
+	if len(order) > 40 {
+		order = order[:40] // sanity bound on outbound lookups per request
+	}
+
+	existing, err := s.store.List()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	tracked := map[string]bool{}
+	for _, c := range existing {
+		if c.Kind == model.KindDomain {
+			tracked[strings.ToLower(c.Host)] = true
+		}
+	}
+
+	out := make([]domainCandidate, len(order))
+	sem := make(chan struct{}, 6)
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithTimeout(r.Context(), s.cfg.ScanTimeout+40*time.Second)
+	defer cancel()
+
+	for i, d := range order {
+		out[i] = domainCandidate{Domain: d, FromHosts: from[d], Tracked: tracked[d]}
+		if tracked[d] {
+			continue // already known; no reason to hit the registry
+		}
+		wg.Add(1)
+		go func(i int, d string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			res, err := s.rdap.Lookup(ctx, d, s.cfg.ScanTimeout, false)
+			if err != nil {
+				out[i].Error = err.Error()
+				return
+			}
+			exp := res.ExpiresAt
+			out[i].ExpiresAt = &exp
+			out[i].Registrar = res.Registrar
+			out[i].Status = res.Status
+		}(i, d)
+	}
+	wg.Wait()
+	writeJSON(w, http.StatusOK, map[string]any{"domains": out})
 }
 
 // handleCalendar returns all active entries as an .ics calendar file.

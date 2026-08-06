@@ -71,3 +71,48 @@ func TestWantsThreshold(t *testing.T) {
 		t.Error("'30, 7' should want 7 but not 3")
 	}
 }
+
+// A domain registration must use the longer ladder. Thirty days is already late
+// for a domain: transfer locks and billing disputes take weeks, and the
+// recovery path after a lapse is redemption fees rather than a certbot run.
+func TestDomainThresholdLadder(t *testing.T) {
+	cases := []struct {
+		days int
+		want int
+	}{
+		{90, -1}, {61, -1}, {60, 60}, {45, 60}, {31, 60},
+		{30, 30}, {8, 30},
+		{7, 7}, {1, 7}, {0, 7}, {-5, 7}, // expired stays in the most urgent bucket
+	}
+	for _, c := range cases {
+		if got := CurrentDomainThreshold(c.days); got != c.want {
+			t.Errorf("CurrentDomainThreshold(%d) = %d, want %d", c.days, got, c.want)
+		}
+	}
+}
+
+// The ladder must be selected by kind, not applied globally: a certificate at
+// 45 days is still quiet, while a domain at 45 days is already due.
+func TestThresholdPicksLadderByKind(t *testing.T) {
+	now := time.Now().UTC()
+	at := func(days int) time.Time { return now.AddDate(0, 0, days) }
+
+	cert := &model.Cert{Kind: model.KindEndpoint, ExpiresAt: at(45)}
+	if got := NotificationThreshold(cert, now); got != -1 {
+		t.Errorf("certificate at 45 days: got %d, want -1 (quiet)", got)
+	}
+	dom := &model.Cert{Kind: model.KindDomain, ExpiresAt: at(45)}
+	if got := NotificationThreshold(dom, now); got != 60 {
+		t.Errorf("domain at 45 days: got %d, want 60", got)
+	}
+	// And escalation still works within the domain ladder.
+	dom2 := &model.Cert{Kind: model.KindDomain, ExpiresAt: at(20), LastNotifiedThreshold: 60}
+	if got := NotificationThreshold(dom2, now); got != 30 {
+		t.Errorf("domain escalating 60 -> 30: got %d, want 30", got)
+	}
+	// Already notified at the same level stays quiet.
+	dom3 := &model.Cert{Kind: model.KindDomain, ExpiresAt: at(20), LastNotifiedThreshold: 30}
+	if got := NotificationThreshold(dom3, now); got != -1 {
+		t.Errorf("domain already notified at 30: got %d, want -1", got)
+	}
+}

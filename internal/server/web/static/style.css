@@ -651,6 +651,7 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .cover-add-item input { margin-top: .2rem; flex: 0 0 auto; }
 .cover-add-body { display: flex; flex-direction: column; gap: .12rem; min-width: 0; }
 .cover-add-title { font-weight: 600; overflow-wrap: anywhere; }
+.cover-add-head { font-size: .95rem; font-weight: 600; margin: 1.1rem 0 .2rem; }
 .cover-add-body .small { overflow-wrap: anywhere; }
 .cover-chip { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem;
   background: rgba(127,127,127,.14); padding: .18rem .5rem; border-radius: 5px; word-break: break-all; }

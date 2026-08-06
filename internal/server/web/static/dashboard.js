@@ -505,18 +505,39 @@ function duplicatesOf(c) {
     .map((x) => x.cert.name);
 }
 
+// Rows accumulate here so the domain branch and the certificate branch can
+// share one painter (finishDetail).
+let detailRows = [];
+
 function renderDetail(it) {
   const c = it.cert;
   const days = it.days_remaining;
   const isEndpoint = c.kind === 'endpoint' || !!c.host;
-  const out = [];
-  const add = (k, v) => { if (v) out.push(`<div class="sd-row"><span class="sd-k">${k}</span><span class="sd-v">${v}</span></div>`); };
+  detailRows = [];
+  const add = (k, v) => { if (v) detailRows.push(`<div class="sd-row"><span class="sd-k">${k}</span><span class="sd-v">${v}</span></div>`); };
 
   const catCol = categoryColor(c.category);
   add('Type', c.category
     ? `<span class="pill" style="background:${hexA(catCol, 0.15)};color:${catCol}">${escapeHtml(categoryLabel(c.category))}</span>`
     : `<span class="muted">${escapeHtml(c.kind || '')}</span>`);
   add('Expires', `${fmtDate(c.expires_at)} <span class="pill ${expiryLevel(days)}">${fmtRemaining(days)}</span>`);
+
+  // A domain registration reuses the same columns for different facts, so it
+  // gets its own labels rather than reading "Issuer: Bluehost Inc."
+  if (c.kind === 'domain') {
+    add('Domain', `<span class="mono">${escapeHtml(c.host || '')}</span>`);
+    add('Registrar', escapeHtml(c.issuer || ''));
+    if (c.not_before && new Date(c.not_before).getUTCFullYear() > 2000) add('Registered', fmtDate(c.not_before));
+    add('Status', escapeHtml(c.subject || ''));
+    const ns = c.dns_names || [];
+    if (ns.length) add('Nameservers', `<div class="cover-list">${ns.map((n) => `<span class="cover-chip">${escapeHtml(n)}</span>`).join('')}</div>`);
+    if (c.last_error) add('Last lookup', `<span class="pill untrusted">failed</span> <span class="muted small">${escapeHtml(c.last_error)}</span>`);
+    else if (c.last_scanned_at) add('Last checked', `<span class="muted">checked ${escapeHtml(relTime(c.last_scanned_at))}</span>` +
+      (isAdmin ? ` · <button class="rescan-btn" data-drescan="${c.id}" title="Look this domain up again now">↻ refresh now</button>` : ''));
+    add('Added', fmtDate(c.created_at));
+    finishDetail(c);
+    return;
+  }
   if (isEndpoint) add('Endpoint', `<span class="mono">${escapeHtml(c.host)}:${c.port}</span>`);
   // Manual entries serialize a zero not_before; only show a real one.
   if (c.not_before && new Date(c.not_before).getUTCFullYear() > 2000) add('Valid from', fmtDate(c.not_before));
@@ -559,8 +580,14 @@ function renderDetail(it) {
   // Always last, and the one thing a bare manual entry can always show.
   add('Added', fmtDate(c.created_at));
 
+  finishDetail(c);
+}
+
+// Shared tail for every flavour of detail popup: paint the rows collected so
+// far, build the action row, and wire the buttons.
+function finishDetail(c) {
   $('detailTitle').textContent = c.name;
-  $('detailBody').innerHTML = out.join('');
+  $('detailBody').innerHTML = detailRows.join('');
   $('detailActions').innerHTML = [
     `<a class="btn ghost small" href="/api/v1/certs/${c.id}/calendar.ics">📆 Add to calendar</a>`,
     isAdmin ? `<span class="spacer"></span><button class="btn ghost small" data-dedit="${c.id}">Edit</button>` : '',
@@ -623,6 +650,33 @@ async function checkCoverage(id, btn) {
   box.hidden = false;
 }
 
+// --- track a domain registration ---
+if ($('domainForm')) $('domainForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const target = $('domainTarget').value.trim();
+  const status = $('domainStatus');
+  status.hidden = false;
+  status.className = 'status';
+  status.textContent = `Looking up ${target}…`;
+  try {
+    const res = await api('POST', '/api/v1/domains', { domain: target });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) {
+      status.className = 'status ok';
+      const l = d.lookup || {};
+      status.textContent = `Tracking ${l.domain} — ${l.registrar || 'registrar unknown'}, expires ${fmtDate(l.expires_at)}`;
+      $('domainTarget').value = '';
+      loadCerts();
+    } else {
+      status.className = 'status err';
+      status.textContent = d.error || 'Lookup failed';
+    }
+  } catch (_) {
+    status.className = 'status err';
+    status.textContent = 'Lookup failed';
+  }
+});
+
 // After a scan, check whether the names this certificate covers are actually
 // served by it. Where they are not, offer to track those certificates too —
 // they are separate things with separate expiry dates, and nothing about the
@@ -646,13 +700,40 @@ async function offerCoverageAdds(saved, status) {
     groups.get(n.sha256).names.push(n.name);
   }
   const found = [...groups.values()];
+
+  // Every hostname this scan touched, including the SANs of the certificates
+  // found behind them — that union is what reveals domains like unibox.biz,
+  // which appears on a neighbouring certificate and nowhere else.
+  const hosts = new Set([saved.host, ...(saved.dns_names || [])].filter(Boolean));
+  for (const n of d.names || []) {
+    hosts.add(n.name);
+    for (const s of n.dns_names || []) hosts.add(s);
+  }
+  if (status) status.textContent = 'Looking up domain registrations…';
+  const domains = await domainCandidates([...hosts]);
+
   if (status) {
     status.className = 'status ok';
-    status.textContent = found.length
-      ? `${found.length} other certificate${found.length === 1 ? '' : 's'} found behind those names`
-      : 'Every reachable name it covers serves this certificate';
+    const bits = [];
+    if (found.length) bits.push(`${found.length} other certificate${found.length === 1 ? '' : 's'}`);
+    if (domains.length) bits.push(`${domains.length} domain registration${domains.length === 1 ? '' : 's'}`);
+    status.textContent = bits.length
+      ? `Found ${bits.join(' and ')} worth tracking`
+      : 'Nothing else found — every reachable name serves this certificate';
   }
-  if (found.length) showCoverageAdd(found, saved.name);
+  if (found.length || domains.length) showCoverageAdd(found, domains, saved.name);
+}
+
+// Ask the server which registrable domains a pile of hostnames belong to. The
+// reduction needs the Public Suffix List, which lives server-side.
+async function domainCandidates(hosts) {
+  const res = await api('POST', '/api/v1/domains/candidates', { hosts });
+  if (!res.ok) return [];
+  const d = await res.json().catch(() => ({}));
+  // Keep only what is both untracked and actually has a published expiry —
+  // a ccTLD that publishes none, or a name nobody registered, is not
+  // something we can put a date on.
+  return (d.domains || []).filter((x) => !x.tracked && x.expires_at && !x.error);
 }
 
 // Where to actually track a certificate we found behind an alias. The alias
@@ -667,12 +748,25 @@ function canonicalHost(g) {
   return real || g.names[0];
 }
 
-function showCoverageAdd(found, fromName) {
+function showCoverageAdd(found, domains, fromName) {
   const dlg = $('coverAddDialog');
   if (!dlg) return;
+  const parts = [];
+  if (found.length) parts.push(`${found.length} other certificate${found.length === 1 ? '' : 's'}`);
+  if (domains.length) parts.push(`${domains.length} domain registration${domains.length === 1 ? '' : 's'}`);
   $('coverAddIntro').textContent =
-    `${fromName} lists names that are answered by ${found.length} other certificate` +
-    `${found.length === 1 ? '' : 's'}. They expire on their own schedule — track them too?`;
+    `Scanning ${fromName} turned up ${parts.join(' and ')}. Each expires on its own schedule — track them too?`;
+
+  $('coverAddDomains').hidden = domains.length === 0;
+  $('coverAddDomainList').innerHTML = domains.map((g, i) => `
+    <label class="cover-add-item">
+      <input type="checkbox" data-dpick="${i}" checked>
+      <span class="cover-add-body">
+        <span class="cover-add-title">${escapeHtml(g.domain)}</span>
+        <span class="muted small">${escapeHtml(g.registrar || 'registrar unknown')} · expires ${fmtDate(g.expires_at)}</span>
+        ${(g.status || []).length ? `<span class="muted small">${escapeHtml(g.status.join(', '))}</span>` : ''}
+      </span>
+    </label>`).join('');
   $('coverAddList').innerHTML = found.map((g, i) => {
     const host = canonicalHost(g);
     const also = (g.dns_names || []).filter((n) => !n.startsWith('*.') && n !== host);
@@ -691,10 +785,16 @@ function showCoverageAdd(found, fromName) {
   $('coverAddGo').onclick = async () => {
     const picks = [...$('coverAddList').querySelectorAll('[data-pick]')]
       .filter((cb) => cb.checked).map((cb) => found[+cb.dataset.pick]);
-    if (!picks.length) { dlg.close(); return; }
+    const dpicks = [...$('coverAddDomainList').querySelectorAll('[data-dpick]')]
+      .filter((cb) => cb.checked).map((cb) => domains[+cb.dataset.dpick]);
+    if (!picks.length && !dpicks.length) { dlg.close(); return; }
     $('coverAddGo').disabled = true;
     $('coverAddGo').textContent = 'Adding…';
     let ok = 0;
+    for (const g of dpicks) {
+      const r = await api('POST', '/api/v1/domains', { domain: g.domain, name: g.domain });
+      if (r.ok) ok++;
+    }
     for (const g of picks) {
       // Scan one hostname per certificate — the same path a manual scan takes,
       // so these are ordinary endpoint entries that rescan on their own. Try the

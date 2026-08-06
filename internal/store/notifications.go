@@ -108,10 +108,20 @@ func (s *Store) MarkNotified(certID int64, threshold int) error {
 	return err
 }
 
+// DomainsForRefresh returns active domain registrations with auto-refresh on.
+// Separate from EndpointsForRescan because they are refreshed by a different
+// mechanism — an RDAP query rather than a TLS handshake.
+func (s *Store) DomainsForRefresh() ([]*model.Cert, error) {
+	return s.listForRefresh(`WHERE active=1 AND kind='domain' AND auto_rescan=1 AND host!='' ORDER BY id ASC`)
+}
+
 // EndpointsForRescan returns active endpoint certs that have auto-rescan on.
 func (s *Store) EndpointsForRescan() ([]*model.Cert, error) {
-	rows, err := s.query(selectCols +
-		` WHERE active=1 AND kind='endpoint' AND auto_rescan=1 AND host!='' ORDER BY id ASC`)
+	return s.listForRefresh(`WHERE active=1 AND kind='endpoint' AND auto_rescan=1 AND host!='' ORDER BY id ASC`)
+}
+
+func (s *Store) listForRefresh(where string) ([]*model.Cert, error) {
+	rows, err := s.query(selectCols + ` ` + where)
 	if err != nil {
 		return nil, err
 	}

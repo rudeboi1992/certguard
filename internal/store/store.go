@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/bfalcher/certguard/internal/model"
+	"github.com/bfalcher/certguard/internal/rdap"
 	"github.com/bfalcher/certguard/internal/scanner"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // registers "pgx"
@@ -204,6 +205,62 @@ func (s *Store) UpsertScan(name string, res *scanner.Result) (*model.Cert, error
 	return s.GetByID(id)
 }
 
+// UpsertDomain inserts or refreshes a domain-registration entry from an RDAP
+// lookup. Domains are keyed by host with port 0, which keeps them from
+// colliding with an endpoint entry for the same name — uniweld.com:443 (the
+// certificate) and uniweld.com:0 (the registration) are two different clocks
+// and both deserve tracking.
+func (s *Store) UpsertDomain(name string, res *rdap.Result) (*model.Cert, error) {
+	now := time.Now().UTC()
+	ns, _ := json.Marshal(res.Nameservers)
+
+	existing, err := s.findByHostPort(res.Domain, 0)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		// A renewal pushes the date out; treat that like a rotated certificate
+		// and re-arm the escalation so the next cycle alerts from scratch.
+		if !existing.ExpiresAt.Equal(res.ExpiresAt) {
+			existing.LastNotifiedThreshold = 0
+			existing.LastNotifiedOn = nil
+		}
+		_, err := s.exec(`UPDATE certs SET
+			issuer=?, expires_at=?, not_before=?, dns_names=?,
+			last_scanned_at=?, last_error=?,
+			last_notified_threshold=?, last_notified_on=?
+			WHERE id=?`,
+			res.Registrar, res.ExpiresAt.Format(rfc3339), res.RegisteredAt.Format(rfc3339),
+			string(ns), now.Format(rfc3339), "",
+			existing.LastNotifiedThreshold, nullTime(existing.LastNotifiedOn),
+			existing.ID)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetByID(existing.ID)
+	}
+
+	if name == "" {
+		name = res.Domain
+	}
+	// Registrar goes in issuer and nameservers in dns_names: both mean "who
+	// vouches for this" and "what it covers", so the existing columns, list
+	// rendering and detail popup all carry over without a migration.
+	id, err := s.insertReturningID(`INSERT INTO certs
+		(name, kind, category, host, port, subject, issuer,
+		 not_before, expires_at, dns_names,
+		 auto_rescan, last_scanned_at, last_error, active, created_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		name, string(model.KindDomain), "domain", res.Domain, 0,
+		strings.Join(res.Status, ", "), res.Registrar,
+		res.RegisteredAt.Format(rfc3339), res.ExpiresAt.Format(rfc3339), string(ns),
+		1, now.Format(rfc3339), "", 1, now.Format(rfc3339))
+	if err != nil {
+		return nil, err
+	}
+	return s.GetByID(id)
+}
+
 // AddCert inserts a manually-entered or file-parsed cert. Only Name and
 // ExpiresAt are required; the certificate-metadata fields are optional and used
 // when a dropped file was parsed client-side. Kind defaults to manual.
@@ -337,19 +394,19 @@ const selectCols = `SELECT id, name, kind, category, host, port, server_name, su
 
 type rowScanner interface{ Scan(dest ...any) error }
 
-func scanRow(r rowScanner) (*model.Cert, error)      { return scanRowValues(r) }
+func scanRow(r rowScanner) (*model.Cert, error) { return scanRowValues(r) }
 func scanRowValues(r rowScanner) (*model.Cert, error) {
 	var (
-		c            model.Cert
-		notBefore    string
-		expiresAt    string
-		dnsJSON      string
-		autoRescan   int
-		active       int
-		lastScanned  sql.NullString
-		createdAt    string
+		c                     model.Cert
+		notBefore             string
+		expiresAt             string
+		dnsJSON               string
+		autoRescan            int
+		active                int
+		lastScanned           sql.NullString
+		createdAt             string
 		lastNotifiedThreshold int
-		lastNotifiedOn sql.NullString
+		lastNotifiedOn        sql.NullString
 	)
 	err := r.Scan(&c.ID, &c.Name, &c.Kind, &c.Category, &c.Host, &c.Port, &c.ServerName,
 		&c.Subject, &c.Issuer, &c.Serial, &c.SHA256, &notBefore, &expiresAt,

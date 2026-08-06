@@ -55,9 +55,20 @@
         <div class="add-tabs" role="tablist">
           <button type="button" class="add-tab active" data-pane="pane-manual">Enter manually / drop file</button>
           <button type="button" class="add-tab" data-pane="pane-scan">Scan a live endpoint</button>
+          <button type="button" class="add-tab" data-pane="pane-domain">Track a domain</button>
         </div>
 
         <div class="add-panes">
+        <div class="add-pane" id="pane-domain" hidden>
+          <p class="muted small">Registration expiry, straight from the registry over RDAP. This is a different clock from the certificate — a lapsed domain takes DNS and email with it.</p>
+          <form id="domainForm" class="row">
+            <input type="text" id="domainTarget" placeholder="example.com" required>
+            <button type="submit" class="btn primary">Track</button>
+          </form>
+          <p class="muted small">Any hostname works — it is reduced to the registered domain.</p>
+          <p id="domainStatus" class="status" hidden></p>
+        </div>
+
         <div class="add-pane" id="pane-scan" hidden>
           <p class="muted small">Connect over TLS and read a certificate automatically.</p>
           <form id="scanForm" class="row">
@@ -255,6 +266,11 @@
     </div>
     <p id="coverAddIntro" class="muted small"></p>
     <div id="coverAddList" class="cover-add-list"></div>
+    <div id="coverAddDomains" hidden>
+      <h3 class="cover-add-head">Domain registrations</h3>
+      <p class="muted small">Found under the names on these certificates. A lapsed registration is far worse than a lapsed certificate, and nothing about the certificate would warn you.</p>
+      <div id="coverAddDomainList" class="cover-add-list"></div>
+    </div>
     <div class="detail-actions">
       <span class="spacer"></span>
       <button type="button" class="btn ghost small" id="coverAddSkip">Not now</button>

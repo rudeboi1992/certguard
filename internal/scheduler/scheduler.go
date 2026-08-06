@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bfalcher/certguard/internal/notify"
+	"github.com/bfalcher/certguard/internal/rdap"
 	"github.com/bfalcher/certguard/internal/scanner"
 	"github.com/bfalcher/certguard/internal/store"
 )
@@ -98,6 +99,36 @@ func (s *Scheduler) rescan(ctx context.Context) (scanned, errs int) {
 		if _, err := s.store.UpsertScan(c.Name, res); err != nil {
 			errs++
 			s.logger.Printf("scheduler: store rescan %s:%d: %v", c.Host, c.Port, err)
+			continue
+		}
+		scanned++
+	}
+
+	// Domain registrations refresh on the same cycle. A registry lookup is not
+	// a TLS handshake, but everything downstream — expiry, thresholds, alerts,
+	// the calendar — works off expires_at and does not care which produced it.
+	doms, err := s.store.DomainsForRefresh()
+	if err != nil {
+		s.logger.Printf("scheduler: list domains: %v", err)
+		return scanned, errs
+	}
+	for _, c := range doms {
+		if ctx.Err() != nil {
+			break
+		}
+		res, err := rdap.Lookup(ctx, c.Host, rdap.Options{Timeout: s.scanTimeout})
+		if err != nil {
+			errs++
+			// Record it so the failure surfaces on the entry rather than only
+			// in the log — a domain that stopped resolving in RDAP is exactly
+			// the kind of thing worth seeing on the dashboard.
+			_ = s.store.TouchScanError(c.ID, err.Error())
+			s.logger.Printf("scheduler: rdap %s failed: %v", c.Host, err)
+			continue
+		}
+		if _, err := s.store.UpsertDomain(c.Name, res); err != nil {
+			errs++
+			s.logger.Printf("scheduler: store domain %s: %v", c.Host, err)
 			continue
 		}
 		scanned++

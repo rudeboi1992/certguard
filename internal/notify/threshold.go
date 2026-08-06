@@ -12,6 +12,14 @@ import (
 // Default day-thresholds, most-to-least urgent.
 var Thresholds = []int{3, 7, 30}
 
+// DomainThresholds are the buckets for domain registrations. They start far
+// earlier than a certificate's because the recovery story is worse: a lapsed
+// certificate is reissued in minutes by an ACME client, while a lapsed domain
+// enters redemption, costs a restore fee, and can eventually be bought by
+// somebody else. Registrar transfer locks and billing disputes also take weeks,
+// not hours, so 30 days is already late.
+var DomainThresholds = []int{7, 30, 60}
+
 // CurrentThreshold returns the most urgent threshold bucket for a given number
 // of days remaining: 3, 7, 30, or -1 (nothing to notify, >30 days out).
 // Expired certs (days < 0) fall into the 3-day (urgent) bucket.
@@ -28,6 +36,28 @@ func CurrentThreshold(days int) int {
 	}
 }
 
+// CurrentDomainThreshold is CurrentThreshold's counterpart for registrations.
+func CurrentDomainThreshold(days int) int {
+	switch {
+	case days <= 7:
+		return 7
+	case days <= 30:
+		return 30
+	case days <= 60:
+		return 60
+	default:
+		return -1
+	}
+}
+
+// thresholdFor picks the ladder appropriate to what the entry actually is.
+func thresholdFor(c *model.Cert, days int) int {
+	if c.Kind == model.KindDomain {
+		return CurrentDomainThreshold(days)
+	}
+	return CurrentThreshold(days)
+}
+
 // NotificationThreshold decides whether a cert should be notified now, and at
 // what threshold. It returns 3/7/30 to notify, or -1 for "nothing to do".
 //
@@ -39,7 +69,7 @@ func CurrentThreshold(days int) int {
 // Because the decision is state-based rather than time-based, the scheduler can
 // run as often as it likes without producing duplicate alerts.
 func NotificationThreshold(c *model.Cert, now time.Time) int {
-	current := CurrentThreshold(c.DaysRemaining(now))
+	current := thresholdFor(c, c.DaysRemaining(now))
 	if current == -1 {
 		return -1
 	}
