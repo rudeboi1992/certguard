@@ -4,6 +4,8 @@
 name: Go
 
 on:
+  # Manual trigger, so a build can be started without a push.
+  workflow_dispatch:
   push:
     branches: [ "main" ]
   pull_request:
