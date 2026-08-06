@@ -83,6 +83,11 @@
   <div id="toast" class="toast" hidden></div>
 
   <script src="/static/common.js"></script>
+  <!-- loadWhoami() in common.js calls ZK.isUnlocked() whenever zero-knowledge
+       mode is on, so every page that calls it needs zk.js — even this one,
+       which never touches a secret itself. Without it the whole page dies on
+       "ZK is not defined" before any data loads. -->
+  <script src="/static/zk.js"></script>
   <script src="/static/inventory.js"></script>
 </body>
 </html>
