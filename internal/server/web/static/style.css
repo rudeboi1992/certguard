@@ -11,6 +11,13 @@
   --warn: #ea580c;
   --urgent: #dc2626;
   --radius: 10px;
+  /* Tells the browser which scheme to paint the parts of a form control we
+     don't own: the calendar button inside input[type=date], the picker popup
+     it opens, spin buttons. Without this the browser assumes light and draws
+     a near-black calendar glyph, which vanishes against a dark field. Set on
+     all three theme states below, not just dark, so an explicit light choice
+     also overrides an OS-dark default. */
+  color-scheme: light;
   /* One page width, shared by the header and the content below it so they stay
      flush. The dashboard is a 4-column widget grid, so it wants real room;
      settings is a single stack of forms and overrides this to stay readable. */
@@ -26,6 +33,7 @@
     --muted: #9aa4b2;
     --border: #262c34;
     --primary: #3b82f6;
+    color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
@@ -35,6 +43,7 @@
   --muted: #9aa4b2;
   --border: #262c34;
   --primary: #3b82f6;
+  color-scheme: dark;
 }
 /* data-theme="light" needs no block — it simply keeps the :root light values,
    overriding the OS-dark default because the media query above excludes any
