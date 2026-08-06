@@ -1004,6 +1004,25 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
   border: 1px solid var(--border); border-radius: 999px; font-size: .78rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+/* A key beside the name marks an entry that holds a secret, so the rows worth
+   expanding are visible without opening any of them. */
+.inv-key { font-size: .8rem; cursor: help; }
+.inv-secret-f { gap: .3rem; cursor: pointer; user-select: none; }
+.inv-secret-f input { accent-color: var(--primary); margin: 0; }
+
+/* Notes are edited in place. Capped in width because a note is prose and a
+   40rem measure stays readable; the row itself can be far wider. */
+.inv-notes { display: grid; gap: .35rem; max-width: 40rem; }
+.inv-notes-in {
+  width: 100%; resize: vertical; padding: .45rem .55rem; font: inherit;
+  font-size: .85rem; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card); color: var(--ink);
+}
+.inv-notes-act { display: flex; align-items: center; gap: .5rem; }
+/* Disabled Save means "nothing has changed", which should read as inert rather
+   than broken — hence dimmed instead of restyled. */
+.inv-notes-act .btn[disabled] { opacity: .45; cursor: default; }
+
 .inv-cov { display: grid; gap: .3rem; font-size: .85rem; }
 .inv-cov-list { display: grid; gap: .25rem; }
 .inv-cov-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }

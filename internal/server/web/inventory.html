@@ -12,6 +12,7 @@
   <header class="topbar">
     <div class="topbar-inner">
       <span class="brand">certguard</span>
+      <button id="vaultLockBtn" class="nav-btn vault-btn" hidden></button>
       <span class="spacer"></span>
       <span id="whoami" class="muted"></span>
       <button id="themeToggle" class="nav-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
@@ -49,6 +50,9 @@
           <option value="file">File</option>
           <option value="manual">Manual</option>
         </select>
+      </label>
+      <label class="inv-f inv-secret-f" id="invSecretsWrap" hidden>
+        <input type="checkbox" id="invSecrets"> 🔑 With secrets
       </label>
       <span class="inv-toolbar-spacer"></span>
       <button type="button" id="invReset" class="nav-btn" hidden>Clear filters</button>
@@ -88,6 +92,7 @@
        which never touches a secret itself. Without it the whole page dies on
        "ZK is not defined" before any data loads. -->
   <script src="/static/zk.js"></script>
+  <script src="/static/vault-ui.js"></script>
   <script src="/static/inventory.js"></script>
 </body>
 </html>

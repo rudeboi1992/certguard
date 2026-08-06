@@ -239,23 +239,8 @@
 
   <!-- Unlock prompt. A dialog rather than an inline banner so it can also open
        on top of the entry detail popup, which is where Reveal lives. -->
-  <dialog id="vaultDialog" class="detail-modal vault-modal" aria-labelledby="vaultTitle">
-    <div class="vault-head">
-      <span class="vault-badge" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10" rx="2.2"/><path d="M8 10.5V7.6a4 4 0 0 1 8 0v2.9"/></svg>
-      </span>
-      <span class="vault-copy">
-        <strong class="vault-title" id="vaultTitle">Vault locked</strong>
-        <span class="vault-sub muted">Enter your passphrase to reveal or store secrets.</span>
-      </span>
-      <button type="button" class="widget-hide" id="vaultClose" title="Close" aria-label="Close">×</button>
-    </div>
-    <div class="vault-form">
-      <input type="password" id="vaultPass" placeholder="Passphrase" autocomplete="current-password">
-      <button class="btn primary" id="vaultUnlockBtn">Unlock</button>
-    </div>
-    <p id="vaultLockErr" class="error small" hidden></p>
-  </dialog>
+  <!-- The vault unlock dialog is injected by vault-ui.js, so the inventory page
+       and this one share a single definition of it. -->
 
   <!-- Offered after a scan when the names a certificate covers turn out to be
        served by other certificates. Those are separate things with separate
@@ -306,6 +291,7 @@
   <script src="/static/cert-parser.js"></script>
   <script src="/static/common.js"></script>
   <script src="/static/zk.js"></script>
+  <script src="/static/vault-ui.js"></script>
   <script src="/static/widgets.js"></script>
   <script src="/static/dashboard.js"></script>
 </body>

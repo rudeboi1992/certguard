@@ -245,91 +245,13 @@ function setupMoreObserver(total) {
 // In zero-knowledge mode the passphrase is stretched in the browser and unwraps
 // the data key locally (nothing is sent to the server). Otherwise it posts to the
 // server-side passphrase vault.
-function showVaultUnlock() {
-  const dlg = $('vaultDialog'); if (!dlg) return;
-  const go = async () => {
-    const errEl = $('vaultLockErr');
-    errEl.hidden = true;
-    const pass = $('vaultPass').value;
-    if (zkEnabled) {
-      try {
-        const res = await api('GET', '/api/v1/vault/keyring');
-        if (!res.ok) throw new Error('keyring unavailable');
-        await ZK.unlock(pass, await res.json());
-        vaultLocked = false;
-        closeVaultDialog();
-        syncVaultUi();
-        toast('Vault unlocked ✓');
-        loadCerts();
-      } catch (e) {
-        errEl.textContent = 'Incorrect passphrase';
-        errEl.hidden = false;
-      }
-      return;
-    }
-    const res = await api('POST', '/api/v1/vault/unlock', { passphrase: pass });
-    if (res.ok) { location.reload(); return; }
-    const d = await res.json().catch(() => ({}));
-    errEl.textContent = d.error || 'Unlock failed';
-    errEl.hidden = false;
-  };
-  $('vaultLockErr').hidden = true;
-  $('vaultPass').value = '';
-  $('vaultUnlockBtn').onclick = go;
-  $('vaultPass').onkeydown = (e) => { if (e.key === 'Enter') go(); };
-  // showModal stacks: opened from Reveal inside the detail popup, this lands on
-  // top of it rather than behind, which an inline banner could never do.
-  if (!dlg.open) dlg.showModal();
-  $('vaultPass').focus();
-}
 
-function closeVaultDialog() {
-  const dlg = $('vaultDialog');
-  if (dlg && dlg.open) dlg.close();
-}
 
-// One button beside the wordmark, showing and toggling the vault's state. It
-// only appears where there is something to lock — a passphrase vault or ZK mode
-// — since in auto mode the key sits on disk and "locking" would be theatre.
-const ICON_LOCKED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10" rx="2.2"/><path d="M8 10.5V7.6a4 4 0 0 1 8 0v2.9"/></svg>';
-const ICON_UNLOCKED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10" rx="2.2"/><path d="M8 10.5V7.4a4 4 0 0 1 7.7-1.5"/></svg>';
+// The vault lock button, unlock dialog, and reveal flow live in vault-ui.js,
+// shared with the inventory page. It only needs to know what to re-read once
+// the vault state changes.
+setVaultRefresh(() => loadCerts());
 
-function syncVaultUi() {
-  const btn = $('vaultLockBtn');
-  if (!btn) return;
-  btn.hidden = !(vaultLockable && isAdmin);
-  btn.innerHTML = vaultLocked ? ICON_LOCKED : ICON_UNLOCKED;
-  btn.classList.toggle('locked', vaultLocked);
-  const label = vaultLocked ? 'Vault locked — click to unlock' : 'Vault unlocked — click to lock';
-  btn.title = label;
-  btn.setAttribute('aria-label', label);
-}
-
-// Locked → offer the passphrase box. Unlocked → close the vault again.
-function toggleVault() {
-  if (vaultLocked) showVaultUnlock(); else lockVault();
-}
-
-// Close the vault without signing out. ZK mode drops the data key from memory;
-// otherwise the server forgets its unwrapped copy.
-async function lockVault() {
-  if (zkEnabled) {
-    ZK.lock();
-  } else {
-    const res = await api('POST', '/api/v1/vault/lock');
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      toast(d.error || 'Could not lock the vault', true);
-      return;
-    }
-  }
-  vaultLocked = true;
-  syncVaultUi();
-  toast('Vault locked');
-  loadCerts();
-}
-if ($('vaultLockBtn')) $('vaultLockBtn').addEventListener('click', toggleVault);
-if ($('vaultClose')) $('vaultClose').addEventListener('click', closeVaultDialog);
 ['coverAddClose', 'coverAddSkip'].forEach((id) => {
   if ($(id)) $(id).addEventListener('click', () => $('coverAddDialog').close());
 });
@@ -338,45 +260,6 @@ if ($('coverAddDialog')) {
     if (e.target === $('coverAddDialog')) $('coverAddDialog').close();
   });
 }
-if ($('vaultDialog')) {
-  $('vaultDialog').addEventListener('click', (e) => {
-    if (e.target === $('vaultDialog')) closeVaultDialog();
-  });
-}
-
-// Reveal a stored secret: copy to clipboard and show it inline briefly. In
-// zero-knowledge mode the server returns ciphertext that we decrypt locally.
-async function revealSecret(id, btn) {
-  if (vaultLocked || (zkEnabled && !ZK.isUnlocked())) {
-    vaultLocked = true; syncVaultUi();
-    showVaultUnlock();
-    return;
-  }
-  const res = await api('GET', `/api/v1/certs/${id}/secret`);
-  const d = await res.json().catch(() => ({}));
-  // 423 Locked: the passphrase vault was closed since this page loaded (another
-  // tab, a restart, a timeout). Offer the box here instead of a dead-end toast.
-  if (res.status === 423) {
-    vaultLocked = true; syncVaultUi();
-    showVaultUnlock();
-    return;
-  }
-  if (!res.ok) { toast(d.error || 'Reveal failed', true); return; }
-  let value = d.value;
-  if (zkEnabled) {
-    try { value = await ZK.decrypt(d.enc); }
-    catch (e) { toast('Could not decrypt — wrong passphrase?', true); return; }
-  }
-  let copied = false;
-  try { await navigator.clipboard.writeText(value); copied = true; } catch (e) {}
-  const span = btn.closest('.secretline');
-  if (!span) { toast(copied ? 'Secret copied ✓' : value); return; }
-  span.innerHTML = `🔑 <code class="secret-reveal">${escapeHtml(value)}</code> <button class="secret-btn" data-hide>hide</button>`;
-  span.querySelector('[data-hide]').addEventListener('click', () => loadCerts());
-  toast(copied ? 'Secret copied to clipboard ✓' : 'Secret revealed');
-  setTimeout(() => { if (document.body.contains(span)) loadCerts(); }, 30000);
-}
-
 // Rescan a single endpoint on demand, then refresh the list.
 async function rescanCert(id, btn) {
   if (btn) { btn.disabled = true; btn.textContent = '↻ scanning…'; }

@@ -65,7 +65,7 @@ const TILES = [
 
 // --- state ----------------------------------------------------------------
 
-const state = { q: '', category: '', kind: '', status: 'all', sort: 'remaining', dir: 1 };
+const state = { q: '', category: '', kind: '', status: 'all', secretsOnly: false, sort: 'remaining', dir: 1 };
 
 // Every column sorts ascending on first click, which lands on the useful end
 // of all of them: A→Z for the text columns, and worst-first for the rest,
@@ -96,6 +96,7 @@ function visibleItems() {
     const c = it.cert;
     if (state.category && c.category !== state.category) return false;
     if (state.kind && c.kind !== state.kind) return false;
+    if (state.secretsOnly && !c.has_secret) return false;
     if (state.status === 'problems') { if (!hasProblem(c)) return false; }
     else if (state.status !== 'all' && bucket(it.days_remaining) !== state.status) return false;
     if (!q) return true;
@@ -162,7 +163,10 @@ function buildRow(it) {
   tr.tabIndex = 0;
   tr.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   tr.innerHTML = `
-    <td class="inv-name"><span class="inv-caret" aria-hidden="true"></span><strong>${escapeHtml(c.name)}</strong></td>
+    <td class="inv-name"><span class="inv-caret" aria-hidden="true"></span><strong>${escapeHtml(c.name)}</strong>${
+      c.has_secret && secretsEnabled
+        ? ' <span class="inv-key" title="Has a stored secret — expand to reveal">🔑</span>'
+        : ''}</td>
     <td class="col-type">${c.category
       ? `<span class="pill" style="background:${hexA(col, 0.15)};color:${col}">${escapeHtml(categoryLabel(c.category))}</span>`
       : '<span class="muted small">—</span>'}</td>
@@ -205,8 +209,30 @@ function detailRow(it) {
   add('Added', fmtDate(c.created_at));
   add('Last checked', c.last_scanned_at ? `${fmtDate(c.last_scanned_at)} <span class="muted small">(${escapeHtml(relTime(c.last_scanned_at))})</span>` : '');
   add('Auto rescan', c.kind === 'endpoint' || c.kind === 'domain' ? (c.auto_rescan ? 'on' : 'off') : '');
-  add('Secret', c.has_secret ? `stored${c.secret_hint ? ' · <span class="mono">' + escapeHtml(c.secret_hint) + '</span>' : ''}` : '');
-  add('Notes', c.notes ? escapeHtml(c.notes) : '');
+
+  // Same .secretline markup the dashboard uses, so revealSecret() in
+  // vault-ui.js can swap the value in place without knowing which page it is
+  // on. Reveal is admin-only and goes through the vault, which prompts for the
+  // passphrase if it is locked.
+  if (c.has_secret && secretsEnabled) {
+    const rev = isAdmin ? ` · <button class="secret-btn" data-reveal="${c.id}">reveal</button>` : '';
+    add('Secret', `<span class="secretline">🔑 ${escapeHtml(c.secret_hint || 'secret set')}${rev}</span>`);
+  }
+
+  // Notes are editable in place for admins — the whole point of showing them
+  // here is that this is where you are already looking when you think of one.
+  // Viewers see the text if there is any, and nothing if there isn't.
+  if (isAdmin) {
+    add('Notes', `<div class="inv-notes">
+      <textarea class="inv-notes-in" data-notes="${c.id}" rows="2"
+        placeholder="Add a note…" aria-label="Notes for ${escapeHtml(c.name)}">${escapeHtml(c.notes || '')}</textarea>
+      <div class="inv-notes-act">
+        <button type="button" class="btn primary small" data-notes-save="${c.id}" disabled>Save</button>
+        <span class="muted small" data-notes-state="${c.id}"></span>
+      </div></div>`);
+  } else {
+    add('Notes', c.notes ? escapeHtml(c.notes) : '');
+  }
   add('Error', c.last_error ? `<span class="inv-err">${escapeHtml(c.last_error)}</span>` : '');
 
   // Coverage is the one thing a flat key/value list can't carry: it is a
@@ -227,7 +253,62 @@ function detailRow(it) {
   const tr = document.createElement('tr');
   tr.className = 'inv-detail';
   tr.innerHTML = `<td colspan="9"><div class="inv-d-wrap"><div class="inv-d-grid">${kv.join('')}</div>${cov}</div></td>`;
+
+  const reveal = tr.querySelector('[data-reveal]');
+  if (reveal) reveal.addEventListener('click', () => revealSecret(reveal.dataset.reveal, reveal));
+
+  const ta = tr.querySelector('[data-notes]');
+  if (ta) {
+    const save = tr.querySelector('[data-notes-save]');
+    const stateEl = tr.querySelector('[data-notes-state]');
+    // The baseline lives on the element, not in this closure, so that a save
+    // can move it. Held in the closure it would go stale the moment you saved,
+    // and reverting to the previous text would leave Save greyed out.
+    ta.dataset.orig = c.notes || '';
+    ta.addEventListener('input', () => {
+      save.disabled = ta.value === ta.dataset.orig;
+      stateEl.textContent = '';
+    });
+    // Ctrl/Cmd+Enter saves without reaching for the mouse.
+    ta.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !save.disabled) {
+        e.preventDefault();
+        saveNotes(c.id, ta, save, stateEl);
+      }
+    });
+    save.addEventListener('click', () => saveNotes(c.id, ta, save, stateEl));
+  }
   return tr;
+}
+
+// Save one entry's notes. PATCH replaces name/category/notes together, so the
+// current name and category are sent back unchanged — omitting the name is a
+// 400, not a partial update.
+async function saveNotes(id, ta, btn, stateEl) {
+  const it = allItems.find((x) => String(x.cert.id) === String(id));
+  if (!it) return;
+  const c = it.cert;
+  const value = ta.value;
+  btn.disabled = true;
+  stateEl.textContent = 'Saving…';
+  const res = await api('PATCH', `/api/v1/certs/${id}`, {
+    name: c.name, category: c.category, notes: value,
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    stateEl.textContent = '';
+    btn.disabled = false;
+    toast(d.error || 'Could not save notes', true);
+    return;
+  }
+  const updated = await res.json().catch(() => null);
+  c.notes = updated && typeof updated.notes === 'string' ? updated.notes : value;
+  ta.dataset.orig = c.notes;
+  stateEl.textContent = 'Saved ✓';
+  toast('Notes saved ✓');
+  // Deliberately not re-rendering: that would rebuild this textarea and throw
+  // away the caret. The row already shows what was saved, and search picks the
+  // new text up on the next render.
 }
 
 function render() {
@@ -248,7 +329,7 @@ function render() {
     th.setAttribute('aria-sort', on ? (state.dir === 1 ? 'ascending' : 'descending') : 'none');
   });
 
-  const filtered = state.q || state.category || state.kind || state.status !== 'all';
+  const filtered = state.q || state.category || state.kind || state.secretsOnly || state.status !== 'all';
   $('invEmpty').hidden = allItems.length !== 0;
   $('invNoMatch').hidden = !(allItems.length !== 0 && items.length === 0);
   $('invTable').hidden = items.length === 0;
@@ -302,10 +383,12 @@ $('invSearchClear').addEventListener('click', () => {
 });
 $('invCategory').addEventListener('change', (e) => { state.category = e.target.value; render(); });
 $('invKind').addEventListener('change', (e) => { state.kind = e.target.value; render(); });
+$('invSecrets').addEventListener('change', (e) => { state.secretsOnly = e.target.checked; render(); });
 $('invCsv').addEventListener('click', exportCsv);
 $('invReset').addEventListener('click', () => {
-  state.q = ''; state.category = ''; state.kind = ''; state.status = 'all';
+  state.q = ''; state.category = ''; state.kind = ''; state.status = 'all'; state.secretsOnly = false;
   $('invSearch').value = ''; $('invCategory').value = ''; $('invKind').value = '';
+  $('invSecrets').checked = false;
   render();
 });
 
@@ -338,6 +421,9 @@ async function load() {
     CATEGORIES.filter(([v]) => used.has(v))
       .map(([v, l]) => `<option value="${v}">${escapeHtml(l)}</option>`).join('');
 
+  // Same rule as the type filter: only offer it when it can match something.
+  $('invSecretsWrap').hidden = !(secretsEnabled && allItems.some((it) => it.cert.has_secret));
+
   const soonest = allItems.filter((it) => it.days_remaining >= 0)
     .reduce((m, it) => (m === null || it.days_remaining < m ? it.days_remaining : m), null);
   $('invSub').textContent = allItems.length === 0
@@ -347,8 +433,13 @@ async function load() {
   render();
 }
 
+// Locking or unlocking the vault changes which secrets can be revealed, so
+// re-read the list when it happens.
+setVaultRefresh(() => load());
+
 (async () => {
   await loadWhoami();
+  syncVaultUi();
   // Deep link from elsewhere, e.g. /inventory?status=expired.
   const want = new URLSearchParams(location.search).get('status');
   if (want && TILES.some(([k]) => k === want)) state.status = want;
