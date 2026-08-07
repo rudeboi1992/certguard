@@ -152,9 +152,16 @@ function initWidgetGrid(grid, storageKey, opts) {
   // did before heights became explicit.
   const maxAutoRows = () => Math.max(MIN_H, Math.floor((window.innerHeight * 0.78) / ROW));
 
-  // How many rows a card needs to show its content, capped. Used when sizing a
-  // card that has never been given a height, and by "fit the content".
-  function contentRows(card) {
+  // How many rows a card needs to show its content.
+  //
+  // The cap applies to *automatic* sizing only — first placement and the
+  // migration from the old format — where an unbounded fit produced cards well
+  // over 1500px that buried everything below them. It must not apply when the
+  // user double-clicks the bottom edge: that is an explicit "fit this", and
+  // stopping at 78% of the window means the content still scrolls, which reads
+  // as the card refusing to snap to the right place. Asked directly, fit
+  // exactly; the card can always be dragged smaller afterwards.
+  function contentRows(card, capped) {
     const prevH = card.style.height, prevMax = card.style.maxHeight;
     card.style.height = 'auto';
     card.style.maxHeight = 'none';
@@ -162,7 +169,7 @@ function initWidgetGrid(grid, storageKey, opts) {
     card.style.height = prevH;
     card.style.maxHeight = prevMax;
     const want = Math.ceil((need + GAP) / ROW);
-    return Math.max(MIN_H, Math.min(maxAutoRows(), want));
+    return Math.max(MIN_H, capped === false ? want : Math.min(maxAutoRows(), want));
   }
 
   // --- persistence ---
@@ -548,11 +555,12 @@ function initWidgetGrid(grid, storageKey, opts) {
     vh.title = 'Drag to resize height · double-click to fit the content';
     card.appendChild(vh);
 
-    // Double-click sizes the card to exactly what it holds.
+    // Double-click sizes the card to exactly what it holds — uncapped, because
+    // it was asked for directly.
     vh.addEventListener('dblclick', (ev) => {
       ev.preventDefault();
       const r = rectOf(card);
-      setRect(card, { c: r.c, r: r.r, w: r.w, h: contentRows(card) });
+      setRect(card, { c: r.c, r: r.r, w: r.w, h: contentRows(card, false) });
       resolve(card); layout(); save();
     });
 
