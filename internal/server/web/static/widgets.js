@@ -143,8 +143,17 @@ function initWidgetGrid(grid, storageKey, opts) {
     if (!grid.classList.contains('ready')) requestAnimationFrame(() => grid.classList.add('ready'));
   }
 
-  // How many rows a card needs to show all of its content. Used to size a card
-  // that has never been given a height.
+  // The tallest a card may be sized automatically. "Fit the content" has to be
+  // bounded, because some cards' content is unbounded: the calendar's is a full
+  // twelve-month year and the tracked list's is every entry, so fitting them
+  // literally produced cards well over 1500px that pushed everything else off
+  // the screen and made the page one enormous scroll. Past this the card keeps
+  // the height and its body scrolls, which is what the old engine's 78vh cap
+  // did before heights became explicit.
+  const maxAutoRows = () => Math.max(MIN_H, Math.floor((window.innerHeight * 0.78) / ROW));
+
+  // How many rows a card needs to show its content, capped. Used when sizing a
+  // card that has never been given a height, and by "fit the content".
   function contentRows(card) {
     const prevH = card.style.height, prevMax = card.style.maxHeight;
     card.style.height = 'auto';
@@ -152,7 +161,8 @@ function initWidgetGrid(grid, storageKey, opts) {
     const need = card.offsetHeight;
     card.style.height = prevH;
     card.style.maxHeight = prevMax;
-    return Math.max(MIN_H, Math.ceil((need + GAP) / ROW));
+    const want = Math.ceil((need + GAP) / ROW);
+    return Math.max(MIN_H, Math.min(maxAutoRows(), want));
   }
 
   // --- persistence ---
