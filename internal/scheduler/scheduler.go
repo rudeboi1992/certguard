@@ -7,10 +7,13 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/bfalcher/certguard/internal/coverage"
+	"github.com/bfalcher/certguard/internal/model"
 	"github.com/bfalcher/certguard/internal/notify"
 	"github.com/bfalcher/certguard/internal/rdap"
 	"github.com/bfalcher/certguard/internal/scanner"
@@ -77,6 +80,32 @@ func (s *Scheduler) RunOnce(ctx context.Context) Report {
 	return Report{Scanned: scanned, ScanErrors: scanErrs, Notified: sent}
 }
 
+// event appends one activity-log line. The error is dropped on purpose: an
+// audit row that cannot be written must not derail the sweep that produced it.
+func (s *Scheduler) event(kind string, c *model.Cert, detail string) {
+	_ = s.store.AddEvent(&model.Event{
+		Kind: kind, CertID: c.ID, CertName: c.Name, Detail: detail,
+	})
+}
+
+// newlyUnreachable returns the names that are unreachable now and were not
+// before, so a name that has been broken for weeks is reported once.
+func newlyUnreachable(before, after []model.CoveredName) []string {
+	was := map[string]bool{}
+	for _, n := range before {
+		if n.Status == "unreachable" {
+			was[n.Name] = true
+		}
+	}
+	var out []string
+	for _, n := range after {
+		if n.Status == "unreachable" && !was[n.Name] {
+			out = append(out, n.Name)
+		}
+	}
+	return out
+}
+
 // rescan re-scans every auto-rescan endpoint, refreshing stored expiry.
 func (s *Scheduler) rescan(ctx context.Context) (scanned, errs int) {
 	eps, err := s.store.EndpointsForRescan()
@@ -94,6 +123,15 @@ func (s *Scheduler) rescan(ctx context.Context) (scanned, errs int) {
 		})
 		if err != nil {
 			errs++
+			// Persist the failure. It used to be logged and dropped, so an
+			// endpoint that started failing on the 6-hourly sweep stayed
+			// invisible in the UI until somebody happened to press Rescan —
+			// the Problems card reads last_error, and nothing was setting it.
+			// Recording it also makes the transition below meaningful.
+			if c.LastError == "" {
+				s.event(store.EventScanFailed, c, err.Error())
+			}
+			_ = s.store.TouchScanError(c.ID, err.Error())
 			s.logger.Printf("scheduler: rescan %s:%d failed: %v", c.Host, c.Port, err)
 			continue
 		}
@@ -102,6 +140,16 @@ func (s *Scheduler) rescan(ctx context.Context) (scanned, errs int) {
 			errs++
 			s.logger.Printf("scheduler: store rescan %s:%d: %v", c.Host, c.Port, err)
 			continue
+		}
+		// Only transitions are logged. A row per successful scan would be
+		// thousands a week that all say "still fine", burying the few that
+		// matter.
+		if c.LastError != "" {
+			s.event(store.EventScanRecovered, c, "")
+		}
+		if stored != nil && c.SHA256 != "" && stored.SHA256 != c.SHA256 {
+			s.event(store.EventRenewed, stored,
+				"new certificate expires "+stored.ExpiresAt.Format("2006-01-02"))
 		}
 		// Refresh coverage while we are here. A SAN that no longer resolves
 		// will fail the next HTTP-01 renewal for the WHOLE certificate, so it
@@ -112,6 +160,11 @@ func (s *Scheduler) rescan(ctx context.Context) (scanned, errs int) {
 			names, _ := coverage.Check(ctx, stored, s.scanTimeout)
 			if err := s.store.SaveCoverage(stored.ID, names); err != nil {
 				s.logger.Printf("scheduler: save coverage %d: %v", stored.ID, err)
+			}
+			// Newly-broken names only: an already-broken one would otherwise
+			// log every six hours forever.
+			if newly := newlyUnreachable(c.Coverage, names); len(newly) > 0 {
+				s.event(store.EventCoverageBroken, stored, strings.Join(newly, ", ")+" no longer resolves")
 			}
 		}
 		scanned++
@@ -186,8 +239,19 @@ func (s *Scheduler) NotifyPass(now time.Time) (sent int) {
 			if err := s.store.MarkNotified(c.ID, th); err != nil {
 				s.logger.Printf("scheduler: mark notified cert %d: %v", c.ID, err)
 			}
+			// Escalation state means this fires once per threshold crossed, not
+			// once per pass, so the log gets one line per real alert.
+			s.event(store.EventNotified, c,
+				fmt.Sprintf("%d-day alert to %d channel%s", th, delivered, plural(delivered)))
 			sent += delivered
 		}
 	}
 	return sent
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }

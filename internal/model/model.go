@@ -91,3 +91,16 @@ type CoveredName struct {
 	Subject string `json:"subject,omitempty"`
 	SHA256  string `json:"sha256,omitempty"`
 }
+
+// Event is one line of the activity log: something that changed, when, and who
+// or what changed it. CertID/CertName are denormalised because the log has to
+// remain readable after the entry it refers to is deleted.
+type Event struct {
+	ID       int64     `json:"id"`
+	At       time.Time `json:"at"`
+	Kind     string    `json:"kind"`
+	CertID   int64     `json:"cert_id,omitempty"`
+	CertName string    `json:"cert_name,omitempty"`
+	Actor    string    `json:"actor,omitempty"` // user email, or empty for the scheduler
+	Detail   string    `json:"detail,omitempty"`
+}

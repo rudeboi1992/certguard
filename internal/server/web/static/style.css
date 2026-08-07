@@ -124,20 +124,59 @@ a.brand:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; 
    switching is a CSS swap with no re-render and no flash of the other form.
    The accessible name comes from title/aria-label either way, so an icon-only
    bar is still readable to a screen reader. */
-.main-nav { display: flex; align-items: center; gap: .15rem; }
-:root[data-nav="icons"] .nav-label { display: none; }
-:root[data-nav="text"] .nav-item svg { display: none; }
-/* The current page's link is marked so the bar says where you are — the only
-   cue an icon-only nav would otherwise lose. */
+.main-nav { display: flex; align-items: center; gap: .15rem; position: relative; }
+/* The current page's link is marked so the nav says where you are — the only
+   cue an icon-only presentation would otherwise lose. */
 .nav-item.current { color: var(--ink); background: rgba(127,127,127,.1); }
 .nav-item.current:hover { background: rgba(127,127,127,.16); }
 
-/* Below this there is no room for four words plus the wordmark — measured at
-   296px for the labels alone against ~410px of usable bar — so text mode falls
-   back to icons rather than clipping "Sign out" off the end. The preference is
-   about a comfortable desktop bar; it is kept, just not honoured where it
-   cannot fit. The signed-in address goes first for the same reason: it is the
-   longest thing up there and the least useful. */
+/* --- menu mode (default): a "Navigation" disclosure --- */
+.nav-trigger { gap: .4rem; }
+.nav-trigger-l { font-weight: 500; }
+.nav-caret { display: inline-flex; transition: transform .15s ease; }
+.nav-caret svg { width: 14px; height: 14px; }
+.main-nav.open .nav-caret { transform: rotate(180deg); }
+.main-nav.open .nav-trigger { background: rgba(127,127,127,.12); color: var(--ink); }
+
+:root[data-nav="menu"] .nav-panel {
+  position: absolute; top: calc(100% + .45rem); right: 0; z-index: 80;
+  display: grid; gap: .1rem; min-width: 12rem; padding: .35rem;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 10px 28px rgba(0,0,0,.18);
+  /* Animated rather than display:none so open/close reads as one movement;
+     visibility keeps it out of the tab order while closed. */
+  opacity: 0; visibility: hidden; transform: translateY(-4px);
+  transition: opacity .13s ease, transform .13s ease, visibility .13s;
+}
+:root[data-nav="menu"] .main-nav.open .nav-panel {
+  opacity: 1; visibility: visible; transform: translateY(0);
+}
+/* A dropdown wants words: an icon-only column would be a stack of mystery
+   glyphs, the one layout where the label does all the work. */
+:root[data-nav="menu"] .nav-item {
+  justify-content: flex-start; gap: .6rem; padding: .5rem .6rem; width: 100%;
+}
+/* Bridges the gap between trigger and panel so a pointer travelling between
+   them never crosses a dead strip and fires mouseleave. */
+:root[data-nav="menu"] .nav-panel::before {
+  content: ''; position: absolute; left: 0; right: 0; top: -.45rem; height: .45rem;
+}
+
+/* --- inline modes: the same list, laid out as a row --- */
+:root[data-nav="icons"] .nav-trigger,
+:root[data-nav="text"] .nav-trigger { display: none; }
+:root[data-nav="icons"] .nav-panel,
+:root[data-nav="text"] .nav-panel { display: flex; align-items: center; gap: .15rem; }
+:root[data-nav="icons"] .nav-label { display: none; }
+:root[data-nav="text"] .nav-item svg { display: none; }
+
+/* Below this there is no room for a row of words plus the wordmark — measured
+   at 296px for four labels against ~410px of usable bar at 420px wide, and the
+   list is longer now — so text mode falls back to icons rather than clipping
+   the end off. The preference is kept, just not honoured where it cannot fit.
+   Menu mode needs no such fallback, which is much of why it is the default.
+   The signed-in address hides here too, being the longest and least useful
+   thing in the bar. */
 @media (max-width: 700px) {
   :root[data-nav="text"] .nav-label { display: none; }
   :root[data-nav="text"] .nav-item svg { display: block; }
@@ -938,6 +977,152 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
   border: 1px solid var(--border); border-radius: 8px;
   background: var(--bg); color: var(--ink);
 }
+
+/* ---------------------------------------------------------------------------
+   Shared page furniture for the views that are not the dashboard: a title, a
+   standfirst, then content. Kept together so the five pages start identically.
+   --------------------------------------------------------------------------- */
+.page { gap: .9rem; }
+.page-head { display: grid; gap: .2rem; }
+.page-sub { margin: 0; font-size: .9rem; max-width: 68ch; }
+
+/* --- timeline --- */
+.tl-toolbar { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+.tl-range { display: flex; align-items: center; gap: .3rem; }
+.tl-label { font-weight: 600; min-width: 15rem; text-align: center; }
+.tl-legend { display: flex; flex-wrap: wrap; gap: .5rem; font-size: .78rem; color: var(--muted); }
+.tl-legend .leg { display: inline-flex; align-items: center; gap: .3rem; }
+.tl-legend i { width: .6rem; height: .6rem; border-radius: 2px; display: inline-block; }
+.tl-card { padding: 1rem; }
+/* Twelve months, as many across as fit. auto-fill rather than auto-fit so a
+   part-full last row keeps the column width instead of stretching to fill. */
+.tl-months { display: grid; grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr)); gap: 1.1rem 1.4rem; }
+/* align-content:start is load-bearing. A grid's auto rows stretch to fill the
+   container by default, and .tl-months makes every block in a row as tall as
+   the tallest — so a month needing six week-rows silently inflated its
+   neighbours' header and weekday rows instead of leaving space at the bottom.
+   That is what made the dates across a row fail to line up.
+   min-width:0 stops a block being widened by its own content, which was giving
+   columns different widths despite every track being 1fr. */
+.tl-month { display: grid; gap: .3rem; align-content: start; min-width: 0; }
+/* Fixed height, and the name must not wrap. Otherwise a month showing a count
+   pill is taller than one showing a dash, and "September 2026" wraps where
+   "May 2027" does not — which pushes each calendar to a different vertical
+   offset and makes a row of months read as a jumble of unaligned dates.
+   Measured: header heights were 22, 31 and 39px across one row. */
+.tl-mhead {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .4rem; min-height: 1.9rem;
+}
+.tl-mname { font-weight: 600; font-size: .92rem; white-space: nowrap; }
+.tl-dow, .tl-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.tl-dow span { text-align: center; font-size: .68rem; color: var(--muted); padding-bottom: .1rem; }
+.tl-day {
+  position: relative; aspect-ratio: 1; border: none; background: transparent;
+  border-radius: 6px; font: inherit; font-size: .72rem; color: var(--muted);
+  display: grid; place-items: center; padding: 0; cursor: default;
+}
+.tl-day.empty { visibility: hidden; }
+.tl-day.has { cursor: pointer; color: var(--ink); font-weight: 600; }
+.tl-day.has:hover { background: rgba(127,127,127,.14); }
+.tl-day.today { outline: 1px solid var(--primary); outline-offset: -1px; }
+.tl-day.selected { background: rgba(127,127,127,.2); }
+/* The day's own colour is the worst entry on it. Tinted rather than solid so
+   the date stays readable in both themes. */
+.tl-day.ok { background: rgba(22,163,74,.16); }
+.tl-day.notice { background: rgba(202,138,4,.18); }
+.tl-day.warn { background: rgba(234,88,12,.2); }
+.tl-day.urgent { background: rgba(220,38,38,.22); }
+.tl-dnum { line-height: 1; }
+.tl-dots { position: absolute; bottom: 2px; display: flex; gap: 1px; align-items: center; }
+.tl-dots i { width: 4px; height: 4px; border-radius: 50%; display: block; }
+.tl-dots em { font-size: .55rem; font-style: normal; color: var(--muted); }
+.tl-detail { display: grid; gap: .4rem; }
+.tl-drow {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: .6rem; align-items: center; padding: .45rem 0; border-top: 1px solid var(--border);
+}
+.tl-drow:first-child { border-top: none; }
+.tl-dname { min-width: 0; overflow-wrap: anywhere; }
+
+/* --- coverage --- */
+.cov-list { display: grid; gap: .7rem; }
+.cov-card { padding: .8rem 1rem; }
+/* A certificate with a dead name gets an edge marker: this page exists for
+   those, and they must be findable without reading every card. */
+.cov-card.broken { border-left: 3px solid var(--urgent); }
+.cov-head { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-bottom: .5rem; }
+.cov-cert { display: grid; gap: .1rem; margin-right: auto; min-width: 0; }
+.cov-names { display: grid; gap: .25rem; }
+.cov-row {
+  display: grid; grid-template-columns: minmax(8rem, 22rem) auto minmax(0, 1fr);
+  gap: .6rem; align-items: baseline; padding: .2rem 0;
+}
+.cov-name { overflow-wrap: anywhere; }
+.cov-why { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .cov-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .cov-why { grid-column: 1 / -1; }
+}
+
+/* --- issuers --- */
+.iss-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr)); gap: 1.1rem; }
+.iss-col { display: grid; gap: .6rem; align-content: start; }
+.iss-list { display: grid; gap: .6rem; }
+.iss-card { padding: .75rem .9rem; display: grid; gap: .45rem; }
+.iss-top { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; }
+.iss-name { display: grid; gap: .1rem; min-width: 0; overflow-wrap: anywhere; }
+.iss-count { font-size: 1.3rem; font-weight: 650; }
+/* Share of the estate, so the largest dependency is obvious at a glance
+   rather than by comparing numbers. */
+.iss-bar { display: block; height: 5px; border-radius: 999px; background: rgba(127,127,127,.16); overflow: hidden; }
+.iss-bar i { display: block; height: 100%; background: var(--primary); border-radius: 999px; }
+.iss-flags { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.iss-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .4rem; }
+.iss-chip {
+  display: inline-flex; align-items: center; gap: .4rem; padding: .25rem .6rem;
+  border: 1px solid var(--border); border-radius: 999px; font-size: .82rem;
+}
+.iss-chip em { font-style: normal; font-weight: 650; color: var(--muted); }
+
+/* --- activity --- */
+.act-card { padding: 0; }
+.act-feed { list-style: none; margin: 0; padding: 0; }
+.act-day {
+  position: sticky; top: 3.4rem; z-index: 1;
+  padding: .45rem 1rem; background: var(--bg); border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border); font-size: .78rem; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .03em;
+}
+.act-feed .act-day:first-child { border-top: none; }
+.act-row { display: flex; gap: .7rem; padding: .6rem 1rem; border-top: 1px solid var(--border); }
+.act-day + .act-row { border-top: none; }
+.act-icon {
+  flex: 0 0 auto; width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  display: grid; place-items: center; font-size: .8rem;
+  background: rgba(127,127,127,.14); color: var(--muted);
+}
+.act-icon.ok { background: rgba(22,163,74,.15); color: var(--ok); }
+.act-icon.notice { background: rgba(202,138,4,.15); color: var(--notice); }
+.act-icon.urgent, .act-icon.untrusted { background: rgba(220,38,38,.15); color: var(--urgent); }
+.act-icon.cat { background: rgba(37,99,235,.14); color: var(--primary); }
+.act-body { display: grid; gap: .15rem; min-width: 0; }
+.act-line { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
+.act-detail { overflow-wrap: anywhere; }
+
+/* --- public status --- */
+.st-page { max-width: 46rem; justify-items: center; text-align: center; gap: 1.4rem; }
+.st-hero { display: grid; justify-items: center; gap: .4rem; margin-top: 2rem; }
+.st-dot { width: 1rem; height: 1rem; border-radius: 50%; background: var(--muted); }
+.st-dot.ok { background: var(--ok); }
+.st-dot.notice { background: var(--notice); }
+.st-dot.warn { background: var(--warn); }
+.st-dot.urgent { background: var(--urgent); }
+.st-headline { font-size: 1.6rem; margin: 0; }
+.st-tiles { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; }
+.st-tile { text-align: center; cursor: default; min-width: 7rem; justify-items: center; }
+.st-tile:hover { border-color: var(--border); }
+.st-foot { margin: 0; }
 
 /* ---------------------------------------------------------------------------
    Inventory page — every tracked entry in one sortable table.

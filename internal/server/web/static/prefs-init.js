@@ -21,9 +21,11 @@
   } catch (e) {}
 
   try {
-    // Icons by default; "text" restores the worded links.
+    // "menu" (a Navigation dropdown) by default; "icons" and "text" lay the
+    // same list out inline instead.
     var nav = ls.getItem('certguard-nav');
-    document.documentElement.setAttribute('data-nav', nav === 'text' ? 'text' : 'icons');
+    document.documentElement.setAttribute('data-nav',
+      nav === 'text' || nav === 'icons' ? nav : 'menu');
   } catch (e) {}
 
   try {

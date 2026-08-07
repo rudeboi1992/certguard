@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>certguard — issuers</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛡️</text></svg>">
+  <script src="/static/prefs-init.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/" title="certguard home">certguard</a>
+      <button id="vaultLockBtn" class="nav-btn vault-btn" hidden></button>
+      <span class="spacer"></span>
+      <span id="whoami" class="muted"></span>
+      <button id="themeToggle" class="nav-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
+      <nav id="mainNav" class="main-nav" aria-label="Main"></nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="page-head">
+      <h1 class="page-title">Issuers &amp; registrars</h1>
+      <p class="muted page-sub">Who you depend on. The day a CA changes its rules, shortens its
+        lifetimes, or gets distrusted — or you move registrars — this is the page that says how
+        much of the estate is affected.</p>
+    </div>
+
+    <section class="iss-cols">
+      <div class="iss-col">
+        <h2 class="settings-card-title">Certificate issuers</h2>
+        <div id="issCerts" class="iss-list"></div>
+        <p class="muted small inv-note" id="issCertsEmpty" hidden>No certificates with a known issuer yet.</p>
+      </div>
+      <div class="iss-col">
+        <h2 class="settings-card-title">Domain registrars</h2>
+        <div id="issDomains" class="iss-list"></div>
+        <p class="muted small inv-note" id="issDomainsEmpty" hidden>No tracked domain registrations yet.</p>
+      </div>
+    </section>
+
+    <section class="card" id="issKeyCard">
+      <h2 class="settings-card-title">Key types &amp; signatures</h2>
+      <p class="muted small">What the certificates you hold are actually built from — useful when a
+        signature algorithm or key size is being phased out.</p>
+      <div id="issKeys" class="iss-chips"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/static/nav.js"></script>
+  <script src="/static/common.js"></script>
+  <script src="/static/zk.js"></script>
+  <script src="/static/vault-ui.js"></script>
+  <script src="/static/issuers.js"></script>
+</body>
+</html>

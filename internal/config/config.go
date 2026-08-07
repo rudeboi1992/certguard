@@ -53,6 +53,14 @@ type Config struct {
 	// non-root certguard cannot read Caddy's 0600 root key/cert). Either one makes
 	// the "Download CA certificate" button appear in Settings.
 	CAFile        string
+
+	// StatusPublic opens /status and its endpoint to unauthenticated callers.
+	// OFF by default, and deliberately so: the page is reachable by anyone who
+	// can reach the server. It publishes counts only — how many entries are
+	// tracked, how many are healthy, expiring or expired, and when the last
+	// check ran — never a name, host, issuer or date, so a reader learns the
+	// service is being watched without learning what is in it.
+	StatusPublic  bool
 	CADownloadURL string
 
 	// MasterKey enables the encrypted secret vault. When set (env), the secret
@@ -124,6 +132,7 @@ func Load() Config {
 		AdminEmail:    env("CERTGUARD_ADMIN_EMAIL", ""),
 		AdminPassword: env("CERTGUARD_ADMIN_PASSWORD", ""),
 		CAFile:        env("CERTGUARD_CA_FILE", ""),
+		StatusPublic:  envBool("CERTGUARD_STATUS_PUBLIC", false),
 		CADownloadURL: env("CERTGUARD_CA_URL", ""),
 		Mail: MailConfig{
 			Host: env("CERTGUARD_MAIL_HOST", ""),

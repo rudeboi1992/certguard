@@ -262,16 +262,18 @@ if ($('vaultDisableBtn')) $('vaultDisableBtn').addEventListener('click', disable
 (function appearancePrefs() {
   var nav = $('prefNav'), home = $('prefHome');
   if (!nav || !home) return;
+  const NAV_LABEL = { menu: 'Navigation is a menu', icons: 'Navigation shows inline icons', text: 'Navigation shows inline text' };
   try {
-    nav.value = localStorage.getItem('certguard-nav') === 'text' ? 'text' : 'icons';
+    const saved = localStorage.getItem('certguard-nav');
+    nav.value = (saved === 'text' || saved === 'icons') ? saved : 'menu';
     home.value = localStorage.getItem('certguard-home') === 'inventory' ? 'inventory' : 'dashboard';
   } catch (e) {}
   nav.addEventListener('change', () => {
     try { localStorage.setItem('certguard-nav', nav.value); } catch (e) {}
-    // Both the icon and the label are always in the DOM; this attribute picks
-    // which one shows, so the change lands immediately on this page too.
+    // One set of markup serves all three; this attribute picks the layout, so
+    // the change lands immediately on this page too.
     document.documentElement.setAttribute('data-nav', nav.value);
-    toast(nav.value === 'text' ? 'Navigation shows text' : 'Navigation shows icons');
+    toast(NAV_LABEL[nav.value] || 'Navigation updated');
   });
   home.addEventListener('change', () => {
     try { localStorage.setItem('certguard-home', home.value); } catch (e) {}

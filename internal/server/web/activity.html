@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>certguard — activity</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛡️</text></svg>">
+  <script src="/static/prefs-init.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/" title="certguard home">certguard</a>
+      <button id="vaultLockBtn" class="nav-btn vault-btn" hidden></button>
+      <span class="spacer"></span>
+      <span id="whoami" class="muted"></span>
+      <button id="themeToggle" class="nav-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
+      <nav id="mainNav" class="main-nav" aria-label="Main"></nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="page-head">
+      <h1 class="page-title">Activity</h1>
+      <p class="muted page-sub">What changed, when, and who changed it. Scans are recorded only when
+        something <em>turns over</em> — a check that starts failing, one that recovers, a certificate
+        that was replaced — because a line per successful scan would be thousands a week that all
+        say “still fine”.</p>
+    </div>
+
+    <section class="inv-tiles" id="actTiles" role="group" aria-label="Filter by kind"></section>
+
+    <section class="inv-toolbar">
+      <div class="inv-search">
+        <input type="text" id="actSearch" placeholder="Search an entry, actor, or detail…"
+               autocomplete="off" aria-label="Search activity">
+        <button type="button" id="actSearchClear" class="inv-clear" title="Clear search"
+                aria-label="Clear search" hidden>&times;</button>
+      </div>
+      <span class="inv-toolbar-spacer"></span>
+      <button type="button" id="actReset" class="nav-btn" hidden>Clear filters</button>
+      <button type="button" id="actRefresh" class="nav-btn" title="Reload">↻ Refresh</button>
+    </section>
+
+    <section class="card act-card">
+      <ol class="act-feed" id="actFeed"></ol>
+      <p class="muted inv-note" id="actEmpty" hidden></p>
+      <p class="muted small inv-note" id="actCount"></p>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/static/nav.js"></script>
+  <script src="/static/common.js"></script>
+  <script src="/static/zk.js"></script>
+  <script src="/static/vault-ui.js"></script>
+  <script src="/static/activity.js"></script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>certguard — coverage</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛡️</text></svg>">
+  <script src="/static/prefs-init.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/" title="certguard home">certguard</a>
+      <button id="vaultLockBtn" class="nav-btn vault-btn" hidden></button>
+      <span class="spacer"></span>
+      <span id="whoami" class="muted"></span>
+      <button id="themeToggle" class="nav-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
+      <nav id="mainNav" class="main-nav" aria-label="Main"></nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="page-head">
+      <h1 class="page-title">Coverage</h1>
+      <p class="muted page-sub">A certificate's SANs say what it is valid <em>for</em>, not what is deployed.
+        This connects to each covered name and reports what that name actually serves. A name that
+        no longer resolves will fail the next HTTP-01 validation for the <strong>whole</strong>
+        certificate, taking the names that do work down with it.</p>
+    </div>
+
+    <section class="inv-tiles" id="covTiles" role="group" aria-label="Filter by verdict"></section>
+
+    <section class="inv-toolbar">
+      <div class="inv-search">
+        <input type="text" id="covSearch" placeholder="Search a covered name or certificate…"
+               autocomplete="off" aria-label="Search covered names">
+        <button type="button" id="covSearchClear" class="inv-clear" title="Clear search"
+                aria-label="Clear search" hidden>&times;</button>
+      </div>
+      <span class="inv-toolbar-spacer"></span>
+      <button type="button" id="covReset" class="nav-btn" hidden>Clear filters</button>
+      <button type="button" id="covCheckAll" class="nav-btn" hidden title="Re-check every certificate's covered names">↻ Check all</button>
+    </section>
+
+    <div id="covList" class="cov-list"></div>
+    <p class="muted inv-note" id="covEmpty" hidden></p>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/static/nav.js"></script>
+  <script src="/static/common.js"></script>
+  <script src="/static/zk.js"></script>
+  <script src="/static/vault-ui.js"></script>
+  <script src="/static/coverage.js"></script>
+</body>
+</html>

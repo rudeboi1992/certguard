@@ -131,6 +131,13 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /api/v1/certs/{id}/secret", s.adminOnly(s.handleRevealSecret))
 	s.mux.Handle("PUT /api/v1/certs/{id}/secret", s.adminOnly(s.handleSetSecret))
 
+	// Activity log (any authenticated user may read it).
+	s.mux.Handle("GET /api/v1/events", s.authed(s.handleListEvents))
+
+	// Public status — unauthenticated, and served only when explicitly enabled
+	// via CERTGUARD_STATUS_PUBLIC. Counts only; see handlePublicStatus.
+	s.mux.HandleFunc("GET /api/v1/status/public", s.handlePublicStatus)
+
 	// Browser UI (static assets + pages).
 	s.registerUI()
 }
@@ -381,6 +388,8 @@ func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
 		"zk_enabled":       s.vault.zkOn(),
 		"ca_available":     s.cfg.CAFile != "" || s.cfg.CADownloadURL != "",
 		"ca_url":           s.caURL(),
+		// So the nav can offer the public status page only where it exists.
+		"status_public": s.cfg.StatusPublic,
 	})
 }
 
@@ -633,6 +642,7 @@ func (s *Server) handleCreateCert(w http.ResponseWriter, r *http.Request) {
 			stored, _ = s.store.GetByID(stored.ID)
 		}
 	}
+	s.recordEvent(r, store.EventAdded, stored, string(stored.Kind))
 	writeJSON(w, http.StatusCreated, stored)
 }
 
@@ -667,6 +677,7 @@ func (s *Server) handleUpdateCert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated, _ := s.store.GetByID(id)
+	s.recordEvent(r, store.EventUpdated, updated, "")
 	writeJSON(w, http.StatusOK, updated)
 }
 
@@ -1011,6 +1022,9 @@ func (s *Server) handleDeleteCert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid id")
 		return
 	}
+	// Read it before it goes: the activity log denormalises the name, and after
+	// a delete there is nothing left to look it up from.
+	gone, _ := s.store.GetByID(id)
 	if err := s.store.SoftDelete(id); err != nil {
 		if err == store.ErrNotFound {
 			writeErr(w, http.StatusNotFound, "cert not found")
@@ -1019,6 +1033,7 @@ func (s *Server) handleDeleteCert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	s.recordEvent(r, store.EventDeleted, gone, "")
 	w.WriteHeader(http.StatusNoContent)
 }
 

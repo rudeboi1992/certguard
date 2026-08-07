@@ -135,6 +135,9 @@ async function loadWhoami() {
   zkEnabled = !!data.zk_enabled;
   caAvailable = !!data.ca_available;
   if (data.ca_url) caUrl = data.ca_url;
+  // The status page only exists when the operator enabled it, which nav.js
+  // cannot know at render time — so it is added here instead.
+  if (data.status_public && window.navAddItem) navAddItem('/status', 'Status', 'status');
   // In zero-knowledge mode the vault is "locked" until the browser unlocks it
   // with the passphrase this session; otherwise fall back to server-side state.
   vaultLocked = zkEnabled

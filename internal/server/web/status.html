@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>certguard — status</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛡️</text></svg>">
+  <script src="/static/prefs-init.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- No nav, no whoami, no sign-out: this page is readable without an account,
+       so it loads none of the scripts that assume one. It shows counts only —
+       never a name, host, issuer or date. -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/" title="certguard">certguard</a>
+      <span class="spacer"></span>
+      <button id="themeToggle" class="nav-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
+      <a class="nav-btn" href="/login">Sign in</a>
+    </div>
+  </header>
+
+  <main class="page st-page">
+    <section class="st-hero" id="stHero">
+      <span class="st-dot" id="stDot" aria-hidden="true"></span>
+      <h1 class="st-headline" id="stHeadline">Checking…</h1>
+      <p class="muted" id="stSub"></p>
+    </section>
+
+    <section class="st-tiles" id="stTiles"></section>
+
+    <p class="muted small st-foot" id="stFoot"></p>
+  </main>
+
+  <script src="/static/status.js"></script>
+</body>
+</html>

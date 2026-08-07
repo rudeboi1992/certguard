@@ -440,8 +440,12 @@ setVaultRefresh(() => load());
 (async () => {
   await loadWhoami();
   syncVaultUi();
-  // Deep link from elsewhere, e.g. /inventory?status=expired.
-  const want = new URLSearchParams(location.search).get('status');
+  // Deep links from the other pages: ?status=expired from a dashboard tile,
+  // ?q=Let's Encrypt from an issuer card.
+  const qs = new URLSearchParams(location.search);
+  const want = qs.get('status');
   if (want && TILES.some(([k]) => k === want)) state.status = want;
+  const q = qs.get('q');
+  if (q) { state.q = q; $('invSearch').value = q; }
   await load();
 })().catch((e) => toast(e.message || 'Failed to load inventory', true));
