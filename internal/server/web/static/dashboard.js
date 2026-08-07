@@ -1313,16 +1313,14 @@ loadWhoami().then(() => {
     addDialog: $('addSectionDialog'),
     addGrid: $('addSectionGrid'),
     resetBtn: $('resetDashLayout'),
-    centerToggle: $('centerDashLayout'),
-    compactToggle: $('compactDashLayout'),
-    // Shipped default arrangement: Add + Tracked side by side, Calendar
-    // full-width below. Neither of the top two carries a stored height any
-    // more — Add-entry is data-autoheight (sizes to its content) and Tracked
-    // is data-matchheight="w-add" (follows it), so the pair stays level.
+    // Shipped arrangement, as explicit rectangles: {col, row, width, height in
+    // row units}. Add and Tracked side by side, Calendar full width below.
     defaults: {
-      order: ['w-add', 'w-tracked', 'w-calendar'],
-      spans: { 'w-add': 2, 'w-tracked': 2, 'w-calendar': 4 },
-      heights: {},
+      pos: {
+        'w-add': { c: 0, r: 0, w: 2, h: 24 },
+        'w-tracked': { c: 2, r: 0, w: 2, h: 24 },
+        'w-calendar': { c: 0, r: 24, w: 4, h: 22 },
+      },
       // The optional insight cards ship hidden — add them via "＋ Add section".
       hidden: ['w-soon', 'w-problems', 'w-nextup', 'w-issuers', 'w-audit',
         'w-scanhealth', 'w-renewals', 'w-alerts', 'w-scheduler', 'w-notes'],
@@ -1331,7 +1329,7 @@ loadWhoami().then(() => {
   // The zoomed-out arranger drives the same grid through the handle above, so
   // there is one implementation of ordering, spans and persistence.
   initLayoutEditor(dashGrid, {
-    dialog: 'layoutDialog', map: 'layoutMap',
+    dialog: 'layoutDialog', map: 'layoutMap', tray: 'layoutTray',
     openButton: 'arrangeDash', closeButton: 'layoutClose',
   });
   if (secretsEnabled && $('secretField')) $('secretField').hidden = false;

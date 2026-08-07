@@ -28,8 +28,6 @@
     <div class="grid-toolbar">
       <button id="addSectionDash" class="nav-btn">＋ Add section</button>
       <button id="arrangeDash" class="nav-btn" title="Rearrange every card in one small view">⛶ Arrange</button>
-      <button id="compactDashLayout" class="nav-btn toggle-btn" aria-pressed="true" title="On: fill gaps with whichever card fits, densest layout. Off: strict order, gaps left visible.">Compact</button>
-      <button id="centerDashLayout" class="nav-btn toggle-btn" aria-pressed="false" title="Center the cards instead of packing them left">Center cards</button>
       <button id="resetDashLayout" class="nav-btn">Reset layout</button>
       <span class="info-tip" tabindex="0" role="note" aria-label="How to arrange the cards">
         <!-- Drawn rather than typeset: a glyph sits on its own baseline and
@@ -40,7 +38,7 @@
           <path d="M12 11.1v5.4"/>
           <circle cx="12" cy="7.7" r="1.05" fill="currentColor" stroke="none"/>
         </svg>
-        <span class="info-pop">Drag ⠿ to reorder · drag a card's right or bottom edge to resize · double-click the bottom edge to match the tallest card in the row · × to hide.</span>
+        <span class="info-pop">Drag ⠿ to put a card anywhere on the grid · drag its right or bottom edge to resize · double-click the bottom edge to fit the content · × to hide. Cards stay where you put them; anything you drop onto is pushed down.</span>
       </span>
     </div>
 
@@ -318,11 +316,12 @@
       <h2 id="layoutTitle" class="detail-title">Arrange the dashboard</h2>
       <button type="button" class="widget-hide" id="layoutClose" title="Close" aria-label="Close">×</button>
     </div>
-    <p class="muted small">Drag a card anywhere to reorder it. ‹ › change how many columns
-      it spans, and the eye hides it. Changes apply to the page behind this straight away.
-      Keyboard: arrows move, shift+arrows resize.</p>
+    <p class="muted small">A true miniature of the grid — same four columns, same rows.
+      Drag a card anywhere to place it, drag its bottom edge to change height, ‹ › change
+      how many columns it spans, and the eye hides it. Changes apply to the page behind
+      this straight away. Keyboard: arrows move, shift+↑↓ move further.</p>
     <div id="layoutMap" class="layout-map"></div>
-    <p class="muted small" id="lmEmpty" hidden>Every card is hidden — the dashboard is empty.</p>
+    <div id="layoutTray" class="layout-tray" hidden></div>
   </dialog>
 
   <dialog id="entryDetail" class="detail-modal" tabindex="-1" aria-labelledby="detailTitle">

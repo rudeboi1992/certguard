@@ -254,15 +254,16 @@ body:has(.settings-layout) { --page-max: 1120px; }
   display: flex; flex-direction: column; max-height: 78vh;
 }
 .widget-grid.ready .widget { transition: top .18s ease, left .18s ease; }
-/* The Add-entry and Calendar cards size to their content instead of capping +
-   scrolling — the tabs stay put and the manual form / calendar always fit. */
+/* Explicit heights can exceed the generic 78vh cap; the layout writes
+   max-height:none inline, and this keeps the two tallest cards honest even
+   before the first layout pass. */
 #w-add, #w-calendar { max-height: none; }
-/* Belt-and-braces for fit-to-content cards: a layout saved by an older release
-   may still carry an inline pixel height, which would clip the manual form.
-   Scoped to :not([data-sized]) so that once the user drags or double-clicks the
-   card's bottom edge, their height wins and the body scrolls again. */
-.widget[data-autoheight]:not([data-sized]) { height: auto !important; max-height: none !important; }
-.widget[data-autoheight]:not([data-sized]) > .widget-body { overflow-y: visible; }
+/* Nothing overrides the explicit height any more. The old fit-to-content rule
+   forced height:auto !important on [data-autoheight] cards, which under explicit
+   placement made Add-entry render at its full ~1650px and cover every card below
+   it — the layout said one thing and the CSS did another. Cards that want to fit
+   their content get the right number of rows at placement time instead, and
+   double-clicking the bottom edge re-fits them on demand. */
 .widget-off { display: none !important; }
 /* The bar stays put; only the body scrolls (vertically) when a card grows too
    tall. Horizontal scroll is disabled — content reflows to fit the card. */
@@ -981,51 +982,57 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 /* ---------------------------------------------------------------------------
    Zoomed-out layout editor: the dashboard as a small map you drag cards in.
    --------------------------------------------------------------------------- */
-.layout-modal { width: min(760px, 94vw); }
-/* Same four columns as the real grid, so a tile spanning two here spans two
-   there. Tile heights are proportional to the rendered card (--h, scaled
-   down), which is what makes the map read as the dashboard rather than as a
-   list of equal boxes. */
+.layout-modal { width: min(820px, 94vw); }
+/* A true miniature: tiles are absolutely positioned from the same column and
+   row units the real grid uses, so a tile's place here is its place there.
+   A flow layout could only ever approximate that. */
 .layout-map {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem;
-  position: relative; margin-top: .6rem;
-  padding: .5rem; border-radius: var(--radius); background: var(--bg);
-  border: 1px solid var(--border);
+  position: relative; margin-top: .6rem; padding: 4px;
+  border-radius: var(--radius); background: var(--bg);
+  border: 1px solid var(--border); overflow: hidden;
 }
 .lm-tile {
-  grid-column: span var(--span);
-  min-height: clamp(3rem, calc(var(--h) * 0.14), 9rem);
-  display: flex; flex-direction: column; gap: .2rem;
-  padding: .45rem .5rem; border-radius: 8px; cursor: grab;
+  position: absolute; display: flex; flex-direction: column; gap: .15rem;
+  padding: .3rem .4rem; border-radius: 6px; cursor: grab; overflow: hidden;
   background: var(--card); border: 1px solid var(--border);
   touch-action: none; /* the drag is ours, not the browser's scroll */
-  user-select: none; position: relative;
+  user-select: none;
 }
 .lm-tile:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-.lm-tile.dragging { opacity: .65; cursor: grabbing; z-index: 3; box-shadow: 0 8px 20px rgba(0,0,0,.25); }
-.lm-tile.off { opacity: .45; border-style: dashed; }
-.lm-grip { color: var(--muted); font-size: .7rem; line-height: 1; }
+.lm-tile.dragging { opacity: .75; cursor: grabbing; z-index: 3; box-shadow: 0 8px 20px rgba(0,0,0,.3); }
 .lm-name {
-  font-size: .78rem; font-weight: 600; line-height: 1.2;
-  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
-  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  font-size: .74rem; font-weight: 600; line-height: 1.15;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.lm-tools { margin-top: auto; display: flex; align-items: center; gap: .15rem; }
+.lm-tools { margin-top: auto; display: flex; align-items: center; gap: .12rem; }
 .lm-btn {
-  font: inherit; font-size: .72rem; line-height: 1; padding: .15rem .3rem;
-  border: 1px solid var(--border); border-radius: 5px; cursor: pointer;
+  font: inherit; font-size: .68rem; line-height: 1; padding: .1rem .25rem;
+  border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
   background: var(--bg); color: var(--ink);
 }
 .lm-btn:hover:not([disabled]) { border-color: var(--primary); }
-.lm-btn[disabled] { opacity: .35; cursor: default; }
-.lm-eye { margin-left: auto; border: none; background: none; font-size: .8rem; }
-.lm-span { font-size: .7rem; color: var(--muted); min-width: .8rem; text-align: center; }
+.lm-btn[disabled] { opacity: .3; cursor: default; }
+.lm-eye { margin-left: auto; border: none; background: none; font-size: .72rem; }
+.lm-span { font-size: .66rem; color: var(--muted); min-width: .7rem; text-align: center; }
+/* Bottom grip: height, in the same row units as the grid. */
+.lm-vgrip {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 6px;
+  cursor: ns-resize; background: transparent;
+}
+.lm-vgrip:hover { background: rgba(127,127,127,.25); }
 /* Where the dragged tile would land. */
 .lm-drop {
-  position: absolute; width: 3px; border-radius: 2px;
-  background: var(--primary); pointer-events: none;
+  position: absolute; border: 2px dashed var(--primary); border-radius: 6px;
+  background: rgba(59,130,246,.08); pointer-events: none; z-index: 2;
 }
-.layout-map.dragging .lm-tile:not(.dragging) { transition: transform .12s ease; }
+/* Hidden cards keep a place in the arrangement but have no position to show. */
+.layout-tray { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-top: .6rem; }
+.lm-chip {
+  font: inherit; font-size: .78rem; padding: .2rem .5rem; cursor: pointer;
+  border: 1px dashed var(--border); border-radius: 999px;
+  background: none; color: var(--ink);
+}
+.lm-chip:hover { border-color: var(--primary); border-style: solid; }
 
 /* Edit dialog: the clear-secret checkbox reads as a line, not a field.
    Compound selector on purpose — `.stack label` sets display:grid at (0,1,1),
