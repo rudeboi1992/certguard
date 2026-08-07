@@ -27,6 +27,7 @@
 
     <div class="grid-toolbar">
       <button id="addSectionDash" class="nav-btn">＋ Add section</button>
+      <button id="arrangeDash" class="nav-btn" title="Rearrange every card in one small view">⛶ Arrange</button>
       <button id="compactDashLayout" class="nav-btn toggle-btn" aria-pressed="true" title="On: fill gaps with whichever card fits, densest layout. Off: strict order, gaps left visible.">Compact</button>
       <button id="centerDashLayout" class="nav-btn toggle-btn" aria-pressed="false" title="Center the cards instead of packing them left">Center cards</button>
       <button id="resetDashLayout" class="nav-btn">Reset layout</button>
@@ -64,6 +65,7 @@
             <input type="text" id="domainTarget" placeholder="example.com" required>
             <button type="submit" class="btn primary">Track</button>
           </form>
+          <textarea id="domainNotes" class="secret-area sub-input" rows="2" placeholder="Notes (optional) — registrar account, renewal owner…"></textarea>
           <p class="muted small">Any hostname works — it is reduced to the registered domain.</p>
           <p id="domainStatus" class="status" hidden></p>
         </div>
@@ -75,6 +77,7 @@
             <button type="submit" class="btn primary">Scan</button>
           </form>
           <input type="text" id="scanName" class="sub-input" placeholder="Name (optional) — e.g. Karakeep">
+          <textarea id="scanNotes" class="secret-area sub-input" rows="2" placeholder="Notes (optional) — owner, renewal process, ticket number…"></textarea>
           <p id="scanStatus" class="status" hidden></p>
           <div id="scanDetail" class="scan-detail" hidden></div>
         </div>
@@ -105,6 +108,9 @@
             </label>
             <label id="secretField" hidden>Secret / key value <span class="muted small">— optional, stored encrypted</span>
               <textarea id="certSecret" class="secret-area" rows="2" placeholder="Paste the actual API key, token, or PEM…"></textarea>
+            </label>
+            <label>Notes <span class="muted small">— optional</span>
+              <textarea id="certNotes" class="secret-area" rows="2" placeholder="Owner, renewal process, ticket number…"></textarea>
             </label>
             <input type="hidden" id="certKind" value="manual">
             <input type="hidden" id="certSubject">
@@ -274,6 +280,51 @@
   <!-- Full readout for one entry. Rows stay minimal (name, type, date, days,
        status) so the card works in a narrow column; everything else lives here
        and opens on tap. -->
+  <!-- Editing an entry. A dialog rather than an in-row form: the row is one
+       line in a card, which left no room for notes and made the whole list
+       jump while you typed. -->
+  <dialog id="editModal" class="detail-modal" tabindex="-1" aria-labelledby="editTitle">
+    <div class="detail-head">
+      <h2 id="editTitle" class="detail-title">Edit entry</h2>
+      <button type="button" class="widget-hide" id="editClose" title="Close" aria-label="Close">×</button>
+    </div>
+    <form id="editForm" class="stack">
+      <label>Name
+        <input type="text" id="editName" required>
+      </label>
+      <label>Type
+        <select id="editCategory"></select>
+      </label>
+      <label>Notes
+        <textarea id="editNotes" class="secret-area" rows="3" placeholder="Anything worth remembering — owner, renewal process, ticket number…"></textarea>
+      </label>
+      <label id="editSecretField" hidden>Secret / key value
+        <input type="text" id="editSecret" placeholder="Add a secret (optional)">
+        <span class="muted small" id="editSecretHint"></span>
+      </label>
+      <label id="editClearField" class="edit-clear-line" hidden>
+        <input type="checkbox" id="editClearSecret"> Remove the stored secret
+      </label>
+      <div class="detail-actions">
+        <button type="submit" class="btn primary">Save changes</button>
+        <button type="button" class="btn ghost" id="editCancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- The dashboard at a glance, small enough to rearrange in one view. -->
+  <dialog id="layoutDialog" class="detail-modal layout-modal" tabindex="-1" aria-labelledby="layoutTitle">
+    <div class="detail-head">
+      <h2 id="layoutTitle" class="detail-title">Arrange the dashboard</h2>
+      <button type="button" class="widget-hide" id="layoutClose" title="Close" aria-label="Close">×</button>
+    </div>
+    <p class="muted small">Drag a card anywhere to reorder it. ‹ › change how many columns
+      it spans, and the eye hides it. Changes apply to the page behind this straight away.
+      Keyboard: arrows move, shift+arrows resize.</p>
+    <div id="layoutMap" class="layout-map"></div>
+    <p class="muted small" id="lmEmpty" hidden>Every card is hidden — the dashboard is empty.</p>
+  </dialog>
+
   <dialog id="entryDetail" class="detail-modal" tabindex="-1" aria-labelledby="detailTitle">
     <div class="detail-head">
       <h2 id="detailTitle" class="detail-title"></h2>
@@ -292,6 +343,7 @@
   <script src="/static/zk.js"></script>
   <script src="/static/vault-ui.js"></script>
   <script src="/static/widgets.js"></script>
+  <script src="/static/layout-editor.js"></script>
   <script src="/static/dashboard.js"></script>
 </body>
 </html>

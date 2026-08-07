@@ -758,4 +758,39 @@ function initWidgetGrid(grid, storageKey, opts) {
   window.addEventListener('resize', () => { refitSized(); relayout(); });
 
   apply();
+
+  // Handle for tools that drive the grid from outside — currently the
+  // zoomed-out layout editor. Everything it needs already existed in here as a
+  // closure; this only makes it reachable, so the editor never has to
+  // reimplement ordering, spans, or the storage format.
+  return {
+    cards: () => widgets().map((c) => ({
+      id: c.id,
+      title: c.dataset.title || c.id,
+      span: spanOf(c),
+      hidden: c.classList.contains('widget-off'),
+      // Real rendered height, so the miniature's tiles are proportional to
+      // what the cards actually are rather than all being the same block.
+      height: heights.get(c.id) || c.offsetHeight || 200,
+    })),
+    setSpan(id, span) {
+      const c = document.getElementById(id);
+      if (!c) return;
+      c.dataset.span = String(Math.max(1, Math.min(COLS, span)));
+    },
+    setHidden(id, off) {
+      const c = document.getElementById(id);
+      if (!c) return;
+      c.classList.toggle('widget-off', !!off);
+    },
+    // Reorder to exactly this list of ids; anything unlisted keeps its
+    // relative place at the end.
+    setOrder(ids) {
+      const byId = new Map(widgets().map((c) => [c.id, c]));
+      ids.forEach((id) => { const c = byId.get(id); if (c) grid.appendChild(c); });
+      byId.forEach((c, id) => { if (!ids.includes(id)) grid.appendChild(c); });
+    },
+    commit() { layout(); save(); },
+    columns: COLS,
+  };
 }

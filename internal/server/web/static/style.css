@@ -979,6 +979,64 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 }
 
 /* ---------------------------------------------------------------------------
+   Zoomed-out layout editor: the dashboard as a small map you drag cards in.
+   --------------------------------------------------------------------------- */
+.layout-modal { width: min(760px, 94vw); }
+/* Same four columns as the real grid, so a tile spanning two here spans two
+   there. Tile heights are proportional to the rendered card (--h, scaled
+   down), which is what makes the map read as the dashboard rather than as a
+   list of equal boxes. */
+.layout-map {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem;
+  position: relative; margin-top: .6rem;
+  padding: .5rem; border-radius: var(--radius); background: var(--bg);
+  border: 1px solid var(--border);
+}
+.lm-tile {
+  grid-column: span var(--span);
+  min-height: clamp(3rem, calc(var(--h) * 0.14), 9rem);
+  display: flex; flex-direction: column; gap: .2rem;
+  padding: .45rem .5rem; border-radius: 8px; cursor: grab;
+  background: var(--card); border: 1px solid var(--border);
+  touch-action: none; /* the drag is ours, not the browser's scroll */
+  user-select: none; position: relative;
+}
+.lm-tile:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.lm-tile.dragging { opacity: .65; cursor: grabbing; z-index: 3; box-shadow: 0 8px 20px rgba(0,0,0,.25); }
+.lm-tile.off { opacity: .45; border-style: dashed; }
+.lm-grip { color: var(--muted); font-size: .7rem; line-height: 1; }
+.lm-name {
+  font-size: .78rem; font-weight: 600; line-height: 1.2;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.lm-tools { margin-top: auto; display: flex; align-items: center; gap: .15rem; }
+.lm-btn {
+  font: inherit; font-size: .72rem; line-height: 1; padding: .15rem .3rem;
+  border: 1px solid var(--border); border-radius: 5px; cursor: pointer;
+  background: var(--bg); color: var(--ink);
+}
+.lm-btn:hover:not([disabled]) { border-color: var(--primary); }
+.lm-btn[disabled] { opacity: .35; cursor: default; }
+.lm-eye { margin-left: auto; border: none; background: none; font-size: .8rem; }
+.lm-span { font-size: .7rem; color: var(--muted); min-width: .8rem; text-align: center; }
+/* Where the dragged tile would land. */
+.lm-drop {
+  position: absolute; width: 3px; border-radius: 2px;
+  background: var(--primary); pointer-events: none;
+}
+.layout-map.dragging .lm-tile:not(.dragging) { transition: transform .12s ease; }
+
+/* Edit dialog: the clear-secret checkbox reads as a line, not a field.
+   Compound selector on purpose — `.stack label` sets display:grid at (0,1,1),
+   so a lone .edit-clear-line at (0,1,0) loses and the box stacks above its
+   own text. */
+.stack label.edit-clear-line {
+  display: flex; align-items: center; gap: .45rem; font-size: .9rem;
+}
+.edit-clear-line input { width: auto; flex: 0 0 auto; }
+
+/* ---------------------------------------------------------------------------
    Shared page furniture for the views that are not the dashboard: a title, a
    standfirst, then content. Kept together so the five pages start identically.
    --------------------------------------------------------------------------- */

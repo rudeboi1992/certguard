@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bfalcher/certguard/internal/model"
@@ -114,4 +115,24 @@ func (s *Server) handleStatusPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.serveEmbedded(w, "web/status.html")
+}
+
+// applyNotes attaches a note to a freshly scanned or looked-up entry.
+//
+// Scans and RDAP lookups go through UpsertScan/UpsertDomain, which write the
+// fields they discovered and know nothing about notes — so the note is a
+// second write. Best-effort: an entry that was created successfully must not
+// be reported as a failure because its note did not stick. Returns the updated
+// entry, or the original if there was nothing to do.
+func (s *Server) applyNotes(c *model.Cert, notes string) *model.Cert {
+	if c == nil || strings.TrimSpace(notes) == "" {
+		return c
+	}
+	if err := s.store.UpdateEntry(c.ID, c.Name, c.Category, notes); err != nil {
+		return c
+	}
+	if updated, err := s.store.GetByID(c.ID); err == nil {
+		return updated
+	}
+	return c
 }

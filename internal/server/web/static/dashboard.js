@@ -508,13 +508,14 @@ if ($('domainForm')) $('domainForm').addEventListener('submit', async (e) => {
   status.className = 'status';
   status.textContent = `Looking up ${target}…`;
   try {
-    const res = await api('POST', '/api/v1/domains', { domain: target });
+    const res = await api('POST', '/api/v1/domains', { domain: target, notes: $('domainNotes').value });
     const d = await res.json().catch(() => ({}));
     if (res.ok) {
       status.className = 'status ok';
       const l = d.lookup || {};
       status.textContent = `Tracking ${l.domain} — ${l.registrar || 'registrar unknown'}, expires ${fmtDate(l.expires_at)}`;
       $('domainTarget').value = '';
+      $('domainNotes').value = '';
       loadCerts();
     } else {
       status.className = 'status err';
@@ -695,51 +696,72 @@ if ($('entryDetail')) {
 }
 
 // Inline rename / re-label a row.
+// Edit an entry in a dialog.
+//
+// This used to replace the row with an inline form. A row is one line inside a
+// card, which left nowhere to put notes and made the list jump while you
+// typed. A dialog has room for every field, including the notes that the row
+// form silently dropped.
 function startEdit(id) {
   const it = currentItems.find((x) => String(x.cert.id) === String(id));
   if (!it) return;
-  const row = document.querySelector(`.trow[data-row="${id}"]`);
-  if (!row) return;
-  closeSwipe(row);
   const c = it.cert;
-  row.classList.add('editing');
-  const secretRow = secretsEnabled ? `
-      <div class="edit-secret-row">
-        <input type="text" class="edit-secret" placeholder="${c.has_secret ? 'Replace secret (leave blank to keep ' + escapeHtml(c.secret_hint || 'set') + ')' : 'Add a secret / key value (optional)'}">
-        ${c.has_secret ? '<label class="clear-sec"><input type="checkbox" class="edit-clearsec"> clear</label>' : ''}
-      </div>` : '';
-  row.innerHTML = `
-    <div class="edit-row">
-      <input type="text" class="edit-name" value="${escapeHtml(c.name)}">
-      <select class="edit-cat">${categoryOptions(c.category || 'certificate')}</select>
-      <button class="btn primary small" data-save>Save</button>
-      <button class="btn ghost small" data-cancel>Cancel</button>
-    </div>${secretRow}`;
-  row.querySelector('[data-save]').addEventListener('click', () => saveEdit(id, row));
-  row.querySelector('[data-cancel]').addEventListener('click', () => loadCerts());
-  row.querySelector('.edit-name').focus();
+  editingId = c.id;
+  $('editTitle').textContent = `Edit ${c.name}`;
+  $('editName').value = c.name || '';
+  $('editCategory').innerHTML = categoryOptions(c.category || 'certificate');
+  $('editNotes').value = c.notes || '';
+  $('editSecret').value = '';
+  $('editSecretField').hidden = !secretsEnabled;
+  $('editSecretHint').textContent = c.has_secret
+    ? `A secret is stored (${c.secret_hint || 'set'}). Type a new one to replace it, or leave blank to keep it.`
+    : 'Optional. Stored encrypted.';
+  $('editClearField').hidden = !(secretsEnabled && c.has_secret);
+  $('editClearSecret').checked = false;
+  const dlg = $('editModal');
+  if (!dlg.open) dlg.showModal();
+  $('editName').focus();
 }
 
-async function saveEdit(id, tr) {
-  const name = tr.querySelector('.edit-name').value.trim();
-  const category = tr.querySelector('.edit-cat').value;
-  if (!name) { toast('Name is required', true); return; }
-  const res = await api('PATCH', `/api/v1/certs/${id}`, { name, category });
+function closeEdit() {
+  editingId = null;
+  const dlg = $('editModal');
+  if (dlg && dlg.open) dlg.close();
+}
+
+async function saveEdit() {
+  const id = editingId;
+  if (id === null) return;
+  const name = $('editName').value.trim();
+  if (!name) { toast('Name is required', true); $('editName').focus(); return; }
+  // notes goes with every save. PATCH replaces name, category and notes
+  // together, so omitting it — as the old inline form did — silently wiped
+  // whatever note the entry had.
+  const res = await api('PATCH', `/api/v1/certs/${id}`, {
+    name, category: $('editCategory').value, notes: $('editNotes').value,
+  });
   if (!res.ok) { const d = await res.json().catch(() => ({})); toast(d.error || 'Save failed', true); return; }
-  // Secret changes (optional): a new value replaces it; the clear box wipes it.
-  const secInput = tr.querySelector('.edit-secret');
-  const clearBox = tr.querySelector('.edit-clearsec');
-  if (secInput && secInput.value) {
+
+  const secret = $('editSecret').value;
+  const clear = $('editClearSecret').checked;
+  if (secret || clear) {
     if (zkEnabled && !ZK.isUnlocked()) { showVaultUnlock(); toast('Unlock the vault first', true); return; }
-    await api('PUT', `/api/v1/certs/${id}/secret`, await secretBody(secInput.value));
-  } else if (clearBox && clearBox.checked) {
-    await api('PUT', `/api/v1/certs/${id}/secret`, await secretBody(''));
+    await api('PUT', `/api/v1/certs/${id}/secret`, await secretBody(secret || ''));
   }
-  toast('Saved'); loadCerts();
+  closeEdit();
+  toast('Saved ✓');
+  loadCerts();
 }
 
-// secretBody builds the /secret PUT payload. In zero-knowledge mode the value is
-// encrypted in the browser and only ciphertext + a masked hint are sent.
+let editingId = null;
+if ($('editForm')) $('editForm').addEventListener('submit', (e) => { e.preventDefault(); saveEdit(); });
+if ($('editCancel')) $('editCancel').addEventListener('click', closeEdit);
+if ($('editClose')) $('editClose').addEventListener('click', closeEdit);
+if ($('editModal')) {
+  $('editModal').addEventListener('click', (e) => { if (e.target === $('editModal')) closeEdit(); });
+  $('editModal').addEventListener('close', () => { editingId = null; });
+}
+
 async function secretBody(plaintext) {
   if (!zkEnabled) return { value: plaintext };
   if (!plaintext) return { enc: '', hint: '' };
@@ -778,7 +800,7 @@ $('scanForm').addEventListener('submit', async (e) => {
   status.className = 'status';
   status.textContent = `Scanning ${target}…`;
   try {
-    const res = await api('POST', '/api/v1/scan', { target, name });
+    const res = await api('POST', '/api/v1/scan', { target, name, notes: $('scanNotes').value });
     const data = await res.json();
     if (res.ok) {
       status.className = 'status ok';
@@ -786,6 +808,7 @@ $('scanForm').addEventListener('submit', async (e) => {
       renderScanDetail(data.scan);
       $('scanTarget').value = '';
       $('scanName').value = '';
+      $('scanNotes').value = '';
       loadCerts();
       offerCoverageAdds(data.saved, status);
     } else {
@@ -809,6 +832,7 @@ $('manualForm').addEventListener('submit', async (e) => {
     subject: $('certSubject').value,
     issuer: $('certIssuer').value,
     sha256: $('certSha256').value,
+    notes: $('certNotes').value,
   };
   const secretVal = $('certSecret').value;
   // Non-ZK: the server encrypts the secret it's handed. ZK: the create call can't
@@ -1284,7 +1308,7 @@ loadWhoami().then(() => {
   if (!isAdmin) {
     document.querySelectorAll('#dashGrid .widget[data-admin]').forEach((w) => w.remove());
   }
-  initWidgetGrid($('dashGrid'), 'certguard-dash-layout', {
+  const dashGrid = initWidgetGrid($('dashGrid'), 'certguard-dash-layout', {
     addButton: $('addSectionDash'),
     addDialog: $('addSectionDialog'),
     addGrid: $('addSectionGrid'),
@@ -1303,6 +1327,12 @@ loadWhoami().then(() => {
       hidden: ['w-soon', 'w-problems', 'w-nextup', 'w-issuers', 'w-audit',
         'w-scanhealth', 'w-renewals', 'w-alerts', 'w-scheduler', 'w-notes'],
     },
+  });
+  // The zoomed-out arranger drives the same grid through the handle above, so
+  // there is one implementation of ordering, spans and persistence.
+  initLayoutEditor(dashGrid, {
+    dialog: 'layoutDialog', map: 'layoutMap',
+    openButton: 'arrangeDash', closeButton: 'layoutClose',
   });
   if (secretsEnabled && $('secretField')) $('secretField').hidden = false;
   // Don't open the prompt on load — the button shows the state, and clicking it

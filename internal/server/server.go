@@ -548,6 +548,9 @@ type scanRequest struct {
 	// dial the IP but present this name. Empty means use the dialed host.
 	ServerName string `json:"server_name"`
 	DryRun     bool   `json:"dry_run"` // scan but do not persist
+	// Notes is applied after the entry is stored. A scan writes the certificate
+	// fields it discovered, so the note cannot ride along with it.
+	Notes string `json:"notes"`
 }
 
 func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
@@ -583,6 +586,8 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	stored = s.applyNotes(stored, req.Notes)
+	s.recordEvent(r, store.EventAdded, stored, "endpoint")
 	writeJSON(w, http.StatusOK, map[string]any{"scan": res, "saved": stored})
 }
 
@@ -868,6 +873,7 @@ func (s *Server) handleTrackDomain(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Domain string `json:"domain"`
 		Name   string `json:"name"`
+		Notes  string `json:"notes"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid JSON body")
@@ -893,6 +899,8 @@ func (s *Server) handleTrackDomain(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	stored = s.applyNotes(stored, req.Notes)
+	s.recordEvent(r, store.EventAdded, stored, "domain")
 	writeJSON(w, http.StatusOK, map[string]any{"lookup": res, "saved": stored})
 }
 
