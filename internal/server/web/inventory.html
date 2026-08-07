@@ -5,20 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>certguard — inventory</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛡️</text></svg>">
-  <script src="/static/theme-init.js"></script>
+  <script src="/static/prefs-init.js"></script>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-inner">
-      <span class="brand">certguard</span>
+      <a class="brand" href="/" title="certguard home">certguard</a>
       <button id="vaultLockBtn" class="nav-btn vault-btn" hidden></button>
       <span class="spacer"></span>
       <span id="whoami" class="muted"></span>
       <button id="themeToggle" class="nav-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
-      <a href="/" class="nav-btn">Dashboard</a>
-      <a href="/settings" class="nav-btn">Settings</a>
-      <button id="logout" class="nav-btn">Sign out</button>
+      <nav id="mainNav" class="main-nav" aria-label="Main"></nav>
     </div>
   </header>
 
@@ -86,6 +84,7 @@
 
   <div id="toast" class="toast" hidden></div>
 
+  <script src="/static/nav.js"></script>
   <script src="/static/common.js"></script>
   <!-- loadWhoami() in common.js calls ZK.isUnlocked() whenever zero-knowledge
        mode is on, so every page that calls it needs zk.js — even this one,

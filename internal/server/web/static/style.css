@@ -110,7 +110,39 @@ h2 { font-size: 1.05rem; }
 .small { font-size: .85rem; }
 code { background: rgba(127,127,127,.15); padding: .05em .35em; border-radius: 4px; }
 
-.brand { font-weight: 700; letter-spacing: -.02em; font-size: 1.15rem; }
+/* The wordmark is the way home, so it is a link. Kept looking like text —
+   underlining it would read as body copy rather than a logo. */
+.brand {
+  font-weight: 700; letter-spacing: -.02em; font-size: 1.15rem;
+  color: var(--ink); text-decoration: none;
+}
+a.brand:hover { opacity: .8; }
+a.brand:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 4px; }
+
+/* Main nav. Every item carries both an icon and a label; which one shows is a
+   per-browser preference applied to <html> by prefs-init.js before paint, so
+   switching is a CSS swap with no re-render and no flash of the other form.
+   The accessible name comes from title/aria-label either way, so an icon-only
+   bar is still readable to a screen reader. */
+.main-nav { display: flex; align-items: center; gap: .15rem; }
+:root[data-nav="icons"] .nav-label { display: none; }
+:root[data-nav="text"] .nav-item svg { display: none; }
+/* The current page's link is marked so the bar says where you are — the only
+   cue an icon-only nav would otherwise lose. */
+.nav-item.current { color: var(--ink); background: rgba(127,127,127,.1); }
+.nav-item.current:hover { background: rgba(127,127,127,.16); }
+
+/* Below this there is no room for four words plus the wordmark — measured at
+   296px for the labels alone against ~410px of usable bar — so text mode falls
+   back to icons rather than clipping "Sign out" off the end. The preference is
+   about a comfortable desktop bar; it is kept, just not honoured where it
+   cannot fit. The signed-in address goes first for the same reason: it is the
+   longest thing up there and the least useful. */
+@media (max-width: 700px) {
+  :root[data-nav="text"] .nav-label { display: none; }
+  :root[data-nav="text"] .nav-item svg { display: block; }
+  #whoami { display: none; }
+}
 
 /* Pinned: the vault state, theme and settings stay reachable however far down
    a long tracked list you are. Above dragged cards (z 50) and the snap guide
@@ -893,6 +925,19 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
   .tc-rem .pill { font-size: .76rem; padding: .1rem .45rem; }
 }
 /* Settings tables: drop the min-width on narrow cards so they never scroll. */
+
+/* Appearance card: a label-and-control row per preference. */
+.set-prefs { display: grid; gap: .8rem; margin-top: .4rem; }
+.set-pref {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap;
+}
+.set-pref-l { display: grid; gap: .1rem; }
+.set-pref select {
+  font: inherit; padding: .45rem .6rem; min-width: 11rem;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); color: var(--ink);
+}
 
 /* ---------------------------------------------------------------------------
    Inventory page — every tracked entry in one sortable table.

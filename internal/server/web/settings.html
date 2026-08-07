@@ -5,19 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>certguard — settings</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛡️</text></svg>">
-  <script src="/static/theme-init.js"></script>
+  <script src="/static/prefs-init.js"></script>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-inner">
-      <span class="brand">certguard</span>
+      <a class="brand" href="/" title="certguard home">certguard</a>
       <span class="spacer"></span>
       <span id="whoami" class="muted"></span>
       <button id="themeToggle" class="nav-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
-      <a href="/" class="nav-btn">Dashboard</a>
-      <a href="/inventory" class="nav-btn">Inventory</a>
-      <button id="logout" class="nav-btn">Sign out</button>
+      <nav id="mainNav" class="main-nav" aria-label="Main"></nav>
     </div>
   </header>
 
@@ -25,6 +23,7 @@
     <aside class="settings-nav">
       <h1 class="page-title">Settings</h1>
       <nav id="settingsNav">
+        <a href="#appearanceCard" data-nav="appearanceCard">Appearance</a>
         <a href="#notifyCard" data-nav="notifyCard">Notifications</a>
         <a href="#usersCard" data-nav="usersCard" id="navUsers">Users</a>
         <a href="#backupCard" data-nav="backupCard" id="navBackup">Backup</a>
@@ -33,6 +32,33 @@
     </aside>
 
     <div class="settings-grid" id="settingsGrid">
+      <section class="card settings-card" id="appearanceCard">
+        <h2 class="settings-card-title">Appearance</h2>
+        <p class="muted">How certguard looks and where it opens. These are saved in
+          <strong>this browser</strong>, like the light/dark toggle — they are not part of your
+          account, so another device gets its own.</p>
+        <div class="set-prefs">
+          <label class="set-pref">
+            <span class="set-pref-l">Top navigation
+              <span class="muted small">Icons keep the bar compact; words spell each link out.</span>
+            </span>
+            <select id="prefNav">
+              <option value="icons">Icons</option>
+              <option value="text">Text labels</option>
+            </select>
+          </label>
+          <label class="set-pref">
+            <span class="set-pref-l">Home page
+              <span class="muted small">Where the certguard logo and “/” take you.</span>
+            </span>
+            <select id="prefHome">
+              <option value="dashboard">Dashboard</option>
+              <option value="inventory">Inventory</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
       <section class="card settings-card" id="notifyCard">
         <h2 class="settings-card-title">Notifications</h2>
         <p class="muted">Get alerted as your entries approach expiry (at 30, 7, and 3 days). Channels are yours; alerts cover the whole shared inventory.</p>
@@ -130,6 +156,7 @@
 
   <div id="toast" class="toast" hidden></div>
 
+  <script src="/static/nav.js"></script>
   <script src="/static/common.js"></script>
   <script src="/static/zk.js"></script>
   <script src="/static/settings.js"></script>

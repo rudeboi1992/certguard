@@ -5,22 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>certguard</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛡️</text></svg>">
-  <script src="/static/theme-init.js"></script>
+  <script src="/static/prefs-init.js"></script>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-inner">
-      <span class="brand">certguard</span>
+      <a class="brand" href="/" title="certguard home">certguard</a>
       <button id="vaultLockBtn" class="nav-btn vault-btn" hidden></button>
       <span class="spacer"></span>
       <span id="whoami" class="muted"></span>
       <button id="themeToggle" class="nav-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
-      <a href="/inventory" class="nav-btn" title="Everything tracked">Inventory</a>
-      <a href="/settings" class="nav-btn" title="Settings" aria-label="Settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      </a>
-      <button id="logout" class="nav-btn">Sign out</button>
+      <!-- Filled by nav.js, so the link set is defined in one place. -->
+      <nav id="mainNav" class="main-nav" aria-label="Main"></nav>
     </div>
   </header>
 
@@ -289,6 +286,7 @@
 
   <script src="/static/vendor/forge.min.js"></script>
   <script src="/static/cert-parser.js"></script>
+  <script src="/static/nav.js"></script>
   <script src="/static/common.js"></script>
   <script src="/static/zk.js"></script>
   <script src="/static/vault-ui.js"></script>

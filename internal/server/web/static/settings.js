@@ -256,6 +256,29 @@ if ($('vaultEnableBtn')) $('vaultEnableBtn').addEventListener('click', enableZK)
 if ($('vaultChangeBtn')) $('vaultChangeBtn').addEventListener('click', changeZK);
 if ($('vaultDisableBtn')) $('vaultDisableBtn').addEventListener('click', disableZK);
 
+// --- appearance (per-browser, same storage as the theme) ---
+// prefs-init.js reads these before the page paints; this only writes them and
+// applies the one change that is visible without a reload.
+(function appearancePrefs() {
+  var nav = $('prefNav'), home = $('prefHome');
+  if (!nav || !home) return;
+  try {
+    nav.value = localStorage.getItem('certguard-nav') === 'text' ? 'text' : 'icons';
+    home.value = localStorage.getItem('certguard-home') === 'inventory' ? 'inventory' : 'dashboard';
+  } catch (e) {}
+  nav.addEventListener('change', () => {
+    try { localStorage.setItem('certguard-nav', nav.value); } catch (e) {}
+    // Both the icon and the label are always in the DOM; this attribute picks
+    // which one shows, so the change lands immediately on this page too.
+    document.documentElement.setAttribute('data-nav', nav.value);
+    toast(nav.value === 'text' ? 'Navigation shows text' : 'Navigation shows icons');
+  });
+  home.addEventListener('change', () => {
+    try { localStorage.setItem('certguard-home', home.value); } catch (e) {}
+    toast(home.value === 'inventory' ? 'Home is now the inventory' : 'Home is now the dashboard');
+  });
+})();
+
 // Sidebar links → smooth-scroll the section to the top.
 document.querySelectorAll('#settingsNav a').forEach((a) => {
   a.addEventListener('click', (e) => {

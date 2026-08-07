@@ -9,7 +9,7 @@ import (
 )
 
 // Content-Security-Policy for the UI. Scripts and styles are same-origin only;
-// no inline scripts are allowed (the theme snippet lives in /static/theme-init.js),
+// no inline scripts are allowed (the pre-paint snippet lives in /static/prefs-init.js),
 // which is the primary defence-in-depth against XSS. Inline *style attributes*
 // (used for widget sizing) are permitted via 'unsafe-inline' in style-src — a low
 // risk. data: images cover the inline SVG favicon and the 2FA QR.
