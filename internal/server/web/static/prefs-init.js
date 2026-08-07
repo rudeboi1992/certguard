@@ -51,7 +51,9 @@
     if (v === 'inventory') return '/inventory';
     var pages = window.CG_PAGES || [];
     for (var i = 0; i < pages.length; i++) {
-      if (pages[i][0] === v) return v;
+      // pages[i][2] === false marks a page that may not be a home page, so a
+      // value left over from before it was excluded stops being followed.
+      if (pages[i][0] === v) return pages[i][2] === false ? '' : v;
     }
     return '';
   }

@@ -9,9 +9,15 @@
 //
 // Icons stay in nav.js: they are large SVG strings and only the menu needs them.
 //
-// /status is deliberately absent. It is the public page, it is off unless the
-// operator enables it, and a home page that 404s the moment the feature is
-// switched off is a trap. nav.js adds it separately when the server says it
+// [path, label, canBeHome]. The third field defaults to true; false keeps the
+// page in the menu but out of the home-page choices.
+//
+// Settings is false: it is somewhere you go to change something and then
+// leave, not somewhere to land every time you open certguard.
+//
+// /status is absent entirely. It is the public page, it is off unless the
+// operator enables it, and a home page that 404s the moment that switch is
+// turned off is a trap. nav.js adds it separately when the server says it
 // exists.
 window.CG_PAGES = [
   ['/', 'Dashboard'],
@@ -20,5 +26,5 @@ window.CG_PAGES = [
   ['/coverage', 'Coverage'],
   ['/issuers', 'Issuers'],
   ['/activity', 'Activity'],
-  ['/settings', 'Settings'],
+  ['/settings', 'Settings', false],
 ];

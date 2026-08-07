@@ -263,7 +263,8 @@ if ($('vaultDisableBtn')) $('vaultDisableBtn').addEventListener('click', disable
   var nav = $('prefNav'), home = $('prefHome');
   if (!nav || !home) return;
   const NAV_LABEL = { menu: 'Navigation is a menu', icons: 'Navigation shows inline icons', text: 'Navigation shows inline text' };
-  const PAGES = window.CG_PAGES || [['/', 'Dashboard']];
+  // Pages flagged false in pages.js stay in the nav but are not offered here.
+  const PAGES = (window.CG_PAGES || [['/', 'Dashboard']]).filter((p) => p[2] !== false);
   home.innerHTML = PAGES.map(([href, label]) =>
     `<option value="${href}">${escapeHtml(label)}</option>`).join('');
   try {
