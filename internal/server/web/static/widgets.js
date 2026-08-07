@@ -172,6 +172,44 @@ function initWidgetGrid(grid, storageKey, opts) {
     return Math.max(MIN_H, capped === false ? want : Math.min(maxAutoRows(), want));
   }
 
+  // Where the bottom edge should land when the card is double-clicked.
+  //
+  // Two lines are worth meeting. A card *beside* this one — its rows overlap
+  // ours but its columns do not — gives a bottom edge to level with, so the
+  // row reads as a row. A card *underneath* — its columns overlap ours and it
+  // starts below us — gives a ceiling, so the gap between can be closed
+  // exactly. Levelling wins when it does not run into the ceiling; otherwise
+  // fill to the ceiling. With neither neighbour there is no line to snap to,
+  // so fall back to fitting the content.
+  //
+  // Levelling may shrink the card as well as grow it. That is the point: "as
+  // tall as the one next to it" is an alignment, not a minimum.
+  function snapRows(card) {
+    const me = rectOf(card);
+    const colsOverlap = (a, b) => a.c < b.c + b.w && b.c < a.c + a.w;
+    const rowsOverlap = (a, b) => a.r < b.r + b.h && b.r < a.r + a.h;
+
+    let ceiling = Infinity;   // top of the nearest card below, in our columns
+    let peerBottom = 0;       // bottom of the deepest card beside us
+    for (const other of visible()) {
+      if (other === card) continue;
+      const o = rectOf(other);
+      if (colsOverlap(me, o)) {
+        if (o.r > me.r) ceiling = Math.min(ceiling, o.r);
+      } else if (rowsOverlap(me, o)) {
+        peerBottom = Math.max(peerBottom, o.r + o.h);
+      }
+    }
+
+    let bottom = 0;
+    if (peerBottom > me.r && peerBottom <= ceiling) bottom = peerBottom;
+    else if (ceiling !== Infinity) bottom = ceiling;
+
+    const rows = bottom - me.r;
+    if (!bottom || rows < MIN_H) return contentRows(card, false);
+    return rows;
+  }
+
   // --- persistence ---
   function save() {
     const pos = {};
@@ -555,12 +593,15 @@ function initWidgetGrid(grid, storageKey, opts) {
     vh.title = 'Drag to resize height · double-click to fit the content';
     card.appendChild(vh);
 
-    // Double-click sizes the card to exactly what it holds — uncapped, because
-    // it was asked for directly.
+    // Double-click snaps the bottom edge to a line that means something in the
+    // layout rather than to the card's own content: level with the card beside
+    // it, or filling the gap down to whatever is underneath. Those are the two
+    // edges you actually want to meet — a row that lines up, or space closed.
+    // Fitting the content is the fallback for a card with neither neighbour.
     vh.addEventListener('dblclick', (ev) => {
       ev.preventDefault();
       const r = rectOf(card);
-      setRect(card, { c: r.c, r: r.r, w: r.w, h: contentRows(card, false) });
+      setRect(card, { c: r.c, r: r.r, w: r.w, h: snapRows(card) });
       resolve(card); layout(); save();
     });
 
