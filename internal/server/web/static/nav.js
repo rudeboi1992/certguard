@@ -37,15 +37,12 @@
     caret: S + '<path d="M6.2 9.3 12 15.1l5.8-5.8"/></svg>',
   };
 
-  var ITEMS = [
-    { href: '/', label: 'Dashboard', icon: ICONS.dashboard },
-    { href: '/inventory', label: 'Inventory', icon: ICONS.inventory },
-    { href: '/timeline', label: 'Timeline', icon: ICONS.timeline },
-    { href: '/coverage', label: 'Coverage', icon: ICONS.coverage },
-    { href: '/issuers', label: 'Issuers', icon: ICONS.issuers },
-    { href: '/activity', label: 'Activity', icon: ICONS.activity },
-    { href: '/settings', label: 'Settings', icon: ICONS.settings },
-  ];
+  // The routes come from pages.js so the menu and the home-page allowlist
+  // cannot drift apart. The icon key is the path with its slash removed
+  // ("/inventory" → inventory); "/" is the dashboard.
+  var ITEMS = (window.CG_PAGES || []).map(function (p) {
+    return { href: p[0], label: p[1], icon: ICONS[p[0] === '/' ? 'dashboard' : p[0].slice(1)] || ICONS.dashboard };
+  });
 
   var path = window.location.pathname;
   function itemHtml(it) {

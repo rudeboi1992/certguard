@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>certguard — settings</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛡️</text></svg>">
+  <script src="/static/pages.js"></script>
   <script src="/static/prefs-init.js"></script>
   <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -50,12 +51,11 @@
           </label>
           <label class="set-pref">
             <span class="set-pref-l">Home page
-              <span class="muted small">Where the certguard logo and “/” take you.</span>
+              <span class="muted small">Where the certguard logo and “/” take you. Any page will do.</span>
             </span>
-            <select id="prefHome">
-              <option value="dashboard">Dashboard</option>
-              <option value="inventory">Inventory</option>
-            </select>
+            <!-- Options are filled from pages.js, so a new page shows up here
+                 without this markup changing. -->
+            <select id="prefHome" aria-label="Home page"></select>
           </label>
         </div>
       </section>

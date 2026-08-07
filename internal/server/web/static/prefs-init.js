@@ -32,9 +32,27 @@
     // Only ever redirects from "/" itself, so there is no loop, /login is
     // untouched, and every other page loads normally. replace() rather than
     // assign() keeps the Back button working: it would otherwise bounce off
-    // "/" straight back to the inventory.
-    if (window.location.pathname === '/' && ls.getItem('certguard-home') === 'inventory') {
-      window.location.replace('/inventory');
-    }
+    // "/" straight back to the chosen page.
+    if (window.location.pathname !== '/') return;
+    var home = homePath(ls.getItem('certguard-home'));
+    if (home && home !== '/') window.location.replace(home);
   } catch (e) {}
+
+  // Resolve a stored preference to a path, or '' if it is not a page we serve.
+  //
+  // The allowlist matters: this value is fed to location.replace(), and
+  // accepting it verbatim would turn anything that can write localStorage into
+  // an open redirect — including a "javascript:" URL. Only the routes in
+  // CG_PAGES are ever followed.
+  function homePath(v) {
+    if (!v) return '';
+    // Older builds stored "dashboard"/"inventory" rather than a path.
+    if (v === 'dashboard') return '/';
+    if (v === 'inventory') return '/inventory';
+    var pages = window.CG_PAGES || [];
+    for (var i = 0; i < pages.length; i++) {
+      if (pages[i][0] === v) return v;
+    }
+    return '';
+  }
 })();

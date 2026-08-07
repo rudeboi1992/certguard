@@ -263,10 +263,16 @@ if ($('vaultDisableBtn')) $('vaultDisableBtn').addEventListener('click', disable
   var nav = $('prefNav'), home = $('prefHome');
   if (!nav || !home) return;
   const NAV_LABEL = { menu: 'Navigation is a menu', icons: 'Navigation shows inline icons', text: 'Navigation shows inline text' };
+  const PAGES = window.CG_PAGES || [['/', 'Dashboard']];
+  home.innerHTML = PAGES.map(([href, label]) =>
+    `<option value="${href}">${escapeHtml(label)}</option>`).join('');
   try {
     const saved = localStorage.getItem('certguard-nav');
     nav.value = (saved === 'text' || saved === 'icons') ? saved : 'menu';
-    home.value = localStorage.getItem('certguard-home') === 'inventory' ? 'inventory' : 'dashboard';
+    // Older builds stored "dashboard"/"inventory" instead of a path.
+    const savedHome = localStorage.getItem('certguard-home');
+    const asPath = savedHome === 'dashboard' ? '/' : savedHome === 'inventory' ? '/inventory' : savedHome;
+    home.value = PAGES.some(([h]) => h === asPath) ? asPath : '/';
   } catch (e) {}
   nav.addEventListener('change', () => {
     try { localStorage.setItem('certguard-nav', nav.value); } catch (e) {}
@@ -277,7 +283,8 @@ if ($('vaultDisableBtn')) $('vaultDisableBtn').addEventListener('click', disable
   });
   home.addEventListener('change', () => {
     try { localStorage.setItem('certguard-home', home.value); } catch (e) {}
-    toast(home.value === 'inventory' ? 'Home is now the inventory' : 'Home is now the dashboard');
+    const label = (PAGES.find(([h]) => h === home.value) || [, home.value])[1];
+    toast(`Home is now ${label}`);
   });
 })();
 
