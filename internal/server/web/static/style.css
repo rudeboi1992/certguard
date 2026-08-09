@@ -750,6 +750,10 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .cal-legend .leg i { width: 11px; height: 11px; border-radius: 3px; }
 /* nav row (back · ‹ range › · add-to-calendar) sits under the clean title bar */
 .cal-range { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .8rem; }
+/* ‹ label › is one unit. Left loose in the wrapping row, a long day-view label
+   ("Mon, Oct 12, 2026") pushed the next-arrow onto a line by itself. Grouping
+   them means the row can only ever break *around* the date, never inside it. */
+.cal-nav { display: flex; align-items: center; justify-content: center; gap: .35rem; flex: 1 1 auto; min-width: 0; }
 /* margin-left:auto keeps the add button right-aligned whether it stays on the
    nav line or wraps to its own line on a narrow card. */
 .cal-add { white-space: nowrap; margin-left: auto; }
@@ -901,6 +905,16 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
   .cal-ev { font-size: .62rem; padding: 1px 4px; }
   .cal-day { font-size: .72rem; }
   .cal-label { min-width: 0; }
+}
+/* Too narrow for back-button + date + add on one line. Rather than let the add
+   button dangle on a line of its own, give the date its own full-width row and
+   pair the two buttons above it:  [‹ Month]      [+📆]
+                                     ‹ Mon, Oct 12, 2026 ›
+   Only when the back button is showing: that means month or day view, whose
+   labels are long. The year view has no back button and a four-character
+   label, so it still fits on one line and should keep it. */
+@container (max-width: 460px) {
+  .cal-range:has(#calYearBtn:not([hidden])) .cal-nav { order: 1; flex-basis: 100%; }
 }
 /* Too narrow for readable event text — swap the bars for colored dots. Days
    stay tappable to open the day view for the full list. */
