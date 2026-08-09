@@ -131,9 +131,11 @@
         <div class="widget-body">
         <div class="cal-range">
           <button id="calYearBtn" class="btn ghost small" title="Back" hidden>◱ Year</button>
-          <button id="calPrev" class="btn ghost small" title="Previous">‹</button>
-          <span id="calLabel" class="cal-label"></span>
-          <button id="calNext" class="btn ghost small" title="Next">›</button>
+          <div class="cal-nav">
+            <button id="calPrev" class="btn ghost small" title="Previous">‹</button>
+            <span id="calLabel" class="cal-label"></span>
+            <button id="calNext" class="btn ghost small" title="Next">›</button>
+          </div>
           <a id="downloadCal" class="btn ghost small cal-add" href="/api/v1/calendar.ics" title="Add all expirations to your calendar (.ics)" aria-label="Add to calendar">+📆</a>
         </div>
         <div id="calLegend" class="cal-legend"></div>

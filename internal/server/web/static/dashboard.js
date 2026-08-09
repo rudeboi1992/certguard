@@ -1028,8 +1028,10 @@ function renderDay() {
   $('calYearBtn').hidden = false;
   $('calYearBtn').textContent = '‹ Month';
   const dObj = new Date(Date.UTC(calYear, calMonth, calDay));
+  // Short month to match the short weekday — "Mon, October 12" mixed the two
+  // styles, and the extra width is what crowded the nav row on a narrow card.
   $('calLabel').textContent = dObj.toLocaleDateString(undefined,
-    { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 
   const list = bucketByDay()[`${calYear}-${calMonth}-${calDay}`] || [];
   if (!list.length) {
