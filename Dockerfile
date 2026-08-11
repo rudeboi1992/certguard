@@ -11,11 +11,15 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+# The build context has no .git, so the toolchain cannot stamp the commit on its
+# own — CI passes it in. Defaults keep a bare `docker build` working.
 ARG VERSION=docker
+ARG COMMIT=
+ARG BUILD_DATE=
 ARG TARGETOS TARGETARCH
 # CGO is off (modernc.org/sqlite is pure Go) so the binary is fully static.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
-        -ldflags="-s -w -X main.version=${VERSION}" \
+        -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildDate=${BUILD_DATE}" \
         -o /out/certguard . \
     && mkdir /data
 

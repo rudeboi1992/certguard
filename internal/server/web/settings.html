@@ -29,6 +29,7 @@
         <a href="#usersCard" data-nav="usersCard" id="navUsers">Users</a>
         <a href="#backupCard" data-nav="backupCard" id="navBackup">Backup</a>
         <a href="#securityCard" data-nav="securityCard">Security</a>
+        <a href="#aboutCard" data-nav="aboutCard">About</a>
       </nav>
     </aside>
 
@@ -150,6 +151,18 @@
             <strong>macOS:</strong> open in Keychain Access → System → set to <em>Always Trust</em>.
             <strong>Linux:</strong> copy to <code>/usr/local/share/ca-certificates/</code> and run <code>sudo update-ca-certificates</code>.
           </p>
+        </div>
+      </section>
+
+      <section class="card settings-card" id="aboutCard">
+        <h2 class="settings-card-title">About</h2>
+        <p class="muted">What this instance is running. Quote the version and commit in any bug report.</p>
+        <dl class="about-grid" id="aboutGrid">
+          <dt>Version</dt><dd class="mono" id="aboutVersion">…</dd>
+        </dl>
+        <div class="backup-btns">
+          <button class="btn ghost small" id="copyBuild">Copy build details</button>
+          <a class="btn ghost small" href="https://github.com/rudeboi1992/certguard" target="_blank" rel="noopener noreferrer">Project on GitHub ↗</a>
         </div>
       </section>
     </div>

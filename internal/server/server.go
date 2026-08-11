@@ -76,6 +76,7 @@ func (s *Server) routes() {
 	// Authenticated (any role).
 	s.mux.Handle("POST /api/v1/auth/logout", s.authed(s.handleLogout))
 	s.mux.Handle("GET /api/v1/auth/whoami", s.authed(s.handleWhoami))
+	s.mux.Handle("GET /api/v1/version", s.authed(s.handleVersion))
 	s.mux.Handle("GET /api/v1/certs", s.authed(s.handleListCerts))
 	s.mux.Handle("GET /api/v1/calendar.ics", s.authed(s.handleCalendar))
 	s.mux.Handle("GET /api/v1/certs/{id}/calendar.ics", s.authed(s.handleCalendarOne))
