@@ -123,6 +123,24 @@ function daysUntil(iso) {
   return Math.round((new Date(iso) - new Date()) / 86400000);
 }
 
+// chainRisk mirrors model.ChainRisk in Go: the intermediate that expires
+// soonest AND before the leaf, or null when nothing in the chain gives out
+// first. A link outliving the certificate is deliberately not a risk —
+// renewing on the usual schedule fetches a fresh chain anyway, so flagging it
+// would put a warning on every endpoint whose CA rotates on a longer cycle.
+function chainRisk(c) {
+  const leaf = Date.parse(c.expires_at);
+  let best = null;
+  let bestAt = Infinity;
+  for (const link of c.chain || []) {
+    const at = Date.parse(link.not_after);
+    if (Number.isNaN(at)) continue;              // never captured / zero date
+    if (!Number.isNaN(leaf) && at >= leaf) continue;
+    if (at < bestAt) { best = link; bestAt = at; }
+  }
+  return best;
+}
+
 // loadWhoami sets isAdmin/currentUserId and fills the header. Each page decides
 // what to show based on isAdmin after this resolves.
 async function loadWhoami() {

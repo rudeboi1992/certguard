@@ -54,6 +54,12 @@ type Cert struct {
 	Coverage   []CoveredName `json:"coverage,omitempty"`
 	CoverageAt *time.Time    `json:"coverage_at,omitempty"`
 
+	// Chain is the intermediate certificates the endpoint served alongside the
+	// leaf. A leaf is only as good as the path under it: if an intermediate
+	// lapses first, the endpoint breaks on that date, not on ExpiresAt. See
+	// ChainRisk.
+	Chain []ChainCert `json:"chain,omitempty"`
+
 	// Operational state.
 	AutoRescan    bool       `json:"auto_rescan"`
 	LastScannedAt *time.Time `json:"last_scanned_at,omitempty"`
@@ -75,11 +81,61 @@ type Cert struct {
 	// when moving to a more urgent threshold, preventing duplicate spam.
 	LastNotifiedThreshold int        `json:"last_notified_threshold"`
 	LastNotifiedOn        *time.Time `json:"last_notified_on,omitempty"`
+
+	// The chain escalates separately from the leaf. Sharing one counter would
+	// let whichever fired first silence the other, which is precisely the
+	// failure this feature exists to catch.
+	LastChainNotifiedThreshold int `json:"last_chain_notified_threshold"`
 }
 
 // DaysRemaining reports whole days from now until expiry (may be negative).
 func (c *Cert) DaysRemaining(now time.Time) int {
 	return int(c.ExpiresAt.Sub(now).Hours() / 24)
+}
+
+// ChainCert is one intermediate the endpoint presented under the leaf. Roots
+// are not included: servers are not required to send them, and the one that
+// matters is whatever the client would have to build a path through.
+type ChainCert struct {
+	Subject  string    `json:"subject"`
+	Issuer   string    `json:"issuer,omitempty"`
+	NotAfter time.Time `json:"not_after"`
+	SHA256   string    `json:"sha256,omitempty"`
+}
+
+// ChainRisk reports the soonest intermediate expiry that would break this
+// endpoint before its own certificate does, and whether there is one.
+//
+// An intermediate expiring AFTER the leaf is deliberately not a risk: renewing
+// the leaf on its own schedule fetches a fresh chain anyway, so warning about
+// it would be noise on every endpoint whose CA happens to rotate on a longer
+// cycle — which is all of them.
+func (c *Cert) ChainRisk() (ChainCert, bool) {
+	var soonest ChainCert
+	found := false
+	for _, ic := range c.Chain {
+		if ic.NotAfter.IsZero() {
+			continue
+		}
+		// Only a link that gives out before the leaf changes the outcome.
+		if !c.ExpiresAt.IsZero() && !ic.NotAfter.Before(c.ExpiresAt) {
+			continue
+		}
+		if !found || ic.NotAfter.Before(soonest.NotAfter) {
+			soonest, found = ic, true
+		}
+	}
+	return soonest, found
+}
+
+// ChainDaysRemaining reports whole days until the at-risk link expires. The
+// bool is false when nothing in the chain expires before the leaf.
+func (c *Cert) ChainDaysRemaining(now time.Time) (int, bool) {
+	risk, ok := c.ChainRisk()
+	if !ok {
+		return 0, false
+	}
+	return int(risk.NotAfter.Sub(now).Hours() / 24), true
 }
 
 // CoveredName records what one of a certificate's SAN entries actually serves.

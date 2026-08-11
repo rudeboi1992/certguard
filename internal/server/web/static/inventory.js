@@ -166,7 +166,7 @@ function buildRow(it) {
     <td class="inv-name"><span class="inv-caret" aria-hidden="true"></span><strong>${escapeHtml(c.name)}</strong>${
       c.has_secret && secretsEnabled
         ? ' <span class="inv-key" title="Has a stored secret — expand to reveal">🔑</span>'
-        : ''}</td>
+        : ''}${chainMark(c)}</td>
     <td class="col-type">${c.category
       ? `<span class="pill" style="background:${hexA(col, 0.15)};color:${col}">${escapeHtml(categoryLabel(c.category))}</span>`
       : '<span class="muted small">—</span>'}</td>
@@ -190,6 +190,17 @@ function buildRow(it) {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
   });
   return tr;
+}
+
+// A row whose chain gives out before its certificate does needs to say so in
+// the collapsed view: the "expires" column shows the leaf's date, which is the
+// reassuring one and, in this case, the wrong one to plan around.
+function chainMark(c) {
+  const risk = chainRisk(c);
+  if (!risk) return '';
+  const days = daysUntil(risk.not_after);
+  return ` <span class="inv-chain-mark ${expiryLevel(days)}" title="Chain expires first: ${
+    escapeHtml(risk.subject)} — ${escapeHtml(fmtRemaining(days))}">⛓</span>`;
 }
 
 function detailRow(it) {
@@ -250,9 +261,35 @@ function detailRow(it) {
       <div class="inv-cov-list">${rows}</div></div>`;
   }
 
+  // The chain, like coverage, is a list of verdicts rather than a value: what
+  // matters is which link expires first, not that there are three of them.
+  let chain = '';
+  if ((c.chain || []).length) {
+    const risk = chainRisk(c);
+    const rows = c.chain.map((link) => {
+      const days = daysUntil(link.not_after);
+      // Fingerprints identify a link exactly; fall back to subject+date for
+      // rows stored before SHA-256 was captured.
+      const atRisk = !!risk && (risk.sha256 && link.sha256
+        ? link.sha256 === risk.sha256
+        : link.subject === risk.subject && link.not_after === risk.not_after);
+      return `<div class="inv-chain-row${atRisk ? ' at-risk' : ''}">
+        <span class="mono small">${escapeHtml(link.subject)}</span>
+        <span class="pill ${atRisk ? expiryLevel(days) : ''}">${escapeHtml(fmtDate(link.not_after))}</span>
+        <span class="muted small">${escapeHtml(fmtRemaining(days))}</span></div>`;
+    }).join('');
+    const warn = risk
+      ? `<p class="inv-chain-warn">This chain expires before the certificate does. Clients will fail to build a
+         trust path on that date even though the certificate is still valid, and reissuing from the same CA may
+         return the same intermediate — ask for a chain without it.</p>`
+      : '';
+    chain = `<div class="inv-cov"><div class="inv-d-k">Chain</div>
+      <div class="inv-cov-list">${rows}</div>${warn}</div>`;
+  }
+
   const tr = document.createElement('tr');
   tr.className = 'inv-detail';
-  tr.innerHTML = `<td colspan="9"><div class="inv-d-wrap"><div class="inv-d-grid">${kv.join('')}</div>${cov}</div></td>`;
+  tr.innerHTML = `<td colspan="9"><div class="inv-d-wrap"><div class="inv-d-grid">${kv.join('')}</div>${cov}${chain}</div></td>`;
 
   const reveal = tr.querySelector('[data-reveal]');
   if (reveal) reveal.addEventListener('click', () => revealSecret(reveal.dataset.reveal, reveal));

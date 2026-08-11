@@ -20,6 +20,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/bfalcher/certguard/internal/model"
 )
 
 // DefaultPort is used when a target is given without an explicit port.
@@ -53,6 +55,10 @@ type Result struct {
 	SigAlg     string    `json:"signature_algorithm"`
 	IsCA       bool      `json:"is_ca"`
 	ChainLen   int       `json:"chain_length"`
+	// Chain is the intermediates served under the leaf, in the order sent. The
+	// handshake has always had these — only the count used to be kept, which
+	// left an intermediate expiring before the leaf completely invisible.
+	Chain []model.ChainCert `json:"chain,omitempty"`
 	// TrustError is the verification error observed during the handshake, if
 	// any (expired, self-signed, hostname mismatch). Empty means the chain
 	// verified against the system roots. The scan still succeeds either way —
@@ -135,8 +141,28 @@ func Scan(ctx context.Context, host string, port int, opts Options) (*Result, er
 		SigAlg:     leaf.SignatureAlgorithm.String(),
 		IsCA:       leaf.IsCA,
 		ChainLen:   len(state.PeerCertificates),
+		Chain:      chainOf(state.PeerCertificates),
 		TrustError: trustErr,
 	}, nil
+}
+
+// chainOf flattens the intermediates served under the leaf. The leaf itself is
+// skipped — it is already the Result — and so is anything self-issued, which is
+// a root some servers send needlessly and which nobody has to renew.
+func chainOf(certs []*x509.Certificate) []model.ChainCert {
+	var out []model.ChainCert
+	for _, c := range certs[1:] {
+		if c.Subject.String() == c.Issuer.String() {
+			continue
+		}
+		out = append(out, model.ChainCert{
+			Subject:  c.Subject.String(),
+			Issuer:   c.Issuer.String(),
+			NotAfter: c.NotAfter.UTC(),
+			SHA256:   fingerprint(c),
+		})
+	}
+	return out
 }
 
 // verifyChain re-runs standard verification against system roots and returns a

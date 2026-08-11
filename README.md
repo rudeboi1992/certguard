@@ -162,6 +162,21 @@ fire at **30, 7, and 3 days** using a state machine that escalates but never
 repeats a level, so frequent runs never spam. Certificate rotation (a new
 fingerprint) resets the state so the new cert is tracked fresh.
 
+Domain registrations use an earlier ladder — **60, 30, and 7 days** — because a
+lapsed domain enters redemption and costs a restore fee, while a lapsed
+certificate is reissued in minutes.
+
+**Chain expiry** is evaluated separately from the certificate. A leaf is only as
+good as the path beneath it: if an intermediate expires first, clients cannot
+build a trust path and the endpoint breaks on *that* date, while the
+certificate's own expiry still looks months away. certguard records the
+intermediates served with each endpoint and alerts on the soonest one that
+expires **before** the leaf, on its own escalation counter so a certificate
+alert cannot silence it. An intermediate that outlives the leaf is deliberately
+ignored — renewing on the normal schedule fetches a fresh chain anyway. The
+remedy differs too, and the alert says so: reissuing from the same CA can return
+the same expiring intermediate, so you need a chain that no longer includes it.
+
 Channels are **per-user** but alert on the whole shared inventory. Supported
 types: `email` (SMTP), `slack`, `discord`, and generic `webhook` (JSON POST).
 Each channel can restrict which thresholds it wants (e.g. only `3`).

@@ -83,6 +83,33 @@ func NotificationThreshold(c *model.Cert, now time.Time) int {
 	return -1
 }
 
+// ChainNotificationThreshold is NotificationThreshold's counterpart for the
+// certificate chain: it fires when an intermediate under the leaf expires
+// before the leaf does, and is silent otherwise.
+//
+// It reuses the certificate ladder (30/7/3) rather than introducing a third
+// one. The difference from a leaf alert is not urgency but remedy — you cannot
+// fix this on your own schedule, because the replacement chain has to come from
+// the CA — and the message carries that, not the thresholds.
+func ChainNotificationThreshold(c *model.Cert, now time.Time) int {
+	days, ok := c.ChainDaysRemaining(now)
+	if !ok {
+		return -1
+	}
+	current := CurrentThreshold(days)
+	if current == -1 {
+		return -1
+	}
+	last := c.LastChainNotifiedThreshold
+	if last == 0 {
+		return current
+	}
+	if current < last {
+		return current
+	}
+	return -1
+}
+
 // UrgencyLabel is a human label for a threshold.
 func UrgencyLabel(threshold int) string {
 	switch threshold {

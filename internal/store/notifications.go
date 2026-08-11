@@ -108,6 +108,16 @@ func (s *Store) MarkNotified(certID int64, threshold int) error {
 	return err
 }
 
+// MarkChainNotified records that a chain alert went out for this entry at the
+// given threshold. Separate from MarkNotified because the chain escalates on
+// its own counter — see the 0009 migration.
+func (s *Store) MarkChainNotified(certID int64, threshold int) error {
+	_, err := s.exec(
+		`UPDATE certs SET last_chain_notified_threshold=? WHERE id=?`,
+		threshold, certID)
+	return err
+}
+
 // DomainsForRefresh returns active domain registrations with auto-refresh on.
 // Separate from EndpointsForRescan because they are refreshed by a different
 // mechanism — an RDAP query rather than a TLS handshake.
