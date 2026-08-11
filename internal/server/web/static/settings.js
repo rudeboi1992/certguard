@@ -289,6 +289,51 @@ if ($('vaultDisableBtn')) $('vaultDisableBtn').addEventListener('click', disable
   });
 })();
 
+// --- about / build info ---
+// Only the rows the build actually carries are drawn: an unstamped build has no
+// commit or date, and empty rows read as missing data rather than as absent.
+let buildInfo = null;
+
+async function loadAbout() {
+  const grid = $('aboutGrid');
+  if (!grid) return;
+  let v;
+  try {
+    const res = await api('GET', '/api/v1/version');
+    if (!res.ok) throw new Error(res.status);
+    v = await res.json();
+  } catch {
+    grid.innerHTML = '<dt>Version</dt><dd class="muted">unavailable</dd>';
+    return;
+  }
+  buildInfo = v;
+  const rows = [['Version', v.version + (v.dirty ? ' (modified)' : '')]];
+  // The full hash is what git wants; the short one is what people read.
+  if (v.commit) rows.push(['Commit', v.commit.slice(0, 12)]);
+  if (v.build_date) rows.push(['Built', v.build_date.replace('T', ' ').replace('Z', ' UTC')]);
+  rows.push(['Runtime', `${v.go_version} · ${v.os}/${v.arch}`]);
+  grid.innerHTML = rows
+    .map(([k, val]) => `<dt>${escapeHtml(k)}</dt><dd class="mono">${escapeHtml(val)}</dd>`)
+    .join('');
+}
+
+$('copyBuild')?.addEventListener('click', async () => {
+  if (!buildInfo) return;
+  const v = buildInfo;
+  const text = [
+    `certguard ${v.version}${v.dirty ? ' (modified)' : ''}`,
+    v.commit ? `commit ${v.commit}` : '',
+    v.build_date ? `built ${v.build_date}` : '',
+    `${v.go_version} ${v.os}/${v.arch}`,
+  ].filter(Boolean).join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Build details copied');
+  } catch {
+    toast('Could not copy to clipboard');
+  }
+});
+
 // Sidebar links → smooth-scroll the section to the top.
 document.querySelectorAll('#settingsNav a').forEach((a) => {
   a.addEventListener('click', (e) => {
@@ -318,4 +363,5 @@ loadWhoami().then((u) => {
   }
   loadChannels();
   loadUsers();
+  loadAbout();
 }).catch(() => {});

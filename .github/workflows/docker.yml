@@ -33,6 +33,19 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
+      # github.ref_name is the tag on a tag push but the branch name on a branch
+      # push, which stamped every main build as version "main". Tags keep their
+      # own name; anything else gets a version that says where it came from.
+      - name: Build stamp
+        id: stamp
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.ref_name }}-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Image metadata (tags/labels)
         id: meta
         uses: docker/metadata-action@v5
@@ -51,6 +64,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: VERSION=${{ github.ref_name }}
+          build-args: |
+            VERSION=${{ steps.stamp.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ steps.stamp.outputs.date }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

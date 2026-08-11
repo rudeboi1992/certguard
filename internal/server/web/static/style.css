@@ -446,6 +446,10 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
   font: inherit; font-weight: 600; cursor: pointer; padding: .55rem .9rem;
   border-radius: 8px; border: 1px solid transparent;
 }
+/* .btn never resets the UA anchor underline, so links styled as buttons came
+   out underlined. inline-flex also gives them a button's box outside a flex
+   parent. Scoped to anchors so no <button> changes box model. */
+a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .btn.primary { background: var(--primary); color: var(--primary-ink); }
 .btn.ghost { background: transparent; border-color: var(--border); color: var(--ink); }
 .btn.link { background: none; border: none; color: var(--urgent); padding: .2rem .4rem; }
@@ -526,6 +530,15 @@ input[type=text], input[type=email], input[type=password], input[type=date] {
 .clear-sec { display: inline-flex; align-items: center; gap: .3rem; font-size: .85rem; color: var(--muted); white-space: nowrap; }
 .backup-btns { display: flex; flex-wrap: wrap; gap: .6rem; margin: .8rem 0; }
 .backup-btns .btn:disabled { opacity: .5; cursor: default; }
+/* about card: label/value pairs, stacking to one column when narrow */
+.about-grid { display: grid; grid-template-columns: auto 1fr; gap: .35rem .9rem;
+  margin: .8rem 0 0; align-items: baseline; }
+.about-grid dt { color: var(--muted); font-size: .85rem; }
+.about-grid dd { margin: 0; }
+@media (max-width: 460px) {
+  .about-grid { grid-template-columns: 1fr; gap: .1rem .9rem; }
+  .about-grid dd { margin-bottom: .45rem; }
+}
 /* security card + vault unlock */
 .sec-h { font-size: 1rem; margin: 1rem 0 .4rem; }
 .sec-h:first-child { margin-top: .2rem; }

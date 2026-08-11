@@ -144,6 +144,7 @@ session ids are stored only as SHA-256 hashes — plaintext is shown once.
 | POST   | `/api/v1/auth/login`   | none   | `{"email","password"}` → sets session cookie |
 | POST   | `/api/v1/auth/logout`  | any    | invalidate the session                   |
 | GET    | `/api/v1/auth/whoami`  | any    | current principal                        |
+| GET    | `/api/v1/version`      | any    | running build: version, commit, build date, Go/OS/arch |
 | GET    | `/api/v1/certs`        | any    | list tracked certs, soonest expiry first |
 | POST   | `/api/v1/scan`         | admin  | scan `{"target":"host:port","dry_run":false}` |
 | POST   | `/api/v1/certs`        | admin  | add a manual/file cert `{"name","expires_at",...}` |

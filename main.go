@@ -31,9 +31,22 @@ import (
 	"github.com/bfalcher/certguard/internal/store"
 )
 
-var version = "0.1.0-dev"
+// Stamped at link time by the release build:
+//
+//	-X main.version=v0.1.0 -X main.commit=abc1234 -X main.buildDate=2026-08-11T00:00:00Z
+//
+// A plain `go build` leaves commit and buildDate empty and they are recovered
+// from the VCS stamp the toolchain embeds. See internal/server/version.go.
+var (
+	version   = "0.1.0-dev"
+	commit    = ""
+	buildDate = ""
+)
 
 func main() {
+	// Hand the build stamp to the server package so the CLI and the API report
+	// the same thing.
+	server.SetBuildInfo(version, commit, buildDate)
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)
@@ -50,11 +63,29 @@ func main() {
 	case "channel":
 		os.Exit(cmdChannel(os.Args[2:]))
 	case "version", "-v", "--version":
-		fmt.Println("certguard", version)
+		printVersion()
 	default:
 		usage()
 		os.Exit(2)
 	}
+}
+
+// printVersion reports the running build in the same detail the API does, so a
+// bug report from the CLI and one from the UI carry the same facts.
+func printVersion() {
+	v := server.BuildInfo()
+	fmt.Println("certguard", v.Version)
+	if v.Commit != "" {
+		dirty := ""
+		if v.Dirty {
+			dirty = " (modified)"
+		}
+		fmt.Printf("  commit:  %s%s\n", v.Commit, dirty)
+	}
+	if v.BuildDate != "" {
+		fmt.Printf("  built:   %s\n", v.BuildDate)
+	}
+	fmt.Printf("  go:      %s %s/%s\n", v.GoVersion, v.OS, v.Arch)
 }
 
 func usage() {
