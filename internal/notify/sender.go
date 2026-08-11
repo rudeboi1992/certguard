@@ -45,6 +45,44 @@ func BuildMessage(c *model.Cert, threshold int, now time.Time) Message {
 	return Message{Cert: c, Threshold: threshold, Days: days, Subject: subject, Body: body}
 }
 
+// BuildChainMessage renders the alert for an intermediate that expires before
+// the leaf does.
+//
+// It is worded differently from BuildMessage on purpose. "Renew this
+// certificate" is the wrong instruction here: the leaf is fine, and reissuing
+// it from the same CA can hand back the very same expiring intermediate. What
+// the operator has to do is get a chain that no longer includes this link,
+// which is a conversation with the CA, not a cron job.
+func BuildChainMessage(c *model.Cert, threshold int, now time.Time) Message {
+	risk, ok := c.ChainRisk()
+	if !ok {
+		// Nothing at risk — render the ordinary message rather than something
+		// nonsensical. Callers gate on ChainNotificationThreshold, so this is
+		// defensive only.
+		return BuildMessage(c, threshold, now)
+	}
+	days, _ := c.ChainDaysRemaining(now)
+	urgency := UrgencyLabel(threshold)
+	when := "in " + itoa(days) + " days"
+	if days < 0 {
+		when = "expired " + itoa(-days) + " days ago"
+	} else if days == 0 {
+		when = "today"
+	}
+	subject := fmt.Sprintf("[certguard %s] %s: chain certificate expires %s", urgency, c.Name, when)
+	body := fmt.Sprintf(
+		"Entry: %s\nThe certificate itself is valid until %s, but an intermediate in the chain it serves expires sooner.\n\n"+
+			"Intermediate: %s\nChain expires: %s (%s)\nUrgency: %s\n",
+		c.Name, c.ExpiresAt.Format("2006-01-02"),
+		risk.Subject, risk.NotAfter.Format("2006-01-02"), when, urgency)
+	if c.Host != "" {
+		body += fmt.Sprintf("Endpoint: %s:%d\n", c.Host, c.Port)
+	}
+	body += "\nClients will fail to build a trust path once this link expires, even though the certificate is still in date. " +
+		"Reissuing from the same CA may return the same intermediate — ask for a chain that does not include it, and redeploy the full chain."
+	return Message{Cert: c, Threshold: threshold, Days: days, Subject: subject, Body: body}
+}
+
 // Sender delivers a rendered message to one channel.
 type Sender interface {
 	Send(ch *model.Channel, m Message) error

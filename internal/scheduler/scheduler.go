@@ -219,34 +219,56 @@ func (s *Scheduler) NotifyPass(now time.Time) (sent int) {
 		return 0
 	}
 	for _, c := range certs {
-		th := notify.NotificationThreshold(c, now)
-		if th <= 0 {
-			continue
+		if th := notify.NotificationThreshold(c, now); th > 0 {
+			delivered := s.deliver(channels, th, notify.BuildMessage(c, th, now))
+			if delivered > 0 {
+				if err := s.store.MarkNotified(c.ID, th); err != nil {
+					s.logger.Printf("scheduler: mark notified cert %d: %v", c.ID, err)
+				}
+				// Escalation state means this fires once per threshold crossed, not
+				// once per pass, so the log gets one line per real alert.
+				s.event(store.EventNotified, c,
+					fmt.Sprintf("%d-day alert to %d channel%s", th, delivered, plural(delivered)))
+				sent += delivered
+			}
 		}
-		msg := notify.BuildMessage(c, th, now)
-		delivered := 0
-		for _, ch := range channels {
-			if !ch.WantsThreshold(th) {
-				continue
+		// The chain is evaluated independently of the leaf, and on its own
+		// escalation counter. Folding the two together would let an alert about
+		// the certificate silence the warning that the path underneath it gives
+		// out first — the exact blind spot this exists to close.
+		if th := notify.ChainNotificationThreshold(c, now); th > 0 {
+			delivered := s.deliver(channels, th, notify.BuildChainMessage(c, th, now))
+			if delivered > 0 {
+				if err := s.store.MarkChainNotified(c.ID, th); err != nil {
+					s.logger.Printf("scheduler: mark chain notified cert %d: %v", c.ID, err)
+				}
+				risk, _ := c.ChainRisk()
+				s.event(store.EventChainExpiring, c,
+					fmt.Sprintf("chain certificate %q expires %s, before the certificate does",
+						risk.Subject, risk.NotAfter.Format("2006-01-02")))
+				sent += delivered
 			}
-			if err := s.sender.Send(ch, msg); err != nil {
-				s.logger.Printf("scheduler: send to channel %d (%s): %v", ch.ID, ch.Type, err)
-				continue
-			}
-			delivered++
-		}
-		if delivered > 0 {
-			if err := s.store.MarkNotified(c.ID, th); err != nil {
-				s.logger.Printf("scheduler: mark notified cert %d: %v", c.ID, err)
-			}
-			// Escalation state means this fires once per threshold crossed, not
-			// once per pass, so the log gets one line per real alert.
-			s.event(store.EventNotified, c,
-				fmt.Sprintf("%d-day alert to %d channel%s", th, delivered, plural(delivered)))
-			sent += delivered
 		}
 	}
 	return sent
+}
+
+// deliver sends one rendered message to every channel that subscribes to the
+// threshold, and reports how many accepted it. A channel that errors is logged
+// and skipped so one bad webhook cannot suppress the rest.
+func (s *Scheduler) deliver(channels []*model.Channel, th int, msg notify.Message) int {
+	delivered := 0
+	for _, ch := range channels {
+		if !ch.WantsThreshold(th) {
+			continue
+		}
+		if err := s.sender.Send(ch, msg); err != nil {
+			s.logger.Printf("scheduler: send to channel %d (%s): %v", ch.ID, ch.Type, err)
+			continue
+		}
+		delivered++
+	}
+	return delivered
 }
 
 func plural(n int) string {

@@ -20,6 +20,9 @@ type fakeSender struct {
 		Threshold int
 		CertName  string
 	}
+	// Subjects distinguishes a leaf alert from a chain alert, which are
+	// otherwise identical in the fields above.
+	subjects []string
 }
 
 func (f *fakeSender) Send(ch *model.Channel, m notify.Message) error {
@@ -30,6 +33,7 @@ func (f *fakeSender) Send(ch *model.Channel, m notify.Message) error {
 		Threshold int
 		CertName  string
 	}{ch.ID, m.Threshold, m.Cert.Name})
+	f.subjects = append(f.subjects, m.Subject)
 	return nil
 }
 

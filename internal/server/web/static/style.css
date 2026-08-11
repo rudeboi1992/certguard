@@ -1349,6 +1349,18 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .inv-cov-list { display: grid; gap: .25rem; }
 .inv-cov-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 
+/* Chain: same list shape as coverage, but the at-risk link is called out —
+   every other row here is context for the one that matters. */
+.inv-chain-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.inv-chain-row.at-risk { font-weight: 600; }
+.inv-chain-warn { margin: .35rem 0 0; font-size: .8rem; color: var(--muted); max-width: 68ch; }
+/* The collapsed row shows the leaf's date, so the marker has to carry the
+   warning on its own; it takes the urgency colour of the link, not the leaf. */
+.inv-chain-mark { font-size: .8rem; cursor: help; }
+.inv-chain-mark.urgent { color: var(--urgent); }
+.inv-chain-mark.warn   { color: var(--warn); }
+.inv-chain-mark.notice { color: var(--notice); }
+
 .inv-note { padding: .8rem 1rem; margin: 0; }
 .inv-note:empty { display: none; }
 

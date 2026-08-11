@@ -154,6 +154,7 @@ func (s *Store) migrate() error {
 // Returns the stored cert.
 func (s *Store) UpsertScan(name string, res *scanner.Result) (*model.Cert, error) {
 	dns, _ := json.Marshal(res.DNSNames)
+	chain, _ := json.Marshal(res.Chain)
 	now := time.Now().UTC()
 
 	existing, err := s.findByHostPort(res.Host, res.Port)
@@ -168,17 +169,25 @@ func (s *Store) UpsertScan(name string, res *scanner.Result) (*model.Cert, error
 			existing.LastNotifiedThreshold = 0
 			existing.LastNotifiedOn = nil
 		}
+		// The chain escalates on its own clock: when the CA swaps the
+		// intermediate, the warning should start over against the new one
+		// rather than stay silenced by an alert about the link it replaced.
+		if prev, _ := json.Marshal(existing.Chain); string(prev) != string(chain) {
+			existing.LastChainNotifiedThreshold = 0
+		}
 		_, err := s.exec(`UPDATE certs SET
 			subject=?, issuer=?, serial=?, sha256=?, not_before=?, expires_at=?,
 			dns_names=?, key_type=?, sig_alg=?, server_name=?,
 			last_scanned_at=?, last_error=?,
-			last_notified_threshold=?, last_notified_on=?
+			last_notified_threshold=?, last_notified_on=?,
+			chain_json=?, last_chain_notified_threshold=?
 			WHERE id=?`,
 			res.Subject, res.Issuer, res.Serial, res.SHA256,
 			res.NotBefore.Format(rfc3339), res.NotAfter.Format(rfc3339),
 			string(dns), res.KeyType, res.SigAlg, res.ServerName,
 			now.Format(rfc3339), res.TrustError,
 			existing.LastNotifiedThreshold, nullTime(existing.LastNotifiedOn),
+			string(chain), existing.LastChainNotifiedThreshold,
 			existing.ID)
 		if err != nil {
 			return nil, err
@@ -192,13 +201,13 @@ func (s *Store) UpsertScan(name string, res *scanner.Result) (*model.Cert, error
 	id, err := s.insertReturningID(`INSERT INTO certs
 		(name, kind, category, host, port, server_name, subject, issuer, serial, sha256,
 		 not_before, expires_at, dns_names, key_type, sig_alg,
-		 auto_rescan, last_scanned_at, last_error, active, created_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 auto_rescan, last_scanned_at, last_error, active, created_at, chain_json)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		name, string(model.KindEndpoint), "certificate", res.Host, res.Port, res.ServerName,
 		res.Subject, res.Issuer, res.Serial, res.SHA256,
 		res.NotBefore.Format(rfc3339), res.NotAfter.Format(rfc3339),
 		string(dns), res.KeyType, res.SigAlg,
-		1, now.Format(rfc3339), res.TrustError, 1, now.Format(rfc3339))
+		1, now.Format(rfc3339), res.TrustError, 1, now.Format(rfc3339), string(chain))
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +400,7 @@ const selectCols = `SELECT id, name, kind, category, host, port, server_name, su
 	serial, sha256, not_before, expires_at, dns_names, key_type, sig_alg,
 	auto_rescan, last_scanned_at, last_error, notes, active, created_at,
 	last_notified_threshold, last_notified_on, secret_enc, secret_hint,
-	coverage_json, coverage_at FROM certs`
+	coverage_json, coverage_at, chain_json, last_chain_notified_threshold FROM certs`
 
 type rowScanner interface{ Scan(dest ...any) error }
 
@@ -410,12 +419,14 @@ func scanRowValues(r rowScanner) (*model.Cert, error) {
 		lastNotifiedOn        sql.NullString
 		coverageJSON          string
 		coverageAt            string
+		chainJSON             string
 	)
 	err := r.Scan(&c.ID, &c.Name, &c.Kind, &c.Category, &c.Host, &c.Port, &c.ServerName,
 		&c.Subject, &c.Issuer, &c.Serial, &c.SHA256, &notBefore, &expiresAt,
 		&dnsJSON, &c.KeyType, &c.SigAlg, &autoRescan, &lastScanned, &c.LastError,
 		&c.Notes, &active, &createdAt, &lastNotifiedThreshold, &lastNotifiedOn,
-		&c.SecretEnc, &c.SecretHint, &coverageJSON, &coverageAt)
+		&c.SecretEnc, &c.SecretHint, &coverageJSON, &coverageAt,
+		&chainJSON, &c.LastChainNotifiedThreshold)
 	if err != nil {
 		return nil, err
 	}
@@ -443,6 +454,9 @@ func scanRowValues(r rowScanner) (*model.Cert, error) {
 	if coverageAt != "" {
 		t := parseTime(coverageAt)
 		c.CoverageAt = &t
+	}
+	if chainJSON != "" {
+		_ = json.Unmarshal([]byte(chainJSON), &c.Chain)
 	}
 	return &c, nil
 }

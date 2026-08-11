@@ -17,6 +17,7 @@ const (
 	EventScanFailed     = "scan_failed"
 	EventScanRecovered  = "scan_recovered"
 	EventCoverageBroken = "coverage_broken"
+	EventChainExpiring  = "chain_expiring"
 	EventNotified       = "notified"
 )
 
