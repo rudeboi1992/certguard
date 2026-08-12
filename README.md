@@ -256,6 +256,8 @@ All optional; defaults give a working SQLite-backed service with no setup.
 | `CERTGUARD_SCAN_TIMEOUT` | `10s`           | per-scan dial + handshake budget |
 | `CERTGUARD_SESSION_TTL`  | `720h`          | web session lifetime             |
 | `CERTGUARD_COOKIE_SECURE`| `false`         | set `true` when served over HTTPS|
+| `CERTGUARD_TRUSTED_PROXY`| `false`         | trust `X-Forwarded-For` for rate-limiting — **only** behind a proxy you control; leave off when exposed directly |
+| `CERTGUARD_ALLOW_PRIVATE_WEBHOOKS`| `false`| let notification webhooks reach private/loopback addresses; off blocks SSRF into your network |
 | `CERTGUARD_RP_ID`        | _(Host header)_ | WebAuthn relying party ID — a **domain**, never an IP |
 | `CERTGUARD_RP_ORIGINS`   | _(request origin)_ | comma-separated origins allowed to present keys |
 | `CERTGUARD_CHECK_INTERVAL`| `6h`           | scheduler rescan + notify period |

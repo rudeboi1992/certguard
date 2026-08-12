@@ -15,6 +15,10 @@ type User struct {
 	// serialized; TOTPEnabled reports whether 2FA is active for this user.
 	TOTPSecret  string `json:"-"`
 	TOTPEnabled bool   `json:"totp_enabled"`
+	// TOTPLastStep is the most recent TOTP counter step accepted for this user.
+	// A login rejects any code from this step or earlier, so a captured code
+	// cannot be replayed within its validity window. Never serialized.
+	TOTPLastStep int64 `json:"-"`
 }
 
 // IsAdmin reports whether the user may perform write operations.

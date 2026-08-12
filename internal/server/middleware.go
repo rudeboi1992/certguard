@@ -79,15 +79,21 @@ func (rl *rateLimiter) allow(key string, now time.Time) bool {
 	return true
 }
 
-// clientIP extracts the caller's IP for rate-limiting. It honours the first hop
-// of X-Forwarded-For when present (the app is commonly run behind a reverse
-// proxy), else falls back to the connection's remote address.
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := indexByte(xff, ','); i >= 0 {
-			xff = xff[:i]
+// clientIP extracts the caller's IP for rate-limiting.
+//
+// X-Forwarded-For is honoured ONLY when the operator has declared a trusted
+// proxy. When certguard is exposed directly, the header is attacker-controlled:
+// forging a fresh value on every request would give each login attempt its own
+// rate-limit bucket and defeat the limiter entirely. So the default path uses
+// the real connection address, which cannot be spoofed over TCP.
+func clientIP(r *http.Request, trustProxy bool) string {
+	if trustProxy {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			if i := indexByte(xff, ','); i >= 0 {
+				xff = xff[:i]
+			}
+			return trimSpace(xff)
 		}
-		return trimSpace(xff)
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -100,7 +106,7 @@ func clientIP(r *http.Request) string {
 // Retry-After hint once the window is exhausted.
 func (s *Server) limitAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.loginLimiter.allow(clientIP(r), time.Now()) {
+		if !s.loginLimiter.allow(clientIP(r, s.cfg.TrustedProxy), time.Now()) {
 			w.Header().Set("Retry-After", strconv.Itoa(int(s.loginLimiter.window.Seconds())))
 			writeErr(w, http.StatusTooManyRequests, "too many attempts — try again later")
 			return

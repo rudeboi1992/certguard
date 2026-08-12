@@ -33,7 +33,7 @@ func TestRealSenderGenericWebhook(t *testing.T) {
 	var body []byte
 	var ct string
 	srv := captureServer(t, &body, &ct)
-	s := NewRealSender(config.MailConfig{})
+	s := NewRealSender(config.MailConfig{}, true)
 
 	err := s.Send(&model.Channel{Type: model.ChannelWebhook, Target: srv.URL}, sampleMsg())
 	if err != nil {
@@ -65,7 +65,7 @@ func TestRealSenderSlackAndDiscordShape(t *testing.T) {
 		var body []byte
 		var ct string
 		srv := captureServer(t, &body, &ct)
-		s := NewRealSender(config.MailConfig{})
+		s := NewRealSender(config.MailConfig{}, true)
 		if err := s.Send(&model.Channel{Type: tc.typ, Target: srv.URL}, sampleMsg()); err != nil {
 			t.Fatalf("%s send: %v", tc.typ, err)
 		}
@@ -83,15 +83,25 @@ func TestRealSenderWebhookErrorStatus(t *testing.T) {
 		w.WriteHeader(500)
 	}))
 	defer srv.Close()
-	s := NewRealSender(config.MailConfig{})
+	s := NewRealSender(config.MailConfig{}, true)
 	if err := s.Send(&model.Channel{Type: model.ChannelWebhook, Target: srv.URL}, sampleMsg()); err == nil {
 		t.Error("expected error on 500 response")
 	}
 }
 
 func TestRealSenderEmailUnconfigured(t *testing.T) {
-	s := NewRealSender(config.MailConfig{}) // no host/user
+	s := NewRealSender(config.MailConfig{}, true) // no host/user
 	if err := s.Send(&model.Channel{Type: model.ChannelEmail, Target: "x@y.com"}, sampleMsg()); err == nil {
 		t.Error("expected error when email is unconfigured")
+	}
+}
+
+func TestHeaderSafeStripsCRLF(t *testing.T) {
+	got := headerSafe("Renew soon\r\nBcc: victim@evil.com")
+	if got != "Renew soonBcc: victim@evil.com" {
+		t.Errorf("headerSafe left a line break in: %q", got)
+	}
+	if got := headerSafe("normal subject"); got != "normal subject" {
+		t.Errorf("headerSafe altered a clean subject: %q", got)
 	}
 }

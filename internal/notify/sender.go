@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/smtp"
+	"strings"
 	"time"
 
 	"github.com/bfalcher/certguard/internal/config"
@@ -94,9 +95,15 @@ type RealSender struct {
 	Client *http.Client
 }
 
-// NewRealSender builds a RealSender with a bounded HTTP client.
-func NewRealSender(mail config.MailConfig) *RealSender {
-	return &RealSender{Mail: mail, Client: &http.Client{Timeout: 10 * time.Second}}
+// NewRealSender builds a RealSender with a bounded HTTP client. When
+// allowPrivate is false the client refuses to connect to private, loopback, or
+// link-local addresses, so a user-supplied webhook URL cannot be turned into a
+// request against the server's own network.
+func NewRealSender(mail config.MailConfig, allowPrivate bool) *RealSender {
+	return &RealSender{
+		Mail:   mail,
+		Client: &http.Client{Timeout: 10 * time.Second, Transport: safeHTTPTransport(allowPrivate)},
+	}
 }
 
 func (s *RealSender) Send(ch *model.Channel, m Message) error {
@@ -124,10 +131,21 @@ func (s *RealSender) sendEmail(to string, m Message) error {
 	}
 	addr := fmt.Sprintf("%s:%d", s.Mail.Host, s.Mail.Port)
 	auth := smtp.PlainAuth("", s.Mail.User, s.Mail.Pass, s.Mail.Host)
+	// Backstop against header injection: the Subject carries the entry name,
+	// and a name containing a CR or LF would otherwise smuggle extra headers
+	// into the message. Callers sanitize on write, but a value reaching here
+	// from any other path must not be trusted to be single-line.
+	subject := headerSafe(m.Subject)
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\n"+
 		"Content-Type: text/plain; charset=utf-8\r\n\r\n%s\r\n",
-		from, to, m.Subject, m.Body)
+		from, to, subject, m.Body)
 	return smtp.SendMail(addr, auth, from, []string{to}, []byte(msg))
+}
+
+// headerSafe strips CR and LF so a value cannot terminate one header and start
+// another when placed in a message header line.
+func headerSafe(s string) string {
+	return strings.NewReplacer("\r", "", "\n", "").Replace(s)
 }
 
 func (s *RealSender) postJSON(url string, payload any) error {

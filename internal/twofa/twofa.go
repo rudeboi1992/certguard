@@ -32,17 +32,37 @@ func GenerateSecret() (string, error) {
 // Validate reports whether input is a valid code for secret now, tolerating one
 // step of clock skew on either side.
 func Validate(secret, input string) bool {
+	_, ok := ValidateStep(secret, input, time.Now())
+	return ok
+}
+
+// ValidateStep reports whether input matches the secret near now, and if so
+// which counter step it matched. The step lets a caller reject replays: a code
+// already consumed at a given step must not be accepted again.
+//
+// The ±1 window is walked from oldest to newest so that, when more than one
+// step would match (they never do for distinct codes, but the loop must pick
+// deterministically), the earliest is returned — consuming it advances the
+// replay floor the least, which is the conservative choice.
+func ValidateStep(secret, input string, now time.Time) (int64, bool) {
 	input = strings.TrimSpace(input)
 	if len(input) != digits {
-		return false
+		return 0, false
 	}
-	step := time.Now().Unix() / period
-	for _, d := range []int64{0, -1, 1} {
-		if c, err := codeAt(secret, uint64(step+d)); err == nil && hmac.Equal([]byte(c), []byte(input)) {
-			return true
+	step := now.Unix() / period
+	for _, d := range []int64{-1, 0, 1} {
+		s := step + d
+		if c, err := codeAt(secret, uint64(s)); err == nil && hmac.Equal([]byte(c), []byte(input)) {
+			return s, true
 		}
 	}
-	return false
+	return 0, false
+}
+
+// Code returns the TOTP code for secret at time t. Useful for generating a
+// current code (for display, or in tests) rather than only validating one.
+func Code(secret string, t time.Time) (string, error) {
+	return codeAt(secret, uint64(t.Unix()/period))
 }
 
 // ProvisioningURI builds the otpauth:// URI an authenticator app scans/imports.

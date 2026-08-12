@@ -163,7 +163,7 @@ func cmdServe() int {
 		cfg.CookieSecure = true // browser talks HTTPS → the session cookie must be Secure
 	}
 
-	sender := notify.NewRealSender(cfg.Mail)
+	sender := notify.NewRealSender(cfg.Mail, cfg.AllowPrivateWebhooks)
 	srv := server.New(cfg, st, sender) // bootstraps/loads the secret vault keyring
 	if enabled, unlocked, passphrase := srv.VaultInfo(); enabled {
 		switch {
@@ -598,7 +598,7 @@ func cmdChannel(args []string) int {
 			return 1
 		}
 		cfg := config.Load()
-		sender := notify.NewRealSender(cfg.Mail)
+		sender := notify.NewRealSender(cfg.Mail, cfg.AllowPrivateWebhooks)
 		sample := &model.Cert{Name: "certguard-test.example.com", ExpiresAt: time.Now().UTC().AddDate(0, 0, 3)}
 		msg := notify.BuildMessage(sample, 3, time.Now().UTC())
 		msg.Subject = "[certguard] test notification"

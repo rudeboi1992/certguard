@@ -148,6 +148,8 @@ Key environment variables:
 | `CERTGUARD_TLS_AUTO` | `false` | serve HTTPS with a self-signed cert |
 | `CERTGUARD_TLS_CERT` / `CERTGUARD_TLS_KEY` | – | serve HTTPS with your cert |
 | `CERTGUARD_COOKIE_SECURE` | `false` | mark cookies Secure (auto-on with TLS; set true behind an HTTPS proxy) |
+| `CERTGUARD_TRUSTED_PROXY` | `false` | trust `X-Forwarded-For` for rate-limiting — only behind a proxy you control |
+| `CERTGUARD_ALLOW_PRIVATE_WEBHOOKS` | `false` | allow notification webhooks to reach private/loopback/link-local addresses |
 | `CERTGUARD_RP_ID` | _(Host header)_ | WebAuthn relying party ID for security keys — must be a domain |
 | `CERTGUARD_RP_ORIGINS` | _(request origin)_ | comma-separated origins allowed to present security keys |
 | `CERTGUARD_CHECK_INTERVAL` | `6h` | background rescan/notify cadence |
@@ -195,6 +197,15 @@ If you put certguard on the public internet, also:
 - Use a **real certificate** (`CERTGUARD_ACME_DOMAIN`) rather than the
   self-signed one, so users are not trained to click through warnings.
 - Set **`CERTGUARD_COOKIE_SECURE=true`** if TLS terminates at a proxy.
+- **Do not set `CERTGUARD_TRUSTED_PROXY`** unless a proxy you control sets
+  `X-Forwarded-For`. Exposed directly, a forged header would let an attacker
+  give every login attempt its own rate-limit bucket and brute-force the
+  password. Behind a trusted proxy you *must* set it, or every client shares
+  the proxy's single IP.
+- Leave **`CERTGUARD_ALLOW_PRIVATE_WEBHOOKS`** off. Any signed-in user can add a
+  notification webhook; off, the server refuses to connect one to a private,
+  loopback, or link-local address, so it cannot be turned into a probe of your
+  internal network.
 - Leave **`CERTGUARD_STATUS_PUBLIC`** off unless you want the counts-only status
   page readable by anyone who can reach the host.
 - Encourage **passkeys with user verification**. A passwordless sign-in already

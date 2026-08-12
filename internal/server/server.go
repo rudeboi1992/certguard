@@ -243,10 +243,21 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// offer the right thing rather than guess.
 	keys, _ := s.store.CountCredentials(user.ID)
 	if user.TOTPEnabled || keys > 0 {
-		// A correct TOTP code satisfies the requirement outright. A security
-		// key cannot be verified here — it needs a challenge — so the client is
+		// A correct TOTP code satisfies the requirement outright — but only once.
+		// The matching step is consumed atomically, so a code observed in
+		// transit cannot be replayed within its validity window, and two
+		// concurrent logins with the same code cannot both succeed. A security
+		// key cannot be verified here (it needs a challenge), so the client is
 		// sent to /auth/webauthn/begin instead.
-		if !(user.TOTPEnabled && twofa.Validate(user.TOTPSecret, req.Code)) {
+		totpOK := false
+		if user.TOTPEnabled {
+			if step, ok := twofa.ValidateStep(user.TOTPSecret, req.Code, time.Now()); ok {
+				if fresh, err := s.store.ConsumeTOTPStep(user.ID, step); err == nil && fresh {
+					totpOK = true
+				}
+			}
+		}
+		if !totpOK {
 			var methods []string
 			if user.TOTPEnabled {
 				methods = append(methods, "totp")
@@ -657,6 +668,8 @@ func (s *Server) handleCreateCert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
+	req.Name = sanitizeLabel(req.Name)
+	req.Category = sanitizeLabel(req.Category)
 	if req.Name == "" {
 		writeErr(w, http.StatusBadRequest, "name is required")
 		return
@@ -712,6 +725,8 @@ func (s *Server) handleUpdateCert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
+	req.Name = sanitizeLabel(req.Name)
+	req.Category = sanitizeLabel(req.Category)
 	if req.Name == "" {
 		writeErr(w, http.StatusBadRequest, "name is required")
 		return
@@ -1211,4 +1226,22 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// sanitizeLabel cleans a single-line, user-supplied label (a name or category).
+// It drops control characters — including the CR and LF that would otherwise let
+// a crafted name inject headers into a notification email — and trims the
+// result. Notes are deliberately not run through this: they are allowed to span
+// lines and never reach an email header.
+func sanitizeLabel(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		// Keep printable characters and ordinary spaces; drop C0/C1 controls
+		// (which include CR, LF, and NUL) and the DEL character.
+		if r == '\t' || (r >= 0x20 && r != 0x7f && !(r >= 0x80 && r <= 0x9f)) {
+			b.WriteRune(r)
+		}
+	}
+	return strings.TrimSpace(b.String())
 }

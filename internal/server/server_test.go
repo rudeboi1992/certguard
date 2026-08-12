@@ -13,7 +13,18 @@ import (
 	"github.com/bfalcher/certguard/internal/auth"
 	"github.com/bfalcher/certguard/internal/config"
 	"github.com/bfalcher/certguard/internal/store"
+	"github.com/bfalcher/certguard/internal/twofa"
 )
+
+// currentTOTP computes the code an authenticator would show right now.
+func currentTOTP(t *testing.T, secret string) string {
+	t.Helper()
+	code, err := twofa.Code(secret, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return code
+}
 
 func testServer(t *testing.T) (*httptest.Server, *store.Store) {
 	t.Helper()
@@ -187,5 +198,58 @@ func TestAdminCanScanViaAPI(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&out)
 	if len(out.Scan.SHA256) != 64 {
 		t.Errorf("scan result missing fingerprint: %q", out.Scan.SHA256)
+	}
+}
+
+func TestSanitizeLabelDropsControlChars(t *testing.T) {
+	cases := map[string]string{
+		"api.example.com":     "api.example.com",
+		"web\r\nBcc: x@y.com": "webBcc: x@y.com",
+		"  spaced  ":          "spaced",
+		"tab\tinside":         "tab\tinside", // tabs are kept
+		"nul\x00byte":         "nulbyte",
+		"\x1b[31mansi\x1b[0m": "[31mansi[0m",
+		"café résumé":         "café résumé", // unicode preserved
+	}
+	for in, want := range cases {
+		if got := sanitizeLabel(in); got != want {
+			t.Errorf("sanitizeLabel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestLoginRejectsReplayedTOTPCode(t *testing.T) {
+	hs, st := testServer(t)
+	mkUser(t, st, "totp@x.com", "supersecret", "admin")
+	u, _ := st.GetUserByEmail("totp@x.com")
+
+	secret, err := twofa.GenerateSecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetUserTOTP(u.ID, secret, true); err != nil {
+		t.Fatal(err)
+	}
+	code := currentTOTP(t, secret)
+
+	login := func() int {
+		body, _ := json.Marshal(map[string]string{
+			"email": "totp@x.com", "password": "supersecret", "code": code,
+		})
+		resp, err := http.Post(hs.URL+"/api/v1/auth/login", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	if code1 := login(); code1 != http.StatusOK {
+		t.Fatalf("first login with a fresh code = %d, want 200", code1)
+	}
+	// Same code, immediately: the replay guard must reject it even though the
+	// code is still within its time window.
+	if code2 := login(); code2 == http.StatusOK {
+		t.Error("replayed TOTP code was accepted on the second login")
 	}
 }
