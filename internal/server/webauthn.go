@@ -227,10 +227,15 @@ func (s *Server) handleWebAuthnRegisterBegin(w http.ResponseWriter, r *http.Requ
 	}
 	creation, sess, err := wa.BeginRegistration(wu,
 		webauthn.WithExclusions(exclude),
-		// A second factor, not a passwordless replacement: the password is
-		// still required, so requiring a PIN/biometric on top is friction
-		// without a matching gain. Keys that do it anyway still work.
+		// Both preferred rather than required, because both are asking for a
+		// capability the key may not have. A resident key lets this act as a
+		// passkey; user verification is what makes a passwordless sign-in
+		// two-factor rather than one. A key that can do neither is still a
+		// perfectly good second factor next to the password — it just will not
+		// be offered the passwordless path, which is enforced at login by
+		// demanding verification there.
 		webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
+			ResidentKey:      protocol.ResidentKeyRequirementPreferred,
 			UserVerification: protocol.VerificationPreferred,
 		}),
 	)
@@ -305,9 +310,18 @@ func (s *Server) handleWebAuthnRegisterFinish(w http.ResponseWriter, r *http.Req
 
 // --- login ------------------------------------------------------------------
 
-// handleWebAuthnLoginBegin is the second step of signing in with a security
-// key. The password has already been checked by /auth/login, which returned
-// "webauthn_required" instead of a session.
+// handleWebAuthnLoginBegin issues a challenge for signing in with a key.
+//
+// It serves two flows. With a password, the key is a second factor and the
+// password has already been proved. Without one, the key is the ONLY factor —
+// so user verification is demanded, which makes the authenticator require a PIN
+// or biometric. That keeps the passwordless path genuinely two-factor
+// (something you have plus something you know or are) rather than reducing
+// sign-in to whoever is holding the key.
+//
+// A key with no PIN or biometric simply fails the ceremony, and the page falls
+// back to the password. That is the correct outcome: such a key is one factor,
+// and one factor is not enough on its own.
 func (s *Server) handleWebAuthnLoginBegin(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -315,7 +329,12 @@ func (s *Server) handleWebAuthnLoginBegin(w http.ResponseWriter, r *http.Request
 		return
 	}
 	user, err := s.store.GetUserByEmail(req.Email)
-	if err != nil || !auth.CheckPassword(user.PasswordHash, req.Password) {
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+	passwordless := req.Password == ""
+	if !passwordless && !auth.CheckPassword(user.PasswordHash, req.Password) {
 		writeErr(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
@@ -329,16 +348,117 @@ func (s *Server) handleWebAuthnLoginBegin(w http.ResponseWriter, r *http.Request
 		writeErr(w, http.StatusBadRequest, "no security key registered for this account")
 		return
 	}
-	assertion, sess, err := wa.BeginLogin(wu)
+	var opts []webauthn.LoginOption
+	if passwordless {
+		opts = append(opts, webauthn.WithUserVerification(protocol.VerificationRequired))
+	}
+	assertion, sess, err := wa.BeginLogin(wu, opts...)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not begin login: "+err.Error())
 		return
 	}
+	// The requirement is carried in the stored session, so FinishLogin enforces
+	// it server-side. A client that edits the options it was handed cannot
+	// downgrade the check.
 	if err := s.setCeremony(w, sess, user.ID); err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not start ceremony")
 		return
 	}
 	writeJSON(w, http.StatusOK, assertion)
+}
+
+// --- usernameless passkey login ---------------------------------------------
+
+// handlePasskeyBegin issues a challenge for signing in with a passkey when the
+// server does not know, and is not told, who is signing in.
+//
+// This is the enumeration-safe way to offer passkeys. The response is
+// byte-identical no matter which accounts exist — no address is submitted, no
+// credential list is returned, and nothing is looked up. An instance exposed to
+// the internet therefore leaks nothing about its users through this route,
+// which is why it is preferred over asking "does this address have a key".
+//
+// The authenticator picks the credential and reports the user handle in its
+// response, so the account is discovered at the finish step. Verification is
+// required because the passkey is the only factor.
+func (s *Server) handlePasskeyBegin(w http.ResponseWriter, r *http.Request) {
+	wa, err := s.webAuthnFor(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	assertion, sess, err := wa.BeginDiscoverableLogin(
+		webauthn.WithUserVerification(protocol.VerificationRequired),
+	)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not begin login: "+err.Error())
+		return
+	}
+	// userID 0: nobody is claimed yet. The finish step resolves it from the
+	// handle the authenticator returns.
+	if err := s.setCeremony(w, sess, 0); err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not start ceremony")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, assertion)
+}
+
+// discoverableUser resolves the account an authenticator claims to be. The
+// handle is the user ID that WebAuthnID produced at registration.
+func (s *Server) discoverableUser(rawID, userHandle []byte) (webauthn.User, error) {
+	id, err := strconv.ParseInt(string(userHandle), 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("unrecognised user handle")
+	}
+	user, err := s.store.GetUserByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("unrecognised user handle")
+	}
+	// The credential must actually belong to that account, so a valid handle
+	// cannot be paired with somebody else's credential.
+	cred, err := s.store.CredentialByID(base64.RawURLEncoding.EncodeToString(rawID))
+	if err != nil || cred.UserID != user.ID {
+		return nil, fmt.Errorf("credential does not belong to that account")
+	}
+	return s.webAuthnUserFor(user)
+}
+
+// handlePasskeyFinish verifies a usernameless assertion and starts the session.
+func (s *Server) handlePasskeyFinish(w http.ResponseWriter, r *http.Request) {
+	cer, ok := s.takeCeremony(w, r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "no sign-in in progress — start again")
+		return
+	}
+	wa, err := s.webAuthnFor(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	wu, cred, err := wa.FinishPasskeyLogin(s.discoverableUser, cer.session, r)
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "passkey rejected: "+protocolErr(err))
+		return
+	}
+	au, ok := wu.(*webAuthnUser)
+	if !ok {
+		writeErr(w, http.StatusInternalServerError, "could not resolve account")
+		return
+	}
+	id := base64.RawURLEncoding.EncodeToString(cred.ID)
+	if cred.Authenticator.CloneWarning {
+		s.recordAccountEvent(store.EventKeyCloneWarning, au.user.Email, au.user.Email,
+			"sign counter went backwards for a security key — possible clone")
+		writeErr(w, http.StatusUnauthorized, "passkey rejected: sign counter went backwards, which can mean the key was cloned")
+		return
+	}
+	_ = s.store.TouchCredential(id, cred.Authenticator.SignCount)
+	if err := s.startSession(w, au.user); err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not start session")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": au.user})
 }
 
 // handleWebAuthnLoginFinish verifies the assertion and starts the session.

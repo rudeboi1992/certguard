@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -118,5 +119,150 @@ func credFixture(userID int64) *model.WebAuthnCredential {
 		CredentialID: "dGVzdC1jcmVkZW50aWFsLWlk",
 		PublicKey:    "dGVzdC1wdWJsaWMta2V5",
 		Name:         "Test key",
+	}
+}
+
+func TestPasswordlessBeginDemandsUserVerification(t *testing.T) {
+	hs, st := testServer(t)
+	mkUser(t, st, "pk@x.com", "supersecret", "admin")
+	u, _ := st.GetUserByEmail("pk@x.com")
+	if _, err := st.AddCredential(credFixture(u.ID)); err != nil {
+		t.Fatal(err)
+	}
+
+	// httptest listens on 127.0.0.1, which the RP-ID guard rightly refuses, so
+	// the request carries a hostname the way a real browser would.
+	begin := func(payload string) (int, string) {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPost, hs.URL+"/api/v1/auth/webauthn/begin",
+			strings.NewReader(payload))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Host = "certguard.test"
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var buf strings.Builder
+		_, _ = io.Copy(&buf, resp.Body)
+		return resp.StatusCode, buf.String()
+	}
+
+	// No password: the key is the only factor, so the authenticator must verify
+	// the user. Without this a stolen key alone would be a valid sign-in.
+	code, body := begin(`{"email":"pk@x.com"}`)
+	if code != http.StatusOK {
+		t.Fatalf("passwordless begin = %d, want 200: %s", code, body)
+	}
+	if !strings.Contains(body, `"userVerification":"required"`) {
+		t.Errorf("passwordless challenge does not require user verification: %s", body)
+	}
+
+	// With a correct password the key is a second factor, so verification is
+	// not forced — the password already carried that half.
+	code, body = begin(`{"email":"pk@x.com","password":"supersecret"}`)
+	if code != http.StatusOK {
+		t.Fatalf("second-factor begin = %d, want 200: %s", code, body)
+	}
+	if strings.Contains(body, `"userVerification":"required"`) {
+		t.Errorf("second-factor challenge should not force verification: %s", body)
+	}
+
+	// A wrong password must not be treated as "no password given" and silently
+	// promoted to the passwordless path.
+	if code, _ = begin(`{"email":"pk@x.com","password":"wrong-password"}`); code != http.StatusUnauthorized {
+		t.Errorf("wrong password = %d, want 401", code)
+	}
+}
+
+// beginPasskey posts to the usernameless route with a hostname, since httptest
+// listens on an IP the RP-ID guard rightly refuses.
+func beginPasskey(t *testing.T, hs *httptest.Server) (int, string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, hs.URL+"/api/v1/auth/passkey/begin", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Host = "certguard.test"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var buf strings.Builder
+	_, _ = io.Copy(&buf, resp.Body)
+	return resp.StatusCode, buf.String()
+}
+
+// The reason this route exists: an instance on the public internet must not
+// answer differently depending on who is registered. Anything that varies with
+// the account list is an enumeration oracle.
+func TestPasskeyBeginRevealsNothingAboutAccounts(t *testing.T) {
+	empty, _ := testServer(t)
+	codeEmpty, bodyEmpty := beginPasskey(t, empty)
+	if codeEmpty != http.StatusOK {
+		t.Fatalf("passkey begin on an empty instance = %d, want 200: %s", codeEmpty, bodyEmpty)
+	}
+
+	populated, st := testServer(t)
+	mkUser(t, st, "someone@x.com", "supersecret", "admin")
+	u, _ := st.GetUserByEmail("someone@x.com")
+	if _, err := st.AddCredential(credFixture(u.ID)); err != nil {
+		t.Fatal(err)
+	}
+	codeFull, bodyFull := beginPasskey(t, populated)
+	if codeFull != codeEmpty {
+		t.Errorf("status differs with accounts present: %d vs %d", codeFull, codeEmpty)
+	}
+
+	// The challenge is random per call, so compare the shape rather than bytes:
+	// no credential list may appear, and no address may be echoed.
+	var withUsers, without map[string]any
+	if err := json.Unmarshal([]byte(bodyFull), &withUsers); err != nil {
+		t.Fatalf("unmarshal populated: %v — %s", err, bodyFull)
+	}
+	if err := json.Unmarshal([]byte(bodyEmpty), &without); err != nil {
+		t.Fatalf("unmarshal empty: %v — %s", err, bodyEmpty)
+	}
+	pkFull, _ := withUsers["publicKey"].(map[string]any)
+	pkEmpty, _ := without["publicKey"].(map[string]any)
+	if pkFull == nil || pkEmpty == nil {
+		t.Fatalf("no publicKey in response: %s / %s", bodyFull, bodyEmpty)
+	}
+	if allow, ok := pkFull["allowCredentials"]; ok {
+		if list, isList := allow.([]any); isList && len(list) > 0 {
+			t.Errorf("challenge names credentials, which identifies the account: %v", list)
+		}
+	}
+	if len(pkFull) != len(pkEmpty) {
+		t.Errorf("response shape differs with accounts present: %v vs %v", pkFull, pkEmpty)
+	}
+	if strings.Contains(bodyFull, "someone@x.com") {
+		t.Error("challenge echoes an account address")
+	}
+	// A passkey is the only factor here, so verification must be demanded.
+	if pkFull["userVerification"] != "required" {
+		t.Errorf("userVerification = %v, want required", pkFull["userVerification"])
+	}
+}
+
+func TestPasskeyFinishRejectsAStrayCeremony(t *testing.T) {
+	hs, _ := testServer(t)
+	// No begin, so no ceremony cookie: finish must refuse rather than fall
+	// through to anything.
+	req, _ := http.NewRequest(http.MethodPost, hs.URL+"/api/v1/auth/passkey/finish",
+		strings.NewReader(`{}`))
+	req.Host = "certguard.test"
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("finish without a ceremony = %d, want 400", resp.StatusCode)
 	}
 }

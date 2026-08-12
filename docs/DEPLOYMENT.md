@@ -182,6 +182,25 @@ needs to be exposed publicly: an internal DNS record is enough.
 Behind a reverse proxy that rewrites `Host`, set `CERTGUARD_RP_ID` and
 `CERTGUARD_RP_ORIGINS` explicitly rather than relying on the header.
 
+### Exposing certguard beyond a LAN
+
+The sign-in page is designed not to leak who has an account. There is no
+endpoint that answers "does this address have a key", and the passkey challenge
+is byte-identical whatever accounts exist — no address is submitted and no
+credential list is returned. Password sign-in likewise answers the same way for
+an unknown address and a wrong password.
+
+If you put certguard on the public internet, also:
+
+- Use a **real certificate** (`CERTGUARD_ACME_DOMAIN`) rather than the
+  self-signed one, so users are not trained to click through warnings.
+- Set **`CERTGUARD_COOKIE_SECURE=true`** if TLS terminates at a proxy.
+- Leave **`CERTGUARD_STATUS_PUBLIC`** off unless you want the counts-only status
+  page readable by anyone who can reach the host.
+- Encourage **passkeys with user verification**. A passwordless sign-in already
+  demands it; requiring a PIN or biometric is what keeps a stolen key from being
+  a whole credential.
+
 ## Backups
 
 - **SQLite:** back up `certguard.db` **and** `certguard.key` (Docker: the
