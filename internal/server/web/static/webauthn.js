@@ -72,6 +72,12 @@ const WebAuthnKit = (() => {
       return 'This page’s address cannot be used with security keys — certguard must be reached by hostname, not by IP';
     }
     if (err.name === 'NotSupportedError') return 'This key does not support what certguard asked for';
+    // Verification is demanded for anything vault-related and for passwordless
+    // sign-in. A key with no PIN set cannot satisfy it, and the browser reports
+    // that as a plain constraint failure.
+    if (err.name === 'ConstraintError') {
+      return 'This key could not verify you — set a PIN on it (or use a key that supports one) and try again';
+    }
     return err.message || String(err);
   }
 

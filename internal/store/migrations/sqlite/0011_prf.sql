@@ -1,0 +1,12 @@
+-- Record whether a security key can derive a vault secret (the WebAuthn prf
+-- extension), which the browser reports when the credential is created.
+--
+-- Without this the only way to find out was to try pairing and read a toast,
+-- and a key that CAN do prf but was not asked to verify the user fails in
+-- exactly the same way as one that cannot. Storing the answer lets the key's
+-- row say up front whether it is usable for the vault.
+--
+-- Tri-state, because the honest answer for a key registered before this column
+-- existed is "nobody asked":
+--   -1 unknown, 0 not supported, 1 supported
+ALTER TABLE webauthn_credentials ADD COLUMN prf_supported INTEGER NOT NULL DEFAULT -1;

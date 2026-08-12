@@ -2,6 +2,7 @@ package store
 
 import (
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/bfalcher/certguard/internal/model"
@@ -169,5 +170,41 @@ func TestDeletingKeyCascadesItsWrapper(t *testing.T) {
 	// clutter that the UnlocksVault join could still trip over.
 	if _, _, err := st.VaultWrapper("cred-a"); err == nil {
 		t.Error("wrapper survived deletion of its credential")
+	}
+}
+
+func TestPRFSupportedTriState(t *testing.T) {
+	st, uid := keyStore(t)
+
+	// A row written before certguard asked about prf — exactly the state of a
+	// key registered on an earlier version. It must read back as "unknown",
+	// not as "cannot", or the UI would wrongly refuse to let the owner try.
+	if _, err := st.exec(`INSERT INTO webauthn_credentials
+		(user_id, credential_id, public_key, created_at) VALUES (?,?,?,?)`,
+		uid, "legacy-cred", "pk", "2026-01-01T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := st.CredentialByID("legacy-cred")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.PRFSupported != -1 {
+		t.Errorf("legacy credential PRFSupported = %d, want -1 (unknown)", legacy.PRFSupported)
+	}
+
+	for _, want := range []int{0, 1} {
+		id := "cred-prf-" + strconv.Itoa(want)
+		if _, err := st.AddCredential(&model.WebAuthnCredential{
+			UserID: uid, CredentialID: id, PublicKey: "pk", PRFSupported: want,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		got, err := st.CredentialByID(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.PRFSupported != want {
+			t.Errorf("PRFSupported = %d, want %d", got.PRFSupported, want)
+		}
 	}
 }

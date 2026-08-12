@@ -289,6 +289,17 @@ func (s *Server) handleWebAuthnRegisterFinish(w http.ResponseWriter, r *http.Req
 			transports = append(transports, string(t))
 		}
 	}
+	// Whether this credential can derive a vault secret is something only the
+	// browser can tell us, from the creation-time prf result. It rides on the
+	// query string for the same reason the name does: the body is the
+	// credential JSON, forwarded to the library untouched.
+	prf := -1 // unknown
+	switch r.URL.Query().Get("prf") {
+	case "1":
+		prf = 1
+	case "0":
+		prf = 0
+	}
 	stored := &model.WebAuthnCredential{
 		UserID:         u.ID,
 		CredentialID:   base64.RawURLEncoding.EncodeToString(cred.ID),
@@ -299,6 +310,7 @@ func (s *Server) handleWebAuthnRegisterFinish(w http.ResponseWriter, r *http.Req
 		Name:           name,
 		BackupEligible: cred.Flags.BackupEligible,
 		BackupState:    cred.Flags.BackupState,
+		PRFSupported:   prf,
 	}
 	if _, err := s.store.AddCredential(stored); err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not save credential")

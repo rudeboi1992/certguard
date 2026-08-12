@@ -295,6 +295,20 @@ if ($('vaultDisableBtn')) $('vaultDisableBtn').addEventListener('click', disable
 // row — that half needs the prf extension and an unlocked vault to set up.
 let keysCache = [];
 
+// What a key's row offers for the vault. prf_supported is -1 when the key was
+// registered before certguard asked, in which case the only honest thing is to
+// let the operator try.
+function vaultAction(k) {
+  if (k.unlocks_vault) {
+    return `<span class="pill ok" title="This key can unlock the secret vault">vault</span>
+            <button class="btn link" data-unpair="${k.id}">Unpair vault</button>`;
+  }
+  if (k.prf_supported === 0) {
+    return `<span class="pill muted-pill" title="This key cannot derive a vault secret. It still works as a second factor.">no vault</span>`;
+  }
+  return `<button class="btn ghost small" data-pair="${k.id}">Use for vault</button>`;
+}
+
 async function loadKeys() {
   const rows = $('keyRows');
   if (!rows) return;
@@ -326,10 +340,7 @@ async function loadKeys() {
       <span class="set-target">${escapeHtml(k.name || 'Security key')}</span>
       <span class="set-meta muted small">${escapeHtml(used)}</span>
       <span class="set-actions">
-        ${k.unlocks_vault
-          ? `<span class="pill ok" title="This key can unlock the secret vault">vault</span>
-             <button class="btn link" data-unpair="${k.id}">Unpair vault</button>`
-          : `<button class="btn ghost small" data-pair="${k.id}">Use for vault</button>`}
+        ${vaultAction(k)}
         <button class="btn link" data-delkey="${k.id}">Remove</button>
       </span>`;
     rows.appendChild(row);
@@ -360,12 +371,21 @@ async function registerKey() {
     const cred = await navigator.credentials.create({
       publicKey: { ...WebAuthnKit.decodeCreation(opts), extensions: { prf: {} } },
     });
+    // The creation result says whether this credential can derive a vault
+    // secret. Recording it now means the key's row can state that plainly,
+    // instead of the operator finding out from a failed pairing later.
+    const ext = cred.getClientExtensionResults();
+    const prf = ext && ext.prf && typeof ext.prf.enabled === 'boolean'
+      ? (ext.prf.enabled ? '1' : '0')
+      : '';
     const res = await api('POST',
-      `/api/v1/webauthn/register/finish?name=${encodeURIComponent(name)}`,
+      `/api/v1/webauthn/register/finish?name=${encodeURIComponent(name)}${prf ? `&prf=${prf}` : ''}`,
       WebAuthnKit.encodeAttestation(cred));
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Registration failed');
     $('keyName').value = '';
-    toast('Security key registered');
+    toast(prf === '0'
+      ? 'Security key registered — it cannot unlock the vault, but works as a second factor'
+      : 'Security key registered');
     loadKeys();
   } catch (e) {
     toast(WebAuthnKit.explain(e));
@@ -400,13 +420,21 @@ async function pairKeyWithVault(id, btn) {
       publicKey: {
         challenge: WebAuthnKit.randomSalt(),
         allowCredentials: [{ type: 'public-key', id: WebAuthnKit.b64uToBuf(key.credential_id) }],
-        userVerification: 'preferred',
+        // Required, not preferred. On a hardware key the prf secret comes from
+        // CTAP2 hmac-secret, which the authenticator will only compute once it
+        // has verified the user — so with "preferred" the browser may skip the
+        // PIN and the extension then returns nothing at all. That failure looks
+        // exactly like a key that cannot do prf, which is what made this so
+        // confusing to diagnose.
+        userVerification: 'required',
         extensions: WebAuthnKit.prfExtension(salt),
       },
     });
     const prf = WebAuthnKit.prfResult(cred);
     if (!prf) {
-      toast('This key cannot store a vault secret (no prf support) — it still works as a second factor');
+      // Reaching here despite requiring verification means the key really has
+      // no hmac-secret to draw on, rather than simply not having been asked.
+      toast('This key cannot derive a vault secret. It still works as a second factor for signing in.');
       return;
     }
     const wrapped = await ZK.wrapForKey(prf);
