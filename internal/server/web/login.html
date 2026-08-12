@@ -23,9 +23,11 @@
       <input type="text" name="code" id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code">
     </label>
     <button type="submit" class="btn primary" id="loginBtn">Sign in</button>
+    <button type="button" class="btn ghost" id="keyBtn" hidden>🔐 Use security key</button>
     <p id="hint" class="muted small" hidden></p>
     <p id="error" class="error" hidden></p>
   </form>
+  <script src="/static/webauthn.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

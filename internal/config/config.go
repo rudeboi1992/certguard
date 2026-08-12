@@ -7,6 +7,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -62,6 +63,22 @@ type Config struct {
 	// service is being watched without learning what is in it.
 	StatusPublic  bool
 	CADownloadURL string
+
+	// RPID is the WebAuthn Relying Party ID — the domain security keys are
+	// bound to, e.g. "certguard.unifl.local". It MUST be a domain name: the
+	// spec forbids IP addresses, so security keys cannot be used on an
+	// instance reached as https://192.168.0.154. Leave empty to derive it from
+	// the Host header of each request, which is what most self-hosted installs
+	// want; set it explicitly when behind a proxy that rewrites Host, or to pin
+	// the value.
+	//
+	// Credentials are bound to whatever this was when they were registered.
+	// Changing it invalidates every registered key.
+	RPID string
+	// RPOrigins are the full origins allowed to present assertions, e.g.
+	// "https://certguard.unifl.local". Comma-separated. Empty means "the origin
+	// the request came from", consistent with RPID.
+	RPOrigins []string
 
 	// MasterKey enables the encrypted secret vault. When set (env), the secret
 	// value of an entry is encrypted at rest with AES-256-GCM using a key derived
@@ -134,6 +151,9 @@ func Load() Config {
 		CAFile:        env("CERTGUARD_CA_FILE", ""),
 		StatusPublic:  envBool("CERTGUARD_STATUS_PUBLIC", false),
 		CADownloadURL: env("CERTGUARD_CA_URL", ""),
+
+		RPID:      env("CERTGUARD_RP_ID", ""),
+		RPOrigins: envList("CERTGUARD_RP_ORIGINS"),
 		Mail: MailConfig{
 			Host: env("CERTGUARD_MAIL_HOST", ""),
 			Port: envInt("CERTGUARD_MAIL_PORT", 587),
@@ -167,6 +187,22 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// envList splits a comma-separated env var, trimming blanks. Empty or unset
+// yields nil, which callers read as "not configured" rather than "empty list".
+func envList(key string) []string {
+	v, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(v) == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func envDuration(key string, def time.Duration) time.Duration {

@@ -53,6 +53,35 @@ const ZK = (() => {
     return { wrapped: await wrap(await deriveKEK(passphrase, salt, ITERS)), salt: toB64(salt), iters: String(ITERS) };
   }
 
+  // --- security keys -------------------------------------------------------
+  // A security key wraps the SAME data key the passphrase does, so it is a
+  // second door rather than a different room. The WebAuthn prf extension gives
+  // a stable 32-byte secret per (key, salt) pair; that is already uniformly
+  // random, so it is stretched with HKDF for domain separation rather than
+  // PBKDF2, which exists to make guessing expensive and has nothing to guess
+  // here.
+  async function kekFromPRF(prfBytes) {
+    const base = await crypto.subtle.importKey('raw', prfBytes, 'HKDF', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: enc.encode('certguard-vault-prf-v1') },
+      base, { name: 'AES-GCM', length: 256 }, false, ['wrapKey', 'unwrapKey']);
+  }
+
+  // Wrap the current DEK for a security key. Requires an unlocked vault: you
+  // cannot hand a key something you do not currently hold.
+  async function wrapForKey(prfBytes) {
+    if (!dek) throw new Error('vault is locked');
+    return wrap(await kekFromPRF(prfBytes));
+  }
+
+  async function unlockWithKey(prfBytes, wrapped) {
+    const kek = await kekFromPRF(prfBytes);
+    const combined = fromB64(wrapped);
+    dek = await crypto.subtle.unwrapKey('raw', combined.slice(12), kek,
+      { name: 'AES-GCM', iv: combined.slice(0, 12) },
+      { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+  }
+
   async function encrypt(plaintext) {
     const iv = rand(12);
     const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, dek, enc.encode(plaintext));
@@ -72,6 +101,7 @@ const ZK = (() => {
 
   return {
     create, unlock, rewrap, encrypt, decrypt, hint,
+    wrapForKey, unlockWithKey,
     isUnlocked: () => dek !== null,
     lock: () => { dek = null; },
   };

@@ -148,10 +148,39 @@ Key environment variables:
 | `CERTGUARD_TLS_AUTO` | `false` | serve HTTPS with a self-signed cert |
 | `CERTGUARD_TLS_CERT` / `CERTGUARD_TLS_KEY` | – | serve HTTPS with your cert |
 | `CERTGUARD_COOKIE_SECURE` | `false` | mark cookies Secure (auto-on with TLS; set true behind an HTTPS proxy) |
+| `CERTGUARD_RP_ID` | _(Host header)_ | WebAuthn relying party ID for security keys — must be a domain |
+| `CERTGUARD_RP_ORIGINS` | _(request origin)_ | comma-separated origins allowed to present security keys |
 | `CERTGUARD_CHECK_INTERVAL` | `6h` | background rescan/notify cadence |
 | `CERTGUARD_MAIL_*` | – | SMTP for email notifications |
 
 Migrations run automatically on startup for both SQLite and Postgres.
+
+## Security keys need a hostname
+
+WebAuthn forbids an IP address as a relying party ID, so an instance reached at
+`https://192.168.0.154` cannot register a security key — the browser refuses
+before certguard is even consulted. Reaching it by name fixes this, and nothing
+needs to be exposed publicly: an internal DNS record is enough.
+
+1. **Add an A record** on your internal DNS, e.g. `certguard.example.local` →
+   the instance's address.
+2. **Cover the name with the certificate.** With the built-in self-signed cert,
+   add the hostname to `CERTGUARD_TLS_HOSTS` and delete `tls-cert.pem` /
+   `tls-key.pem` from the data volume so a new one is generated:
+
+   ```
+   -e CERTGUARD_TLS_AUTO=1 -e CERTGUARD_TLS_HOSTS=certguard.example.local
+   ```
+
+   Regenerating means re-installing the CA on any machine that trusted the old
+   one. Listing **both** the hostname and the old IP in `CERTGUARD_TLS_HOSTS`
+   keeps existing bookmarks working during the switch.
+3. **Reach it by name.** Credentials are bound to whatever the RP ID was at
+   registration, so keys registered against one hostname stop working if the
+   hostname changes later. Pick the name before registering keys, not after.
+
+Behind a reverse proxy that rewrites `Host`, set `CERTGUARD_RP_ID` and
+`CERTGUARD_RP_ORIGINS` explicitly rather than relying on the header.
 
 ## Backups
 

@@ -13,6 +13,7 @@
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="/" title="certguard home">certguard</a>
+      <button id="vaultLockBtn" class="nav-btn vault-btn" hidden></button>
       <span class="spacer"></span>
       <span id="whoami" class="muted"></span>
       <button id="themeToggle" class="nav-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme"></button>
@@ -127,6 +128,19 @@
           </div>
         </div>
 
+        <div id="keysSec">
+          <h3 class="sec-h">Security keys</h3>
+          <p class="muted small" id="keysStatus">Use a hardware key (YubiKey, passkey, Windows Hello) as a second factor instead of, or as well as, a code.</p>
+          <div id="keyRows"></div>
+          <p id="noKeys" class="muted small" hidden>No security keys registered.</p>
+          <div class="sec-row">
+            <input type="text" id="keyName" placeholder="Name this key (e.g. YubiKey on keyring)" maxlength="60">
+            <button class="btn primary small" id="keyAddBtn">Register a key</button>
+          </div>
+          <p id="keysUnsupported" class="muted small" hidden>This browser cannot use security keys.</p>
+          <p id="keysNoHost" class="muted small" hidden></p>
+        </div>
+
         <div id="vaultSec" hidden>
           <h3 class="sec-h">Secret vault — zero-knowledge</h3>
           <p class="muted small" id="vaultSecStatus"></p>
@@ -173,6 +187,10 @@
   <script src="/static/nav.js"></script>
   <script src="/static/common.js"></script>
   <script src="/static/zk.js"></script>
+  <script src="/static/webauthn.js"></script>
+  <!-- Pairing a security key with the vault needs the vault unlocked, so this
+       page needs the unlock dialog and the lock button like any other. -->
+  <script src="/static/vault-ui.js"></script>
   <script src="/static/settings.js"></script>
 </body>
 </html>

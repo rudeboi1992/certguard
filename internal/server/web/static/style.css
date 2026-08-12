@@ -539,6 +539,10 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
   .about-grid { grid-template-columns: 1fr; gap: .1rem .9rem; }
   .about-grid dd { margin-bottom: .45rem; }
 }
+/* Security-key button in the vault dialog: a full-width alternative under the
+   passphrase row, so it reads as "or do this instead" rather than a third
+   field. */
+.vault-key-btn { width: 100%; justify-content: center; margin-top: .5rem; }
 /* security card + vault unlock */
 .sec-h { font-size: 1rem; margin: 1rem 0 .4rem; }
 .sec-h:first-child { margin-top: .2rem; }

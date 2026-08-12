@@ -19,6 +19,12 @@ const (
 	EventCoverageBroken = "coverage_broken"
 	EventChainExpiring  = "chain_expiring"
 	EventNotified       = "notified"
+
+	// Security-key lifecycle. These describe an account rather than a tracked
+	// entry, so they carry no cert ID — see recordAccountEvent.
+	EventKeyAdded        = "key_added"
+	EventKeyRemoved      = "key_removed"
+	EventKeyCloneWarning = "key_clone_warning"
 )
 
 // AddEvent appends one entry to the activity log.

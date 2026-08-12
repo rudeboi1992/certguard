@@ -27,6 +27,17 @@ func (s *Server) recordEvent(r *http.Request, kind string, c *model.Cert, detail
 	})
 }
 
+// recordAccountEvent logs something that happened to an account rather than to
+// a tracked entry — registering a security key, for instance. The events table
+// denormalises cert_name and holds no foreign key, so a row with no cert is
+// well-formed; CertName carries the account instead, which is what makes the
+// line readable.
+func (s *Server) recordAccountEvent(kind, actor, subject, detail string) {
+	_ = s.store.AddEvent(&model.Event{
+		Kind: kind, CertName: subject, Actor: actor, Detail: detail,
+	})
+}
+
 // handleListEvents returns the activity log, newest first.
 func (s *Server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 	limit := 200
