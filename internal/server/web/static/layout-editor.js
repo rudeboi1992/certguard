@@ -112,6 +112,26 @@ function initLayoutEditor(api, opts) {
     if (B) addGuide('lm-guide-h', 'top', cB * SCALE);
   }
 
+  // Magnetise the dragged tile's top or bottom edge onto a nearby card's top or
+  // bottom edge, in any column, so rows line up as you pass them. Rows are
+  // fine-grained, so without this pull an exact match almost never happens on a
+  // free drag and the red line never appears — this is what makes levelling with
+  // a card two columns over actually work. Returns the possibly-snapped row.
+  function snapRow(c, row) {
+    const SNAP = 3; // rows (~12px in the miniature)
+    const others = cards.filter((o) => !o.hidden && o.id !== c.id);
+    let best = row, bestDist = SNAP + 1;
+    for (const o of others) {
+      for (const ln of [o.row, o.row + o.rows]) {
+        const dTop = Math.abs(row - ln);
+        if (dTop < bestDist) { bestDist = dTop; best = ln; }
+        const dBottom = Math.abs((row + c.rows) - ln);
+        if (dBottom < bestDist) { bestDist = dBottom; best = ln - c.rows; }
+      }
+    }
+    return Math.max(0, best);
+  }
+
   function toggleVis(id) {
     const c = find(id);
     if (!c) return;
@@ -171,7 +191,8 @@ function initLayoutEditor(api, opts) {
         // so where you grabbed it does not change where it lands.
         c.col = Math.max(0, Math.min(api.columns - c.span,
           Math.round((ev.clientX - grabX - m.left - 4) / cw)));
-        c.row = Math.max(0, Math.round((ev.clientY - grabY - m.top - 4) / SCALE));
+        const rawRow = Math.max(0, Math.round((ev.clientY - grabY - m.top - 4) / SCALE));
+        c.row = snapRow(c, rawRow);   // magnetise an edge to a nearby card's edge
       }
       const marker = document.getElementById('lmDrop');
       if (marker) {
