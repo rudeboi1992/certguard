@@ -21,6 +21,9 @@ const KINDS = [
   ['scan_recovered', 'Recovered', 'ok', '✓'],
   ['coverage_broken', 'Coverage broke', 'untrusted', '⚠'],
   ['chain_expiring', 'Chain expiring', 'untrusted', '⛓'],
+  ['key_added', 'Key registered', 'ok', '🔐'],
+  ['key_removed', 'Key removed', 'urgent', '🔓'],
+  ['key_clone_warning', 'Key warning', 'urgent', '⚠'],
   ['notified', 'Alerted', 'notice', '✉'],
 ];
 const meta = (k) => KINDS.find((x) => x[0] === k) || [k, k, '', '•'];

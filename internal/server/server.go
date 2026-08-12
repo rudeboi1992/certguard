@@ -43,8 +43,9 @@ type Server struct {
 	sender       notify.Sender
 	vault        *vault // envelope-encrypted secret vault (may be locked)
 	mux          *http.ServeMux
-	loginLimiter *rateLimiter // slows credential guessing on auth endpoints
-	rdap         *rdapCache   // short-lived memo of registry lookups
+	loginLimiter *rateLimiter   // slows credential guessing on auth endpoints
+	rdap         *rdapCache     // short-lived memo of registry lookups
+	ceremonies   *ceremonyStore // in-flight WebAuthn challenges
 }
 
 func New(cfg config.Config, st *store.Store, sender notify.Sender) *Server {
@@ -52,6 +53,7 @@ func New(cfg config.Config, st *store.Store, sender notify.Sender) *Server {
 	s.loginLimiter = newRateLimiter(10, 15*time.Minute) // 10 attempts / IP / 15 min
 	s.vault = newVault(st, cfg.MasterKey, cfg.KeyFile)
 	s.rdap = newRDAPCache(10 * time.Minute)
+	s.ceremonies = newCeremonyStore()
 	s.routes()
 	return s
 }
@@ -113,6 +115,23 @@ func (s *Server) routes() {
 	s.mux.Handle("DELETE /api/v1/vault/keyring", s.adminOnly(s.handleZKKeyringDelete))
 
 	// Two-factor (TOTP) — each user manages their own.
+	// Security keys (WebAuthn). Registration is for the signed-in account; the
+	// login pair is public but rate-limited, because it re-checks the password
+	// before issuing a challenge.
+	s.mux.Handle("POST /api/v1/webauthn/register/begin", s.authed(s.handleWebAuthnRegisterBegin))
+	s.mux.Handle("POST /api/v1/webauthn/register/finish", s.authed(s.handleWebAuthnRegisterFinish))
+	s.mux.Handle("GET /api/v1/webauthn/credentials", s.authed(s.handleListCredentials))
+	s.mux.Handle("DELETE /api/v1/webauthn/credentials/{id}", s.authed(s.handleDeleteCredential))
+	s.mux.HandleFunc("POST /api/v1/auth/webauthn/begin", s.limitAuth(s.handleWebAuthnLoginBegin))
+	s.mux.HandleFunc("POST /api/v1/auth/webauthn/finish", s.limitAuth(s.handleWebAuthnLoginFinish))
+
+	// Pairing a security key with the vault. Reads are for the signed-in owner
+	// (the payload is useless without the physical key); changes are admin-only,
+	// matching who may unlock the vault at all.
+	s.mux.Handle("GET /api/v1/vault/wrappers/{cid}", s.authed(s.handleVaultWrapperGet))
+	s.mux.Handle("PUT /api/v1/vault/wrappers/{cid}", s.adminOnly(s.handleVaultWrapperSet))
+	s.mux.Handle("DELETE /api/v1/vault/wrappers/{cid}", s.adminOnly(s.handleVaultWrapperDelete))
+
 	s.mux.Handle("POST /api/v1/2fa/setup", s.authed(s.handle2FASetup))
 	s.mux.Handle("GET /api/v1/2fa/qr", s.authed(s.handle2FAQR))
 	s.mux.Handle("POST /api/v1/2fa/enable", s.authed(s.handle2FAEnable))
@@ -214,10 +233,28 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
-	// Second factor, if the account has it enabled.
-	if user.TOTPEnabled && !twofa.Validate(user.TOTPSecret, req.Code) {
-		writeErr(w, http.StatusUnauthorized, "2fa_required")
-		return
+	// Second factor, if the account has one. An account may hold a TOTP secret,
+	// one or more security keys, or both; the client is told which so it can
+	// offer the right thing rather than guess.
+	keys, _ := s.store.CountCredentials(user.ID)
+	if user.TOTPEnabled || keys > 0 {
+		// A correct TOTP code satisfies the requirement outright. A security
+		// key cannot be verified here — it needs a challenge — so the client is
+		// sent to /auth/webauthn/begin instead.
+		if !(user.TOTPEnabled && twofa.Validate(user.TOTPSecret, req.Code)) {
+			var methods []string
+			if user.TOTPEnabled {
+				methods = append(methods, "totp")
+			}
+			if keys > 0 {
+				methods = append(methods, "webauthn")
+			}
+			writeJSON(w, http.StatusUnauthorized, map[string]any{
+				"error":   "2fa_required",
+				"methods": methods,
+			})
+			return
+		}
 	}
 	if err := s.startSession(w, user); err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not start session")

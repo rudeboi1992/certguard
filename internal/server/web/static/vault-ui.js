@@ -40,6 +40,7 @@ const ICON_UNLOCKED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
       <input type="password" id="vaultPass" placeholder="Passphrase" autocomplete="current-password">
       <button class="btn primary" id="vaultUnlockBtn">Unlock</button>
     </div>
+    <button type="button" class="btn ghost vault-key-btn" id="vaultKeyBtn" hidden>🔐 Unlock with security key</button>
     <p id="vaultLockErr" class="error small" hidden></p>`;
   document.body.appendChild(dlg);
 })();
@@ -76,10 +77,76 @@ function showVaultUnlock() {
   $('vaultPass').value = '';
   $('vaultUnlockBtn').onclick = go;
   $('vaultPass').onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  offerKeyUnlock();
   // showModal stacks: opened from Reveal inside the detail popup, this lands on
   // top of it rather than behind, which an inline banner could never do.
   if (!dlg.open) dlg.showModal();
   $('vaultPass').focus();
+}
+
+// Show the security-key button only when this account actually has a key paired
+// with the vault. Offering it otherwise would prompt for a key that cannot
+// produce the right secret, and the failure would look like a broken key rather
+// than one that was never set up.
+//
+// Only meaningful under zero-knowledge mode: that is the only configuration
+// where the browser holds a data key for a security key to wrap.
+async function offerKeyUnlock() {
+  const btn = $('vaultKeyBtn');
+  if (!btn) return;
+  btn.hidden = true;
+  // typeof, not a truthiness check: a page that forgot to load webauthn.js
+  // would throw a ReferenceError here and take the whole vault dialog with it.
+  if (!zkEnabled || typeof WebAuthnKit === 'undefined' || !WebAuthnKit.supported()) return;
+  let paired = [];
+  try {
+    const res = await api('GET', '/api/v1/webauthn/credentials');
+    if (!res.ok) return;
+    paired = (await res.json()).filter((k) => k.unlocks_vault);
+  } catch { return; }
+  if (!paired.length) return;
+  btn.hidden = false;
+  btn.onclick = () => unlockWithKey(paired, btn);
+}
+
+async function unlockWithKey(paired, btn) {
+  const errEl = $('vaultLockErr');
+  errEl.hidden = true;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Touch your key…';
+  try {
+    // Each key wraps the data key under its own prf salt, so the salt has to
+    // come from the server before the ceremony, not after. Allowing all paired
+    // keys at once would leave us unable to say which salt to use, so the first
+    // is offered and the rest are alternatives only if it is absent.
+    const key = paired[0];
+    const meta = await api('GET', `/api/v1/vault/wrappers/${encodeURIComponent(key.credential_id)}`);
+    if (!meta.ok) throw new Error('This key is not paired with the vault');
+    const { wrapped, prf_salt: prfSalt } = await meta.json();
+    const cred = await navigator.credentials.get({
+      publicKey: {
+        challenge: WebAuthnKit.randomSalt(),
+        allowCredentials: [{ type: 'public-key', id: WebAuthnKit.b64uToBuf(key.credential_id) }],
+        userVerification: 'preferred',
+        extensions: WebAuthnKit.prfExtension(WebAuthnKit.fromB64(prfSalt)),
+      },
+    });
+    const prf = WebAuthnKit.prfResult(cred);
+    if (!prf) throw new Error('This key did not return a vault secret');
+    await ZK.unlockWithKey(prf, wrapped);
+    vaultLocked = false;
+    closeVaultDialog();
+    syncVaultUi();
+    toast('Vault unlocked ✓');
+    vaultRefresh();
+  } catch (e) {
+    errEl.textContent = WebAuthnKit.explain(e);
+    errEl.hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
 }
 
 function closeVaultDialog() {

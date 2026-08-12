@@ -6,6 +6,8 @@ import (
 
 	qrcode "github.com/skip2/go-qrcode"
 
+	"github.com/bfalcher/certguard/internal/model"
+	"github.com/bfalcher/certguard/internal/store"
 	"github.com/bfalcher/certguard/internal/twofa"
 )
 
@@ -116,9 +118,23 @@ func (s *Server) handleZKKeyringSet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "wrapped, salt, and iters are required")
 		return
 	}
+	// Turning zero-knowledge ON generates a brand new data key in the browser,
+	// so any security-key wrappers hold a key that no longer opens anything.
+	// Rotating the passphrase while it is already on re-wraps the SAME data
+	// key, and those wrappers stay valid — which is the point of storing them
+	// separately from the passphrase keyring.
+	wasOn := s.vault.zkOn()
 	if err := s.vault.enableZK(req.Wrapped, req.Salt, req.Iters); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if !wasOn {
+		// Dropped deliberately: zero-knowledge mode is already on at this
+		// point, and failing the request now would be worse than a stale row.
+		// A surviving wrapper cannot leak or corrupt anything either — it holds
+		// the old data key, so unwrapping with it fails the AES-GCM tag check
+		// and the user is told the key does not open the vault.
+		_ = s.store.ClearVaultWrappers()
 	}
 	// Store any migrated ciphertext verbatim.
 	for _, sec := range req.Secrets {
@@ -135,7 +151,91 @@ func (s *Server) handleZKKeyringDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// The data key those wrappers hold is gone with the keyring. Dropped for
+	// the same reason as in the enable path.
+	_ = s.store.ClearVaultWrappers()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// --- vault unlock by security key -------------------------------------------
+
+type vaultWrapperReq struct {
+	Wrapped string `json:"wrapped"`
+	PRFSalt string `json:"prf_salt"`
+}
+
+// ownedCredential resolves a credential ID from the path and confirms it
+// belongs to the caller, so one account cannot touch another's keys.
+func (s *Server) ownedCredential(r *http.Request) (*model.WebAuthnCredential, error) {
+	u := userFrom(r.Context())
+	c, err := s.store.CredentialByID(r.PathValue("cid"))
+	if err != nil {
+		return nil, err
+	}
+	if c.UserID != u.ID {
+		return nil, store.ErrNoCredential
+	}
+	return c, nil
+}
+
+// handleVaultWrapperSet pairs a security key with the vault by storing the data
+// key wrapped under that key's prf secret. The wrapping happened in the
+// browser; the server is storing ciphertext it cannot open, exactly as it does
+// for the passphrase keyring.
+func (s *Server) handleVaultWrapperSet(w http.ResponseWriter, r *http.Request) {
+	c, err := s.ownedCredential(r)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "no such security key")
+		return
+	}
+	var req vaultWrapperReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if req.Wrapped == "" || req.PRFSalt == "" {
+		writeErr(w, http.StatusBadRequest, "wrapped and prf_salt are required")
+		return
+	}
+	if err := s.store.SetVaultWrapper(c.CredentialID, req.Wrapped, req.PRFSalt); err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not store wrapper")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleVaultWrapperGet returns what the browser needs to unlock with a key.
+// Useless without the physical key, but still scoped to the owner and marked
+// no-store.
+func (s *Server) handleVaultWrapperGet(w http.ResponseWriter, r *http.Request) {
+	c, err := s.ownedCredential(r)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "no such security key")
+		return
+	}
+	wrapped, salt, err := s.store.VaultWrapper(c.CredentialID)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "this key does not unlock the vault")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]string{"wrapped": wrapped, "prf_salt": salt})
+}
+
+// handleVaultWrapperDelete stops a key from unlocking the vault without
+// unregistering it as a second factor. Safe unconditionally: the passphrase
+// wrapper is always present, so this can never orphan the vault.
+func (s *Server) handleVaultWrapperDelete(w http.ResponseWriter, r *http.Request) {
+	c, err := s.ownedCredential(r)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "no such security key")
+		return
+	}
+	if err := s.store.DeleteVaultWrapper(c.CredentialID); err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not remove wrapper")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- two-factor (TOTP) ---

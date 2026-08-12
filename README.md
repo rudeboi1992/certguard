@@ -136,6 +136,32 @@ Users are **admin-provisioned** through the CLI; there is no public registration
 Writes (scanning) require the **admin** role; **viewer** is read-only. Tokens and
 session ids are stored only as SHA-256 hashes — plaintext is shown once.
 
+#### Second factor
+
+An account can hold a **TOTP** secret, one or more **security keys**
+(WebAuthn/FIDO2 — YubiKey, passkey, Windows Hello), or both. After the password
+is accepted, certguard reports which factors the account actually has so the
+sign-in page offers exactly those.
+
+> **Security keys require a hostname.** The WebAuthn spec forbids an IP address
+> as a Relying Party ID, and browsers refuse outright, so keys cannot be
+> registered on an instance reached as `https://192.168.0.154`. Give certguard a
+> DNS name and reach it by that name. By default the RP ID is taken from the
+> `Host` header; pin it with `CERTGUARD_RP_ID` (and `CERTGUARD_RP_ORIGINS`) when
+> behind a proxy that rewrites Host.
+>
+> **Credentials are bound to the RP ID.** Changing the hostname later
+> invalidates every registered key, and they have to be registered again.
+
+A security key can also **unlock the secret vault**, using the WebAuthn `prf`
+extension to derive a key that unwraps the same data key your passphrase does.
+It is deliberately a *second* door: the passphrase keyring is always kept, so
+losing a key never costs you the stored secrets. Not every authenticator and
+browser combination supports `prf`; certguard says so when pairing rather than
+failing obscurely, and the key still works as a second factor either way.
+Pairing needs the vault unlocked — you cannot hand over a key you do not
+currently hold.
+
 ### API
 
 | Method | Path                   | Auth   | Purpose                                  |
@@ -145,6 +171,8 @@ session ids are stored only as SHA-256 hashes — plaintext is shown once.
 | POST   | `/api/v1/auth/logout`  | any    | invalidate the session                   |
 | GET    | `/api/v1/auth/whoami`  | any    | current principal                        |
 | GET    | `/api/v1/version`      | any    | running build: version, commit, build date, Go/OS/arch |
+| GET    | `/api/v1/webauthn/credentials` | any | list your registered security keys       |
+| DELETE | `/api/v1/webauthn/credentials/{id}` | any | unregister one of your keys        |
 | GET    | `/api/v1/certs`        | any    | list tracked certs, soonest expiry first |
 | POST   | `/api/v1/scan`         | admin  | scan `{"target":"host:port","dry_run":false}` |
 | POST   | `/api/v1/certs`        | admin  | add a manual/file cert `{"name","expires_at",...}` |
@@ -210,6 +238,8 @@ All optional; defaults give a working SQLite-backed service with no setup.
 | `CERTGUARD_SCAN_TIMEOUT` | `10s`           | per-scan dial + handshake budget |
 | `CERTGUARD_SESSION_TTL`  | `720h`          | web session lifetime             |
 | `CERTGUARD_COOKIE_SECURE`| `false`         | set `true` when served over HTTPS|
+| `CERTGUARD_RP_ID`        | _(Host header)_ | WebAuthn relying party ID — a **domain**, never an IP |
+| `CERTGUARD_RP_ORIGINS`   | _(request origin)_ | comma-separated origins allowed to present keys |
 | `CERTGUARD_CHECK_INTERVAL`| `6h`           | scheduler rescan + notify period |
 | `CERTGUARD_SCHEDULER_ENABLED`| `true`      | run the background job           |
 | `CERTGUARD_MAIL_HOST`    | _(unset)_       | SMTP host (email channels)       |

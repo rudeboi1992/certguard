@@ -289,6 +289,167 @@ if ($('vaultDisableBtn')) $('vaultDisableBtn').addEventListener('click', disable
   });
 })();
 
+// --- security keys ---
+// A key is always a second factor at sign-in. It can additionally hold a
+// wrapped copy of the vault data key, which is what "unlocks vault" means on a
+// row — that half needs the prf extension and an unlocked vault to set up.
+let keysCache = [];
+
+async function loadKeys() {
+  const rows = $('keyRows');
+  if (!rows) return;
+  if (!WebAuthnKit.supported()) {
+    $('keysUnsupported').hidden = false;
+    $('keyAddBtn').disabled = true;
+  }
+  // Security keys are bound to a domain, so an instance reached by IP cannot
+  // register one. Say so here rather than letting the browser throw later.
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(location.hostname) || location.hostname.includes(':')) {
+    const el = $('keysNoHost');
+    el.textContent = `Security keys need a hostname. This page is open at ${location.hostname}, which is an IP address — reach certguard by a domain name to register one.`;
+    el.hidden = false;
+    $('keyAddBtn').disabled = true;
+  }
+  let keys = [];
+  try {
+    const res = await api('GET', '/api/v1/webauthn/credentials');
+    if (res.ok) keys = await res.json();
+  } catch { /* leave the list empty */ }
+  keysCache = keys;
+  rows.innerHTML = '';
+  for (const k of keys) {
+    const row = document.createElement('div');
+    row.className = 'set-row';
+    const used = k.last_used_at ? `last used ${relTime(k.last_used_at)}` : 'never used';
+    row.innerHTML = `
+      <span class="pill notice set-tag">🔐 key</span>
+      <span class="set-target">${escapeHtml(k.name || 'Security key')}</span>
+      <span class="set-meta muted small">${escapeHtml(used)}</span>
+      <span class="set-actions">
+        ${k.unlocks_vault
+          ? `<span class="pill ok" title="This key can unlock the secret vault">vault</span>
+             <button class="btn link" data-unpair="${k.id}">Unpair vault</button>`
+          : `<button class="btn ghost small" data-pair="${k.id}">Use for vault</button>`}
+        <button class="btn link" data-delkey="${k.id}">Remove</button>
+      </span>`;
+    rows.appendChild(row);
+  }
+  $('noKeys').hidden = keys.length !== 0;
+  rows.querySelectorAll('[data-delkey]').forEach((b) =>
+    b.addEventListener('click', () => removeKey(b.dataset.delkey)));
+  rows.querySelectorAll('[data-pair]').forEach((b) =>
+    b.addEventListener('click', () => pairKeyWithVault(b.dataset.pair, b)));
+  rows.querySelectorAll('[data-unpair]').forEach((b) =>
+    b.addEventListener('click', () => unpairKeyFromVault(b.dataset.unpair)));
+}
+
+async function registerKey() {
+  const btn = $('keyAddBtn');
+  const name = ($('keyName').value || '').trim() || 'Security key';
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Touch your key…';
+  try {
+    const begin = await api('POST', '/api/v1/webauthn/register/begin');
+    if (!begin.ok) throw new Error((await begin.json().catch(() => ({}))).error || 'Could not start');
+    const opts = await begin.json();
+    // Ask for prf at CREATION, not only when asserting. An authenticator
+    // enables its hmac-secret when the credential is made, so a key registered
+    // without this can never produce a vault secret afterwards — it would
+    // silently come back empty at pairing time.
+    const cred = await navigator.credentials.create({
+      publicKey: { ...WebAuthnKit.decodeCreation(opts), extensions: { prf: {} } },
+    });
+    const res = await api('POST',
+      `/api/v1/webauthn/register/finish?name=${encodeURIComponent(name)}`,
+      WebAuthnKit.encodeAttestation(cred));
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Registration failed');
+    $('keyName').value = '';
+    toast('Security key registered');
+    loadKeys();
+  } catch (e) {
+    toast(WebAuthnKit.explain(e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+// Give a key its own wrapped copy of the vault data key. Requires the vault to
+// be unlocked right now — you cannot hand over a key you do not currently hold.
+async function pairKeyWithVault(id, btn) {
+  const key = keysCache.find((k) => String(k.id) === String(id));
+  if (!key) return;
+  if (!zkEnabled) {
+    toast('Turn on zero-knowledge mode first — that is the vault a key can unlock');
+    return;
+  }
+  if (!ZK.isUnlocked()) {
+    // Offer the way out rather than just naming the problem: a page load starts
+    // locked, so this is the normal state to arrive in, not an error.
+    toast('Unlock the vault, then pair the key');
+    showVaultUnlock();
+    return;
+  }
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Touch your key…';
+  try {
+    const salt = WebAuthnKit.randomSalt();
+    const cred = await navigator.credentials.get({
+      publicKey: {
+        challenge: WebAuthnKit.randomSalt(),
+        allowCredentials: [{ type: 'public-key', id: WebAuthnKit.b64uToBuf(key.credential_id) }],
+        userVerification: 'preferred',
+        extensions: WebAuthnKit.prfExtension(salt),
+      },
+    });
+    const prf = WebAuthnKit.prfResult(cred);
+    if (!prf) {
+      toast('This key cannot store a vault secret (no prf support) — it still works as a second factor');
+      return;
+    }
+    const wrapped = await ZK.wrapForKey(prf);
+    const res = await api('PUT', `/api/v1/vault/wrappers/${encodeURIComponent(key.credential_id)}`,
+      { wrapped, prf_salt: WebAuthnKit.toB64(salt) });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not save');
+    toast('This key now unlocks the vault');
+    loadKeys();
+  } catch (e) {
+    toast(WebAuthnKit.explain(e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+async function unpairKeyFromVault(id) {
+  const key = keysCache.find((k) => String(k.id) === String(id));
+  if (!key) return;
+  const res = await api('DELETE', `/api/v1/vault/wrappers/${encodeURIComponent(key.credential_id)}`);
+  if (res.status === 204) {
+    toast('Key no longer unlocks the vault');
+    loadKeys();
+  } else {
+    toast('Could not unpair');
+  }
+}
+
+async function removeKey(id) {
+  const key = keysCache.find((k) => String(k.id) === String(id));
+  const label = key ? (key.name || 'this key') : 'this key';
+  if (!confirm(`Remove ${label}? You will not be able to sign in with it afterwards.`)) return;
+  const res = await api('DELETE', `/api/v1/webauthn/credentials/${id}`);
+  if (res.status === 204) {
+    toast('Security key removed');
+    loadKeys();
+  } else {
+    toast('Could not remove key');
+  }
+}
+
+$('keyAddBtn')?.addEventListener('click', registerKey);
+
 // --- about / build info ---
 // Only the rows the build actually carries are drawn: an unstamped build has no
 // commit or date, and empty rows read as missing data rather than as absent.
@@ -364,4 +525,11 @@ loadWhoami().then((u) => {
   loadChannels();
   loadUsers();
   loadAbout();
+  loadKeys();
+  // The topbar lock button and the unlock dialog come from vault-ui.js; without
+  // this the button stays hidden and pairing a key would have no way to unlock.
+  syncVaultUi();
 }).catch(() => {});
+
+// Locking or unlocking changes whether a key can be paired, so redraw the rows.
+setVaultRefresh(() => { renderVaultSec(); loadKeys(); });
