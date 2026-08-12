@@ -188,5 +188,11 @@ function initLayoutEditor(api, opts) {
   });
   const close = document.getElementById(opts.closeButton);
   if (close) close.addEventListener('click', () => dlg.close());
+  // Tidy from inside the arranger: compact the real grid, then re-read so the
+  // miniature reflects where every card ended up.
+  const tidy = opts.tidyButton && document.getElementById(opts.tidyButton);
+  if (tidy && api.compact) {
+    tidy.addEventListener('click', () => { api.compact(); cards = api.cards(); draw(); });
+  }
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
 }

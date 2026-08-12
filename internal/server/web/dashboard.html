@@ -28,6 +28,7 @@
     <div class="grid-toolbar">
       <button id="addSectionDash" class="nav-btn">＋ Add section</button>
       <button id="arrangeDash" class="nav-btn" title="Rearrange every card in one small view">⛶ Arrange</button>
+      <button id="tidyDash" class="nav-btn" title="Pull cards up to close the gaps between them">⇧ Tidy</button>
       <button id="resetDashLayout" class="nav-btn">Reset layout</button>
       <span class="info-tip" tabindex="0" role="note" aria-label="How to arrange the cards">
         <!-- Drawn rather than typeset: a glyph sits on its own baseline and
@@ -316,12 +317,15 @@
   <dialog id="layoutDialog" class="detail-modal layout-modal" tabindex="-1" aria-labelledby="layoutTitle">
     <div class="detail-head">
       <h2 id="layoutTitle" class="detail-title">Arrange the dashboard</h2>
+      <button type="button" class="nav-btn" id="layoutTidy" title="Pull cards up to close the gaps">⇧ Tidy</button>
+      <span class="spacer"></span>
       <button type="button" class="widget-hide" id="layoutClose" title="Close" aria-label="Close">×</button>
     </div>
     <p class="muted small">A true miniature of the grid — same four columns, same rows.
       Drag a card anywhere to place it, drag its bottom edge to change height, ‹ › change
-      how many columns it spans, and the eye hides it. Changes apply to the page behind
-      this straight away. Keyboard: arrows move, shift+↑↓ move further.</p>
+      how many columns it spans, and the eye hides it. <strong>Tidy</strong> pulls everything
+      up to close the gaps. Changes apply to the page behind this straight away.
+      Keyboard: arrows move, shift+↑↓ move further.</p>
     <div id="layoutMap" class="layout-map"></div>
     <div id="layoutTray" class="layout-tray" hidden></div>
   </dialog>
