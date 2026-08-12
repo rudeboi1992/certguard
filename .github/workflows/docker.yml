@@ -55,6 +55,11 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
             type=semver,pattern={{version}}
+            # Rolling minor tag (e.g. :0.4), so an operator can track bug-fix and
+            # security updates within a line without opting into feature jumps.
+            # No bare {{major}} tag: pre-1.0, a :0 that moved across every minor
+            # would promise a stability 0.x does not have.
+            type=semver,pattern={{major}}.{{minor}}
 
       - name: Build and push (amd64 + arm64)
         uses: docker/build-push-action@v6

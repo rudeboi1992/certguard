@@ -2,8 +2,8 @@
 
 An **active** TLS certificate expiry monitor. Point it at a `host:port` and it
 connects, reads the leaf certificate directly, and tracks its expiry — no more
-typing dates by hand. Ships as a single static binary (SQLite built in) for
-self-hosting via Docker or natively.
+typing dates by hand. It's a single static binary with SQLite built in, shipped
+as a Docker image (or build it from source).
 
 This is a Go rebuild of the ideas in
 [ExpiryGuard](https://github.com/sanjayselvaraj/expiryguard), keeping its two
@@ -11,103 +11,130 @@ best parts — privacy-preserving client-side file parsing and a
 notification-escalation state machine — while adding the feature that turns a
 manual registry into a real monitoring tool: **active endpoint scanning**.
 
-## Quick start
+## Install
 
-certguard is **one app, one image** — the paths below just differ in how HTTPS
-is handled. All of them end the same way: open the page and **create your admin
-account in the browser** (no CLI). Not sure which? Most self-hosters want the
-first one.
+certguard is **one app, one image**. The only real choice is **how HTTPS is
+handled**, and it comes down to a single question:
 
-📖 **Full step-by-step for every method (with per-OS certificate steps) is in
-[docs/INSTALL.md](docs/INSTALL.md).**
+> **Do you have a public domain name pointing at this host?**
 
-### ★ Internal network, no public domain — the usual self-hosted choice
+That's the whole fork, because **Let's Encrypt only issues certificates for
+public domains it can reach and validate over the internet.** It cannot issue
+for `certguard.lan`, a private `192.168.x.x` address, or any host that isn't
+internet-reachable — so an internal network needs a different answer.
 
-Running this on a LAN with no public domain (homelab, small office)? This is for
-you. One stack gives you certguard **plus a real, trusted green padlock** — not a
-scary self-signed warning — because bundled Caddy issues the certificate from its
-own local CA:
+| Your situation | What you get | Recipe |
+|---|---|---|
+| Just trying it on your own machine | plain HTTP | [Quick try](#quick-try--localhost) |
+| Internal network, **no public domain** (homelab, office) | trusted cert from a **private CA** | [Internal](#-internal-network-no-public-domain) ★ |
+| **Public domain**, internet-facing | **Let's Encrypt**, automatic | [Public](#public-domain--automatic-lets-encrypt) |
+| You already run Nginx Proxy Manager / Traefik / Caddy | whatever your proxy issues | [Behind your proxy](#behind-a-reverse-proxy-you-already-run) |
 
-```
-CERTGUARD_DOMAIN=certguard.lan docker compose -f docker-compose.internal.yml up -d
-```
+Every recipe ends the same way: open the page and **create your admin account in
+the browser** — no CLI. Not sure? Most self-hosters want **Internal**.
 
-1. Point `certguard.lan` at the host in your internal DNS (or a hosts-file entry).
-2. Open `https://certguard.lan` and create your admin.
-3. Go to **Settings → Download CA certificate** and install it once per device
-   (or push it to all machines via Group Policy). Done — encrypted, trusted, no
-   warnings.
+📖 Full step-by-step, with per-OS certificate-install steps, is in
+[docs/INSTALL.md](docs/INSTALL.md).
 
-Only use this if nothing else on the host already owns ports 80/443.
+### Quick try — localhost
 
-### Proxmox — one line, whole thing
-
-On a Proxmox VE host, this creates a Debian LXC, installs Docker, deploys
-certguard, and prints the URL:
-
-```
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/proxmox-install.sh)"
-```
-
-Then open the `http://<ip>:8181` it gives you and create your admin. Override
-defaults inline, e.g. `CORES=4 RAM=2048 bash -c "$(curl -fsSL …)"`.
-
-Want a trusted HTTPS padlock instead of plain HTTP? Add `MODE=internal` — it
-bundles Caddy with a local CA and serves `https://<ip>` (install the CA once from
-`https://<ip>/ca.crt`):
-
-```
-MODE=internal bash -c "$(curl -fsSL https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/proxmox-install.sh)"
-```
-
-### Try it in 60 seconds (localhost, plain HTTP)
-
-Just kicking the tyres on your own machine:
+Kicking the tyres on your own machine, plain HTTP:
 
 ```
 docker run -d --name certguard -p 8181:8181 -v certguard-data:/data \
   ghcr.io/rudeboi1992/certguard:latest
 ```
 
-Open **http://localhost:8181**. Plain HTTP is fine on localhost or a trusted VPN;
-don't expose it on a network without TLS.
+Open **http://localhost:8181**. Plain HTTP is fine on localhost or a trusted VPN
+— don't expose it on a network without TLS.
 
-### You have a public domain — automatic HTTPS
+### ★ Internal network, no public domain
 
-One container, a real Let's Encrypt certificate, no reverse proxy to run:
+The usual homelab / small-office case. Let's Encrypt can't help here (it won't
+issue for a private name), so bundled **Caddy runs its own local CA** and issues
+a real certificate from it — a genuine green padlock once you install that CA,
+not a self-signed warning:
+
+```
+CERTGUARD_DOMAIN=certguard.lan docker compose -f docker-compose.internal.yml up -d
+```
+
+1. Point `certguard.lan` at this host in your internal DNS (or a hosts-file entry).
+2. Open `https://certguard.lan` and create your admin.
+3. **Settings → Download CA certificate** → install it once per device (or push
+   via Group Policy). Trusted, encrypted, no warnings.
+
+Only use this if nothing else on the host already owns ports 80/443.
+
+### Public domain — automatic Let's Encrypt
+
+One container, a real Let's Encrypt certificate, no reverse proxy to run —
+certguard fetches and renews it itself:
 
 ```
 CERTGUARD_ACME_DOMAIN=certguard.example.com docker compose -f docker-compose.aio.yml up -d
 ```
 
-Needs ports 80 + 443 reachable and the domain's DNS pointing here. Open
-`https://certguard.example.com`.
+Needs ports 80 + 443 reachable **from the internet** and the domain's DNS
+pointing here. Open `https://certguard.example.com`.
 
-> ⚠ **This exposes certguard to the internet.** It holds a secret vault, so
-> before you do: enable **2FA** for every admin, turn on the **zero-knowledge
-> vault**, and ideally front it with **SSO**. For an internal tool, prefer the
-> internal recipe above + a VPN — only go public if you truly need it.
+> ⚠ **This puts certguard on the public internet.** It holds a secret vault, so
+> first: enable **2FA / passkeys** for every admin, turn on the **zero-knowledge
+> vault**, and ideally front it with **SSO**. Prefer the internal recipe + a VPN
+> unless you genuinely need public reachability. See the
+> [public-exposure checklist](docs/DEPLOYMENT.md).
 
-### Portainer (one click)
-
-1. Portainer → **Settings → App Templates** → set the URL to:
-   `https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/portainer-template.json`
-2. **App Templates** → pick **certguard** → fill the short form → **Deploy**.
-3. Open `http://<host>:8181` and create your admin (or set the Admin email/password
-   fields in the form to have it created for you).
+*Rather let Caddy (or another proxy) do Let's Encrypt instead of certguard? That
+is the next recipe — the proxy handles the certificate and certguard just serves
+HTTP behind it.*
 
 ### Behind a reverse proxy you already run
 
-Already run Nginx Proxy Manager, Traefik, or Caddy? Deploy the `docker run` /
-Portainer option above, point your proxy at `certguard:8181`, and set
-`CERTGUARD_COOKIE_SECURE=true` so the session cookie is marked Secure. See
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Already run Nginx Proxy Manager, Traefik, or Caddy? They already do Let's
+Encrypt for you, so run certguard plain behind them — no published ports, joined
+to your proxy's Docker network:
 
-> **One rule for all of them:** the `certguard-data` volume holds your database
-> and the secret-vault key. Back it up; don't delete it.
+```
+# set CADDY_NETWORK (your proxy's network) in a .env file first — see the file header
+docker compose -f docker-compose.external-caddy.yml up -d
+```
+
+Point the proxy at `certguard:8181` and set `CERTGUARD_COOKIE_SECURE=true`. A
+ready Caddy site block is in [deploy/certguard.caddy](deploy/certguard.caddy);
+full details in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+### Running it a different way
+
+The recipes above use Docker Compose, but the **packaging is interchangeable** —
+the HTTPS choice above is what matters; pick whatever wrapper you already use:
+
+- **Portainer** — App Templates → add
+  `https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/portainer-template.json`,
+  pick **certguard**, fill the form, Deploy. (Plain HTTP; put a proxy in front for TLS.)
+- **Proxmox** — one line builds a Debian LXC, installs Docker, and deploys:
+  ```
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/proxmox-install.sh)"
+  ```
+  Add `MODE=internal` for the bundled-Caddy local-CA padlock; override sizing
+  inline, e.g. `CORES=4 RAM=2048 MODE=internal bash -c "$(curl -fsSL …)"`.
+- **Plain Docker / other** — `docker run` (as in *Quick try*) or the base
+  [docker-compose.yml](docker-compose.yml) (SQLite; add `--profile postgres` for Postgres).
+- **From source** — clone and `docker build .`, or `go build`.
+
+### Which image tag?
+
+- **`:latest`** — the newest release; what the recipes above use. Fine for a
+  homelab, but it moves whenever you `docker pull`.
+- **`:0.4`** — tracks the 0.4.x line: bug-fix and security updates, no surprise
+  feature jumps. A good default if you want predictable upgrades.
+- **`:0.4.2`** (or `:v0.4.2`) — pins one exact build; nothing changes until you
+  bump it yourself.
+
+> **The one rule for every recipe:** the `certguard-data` volume holds your
+> database and the secret-vault key. Back it up; don't delete it.
 
 See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for Postgres, secret-vault modes
-(including zero-knowledge), backups, and hardening.
+(including zero-knowledge), backups, and the public-exposure hardening checklist.
 
 ## Status: Phases 1–2 — working
 
