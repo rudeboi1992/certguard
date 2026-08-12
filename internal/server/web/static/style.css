@@ -313,6 +313,21 @@ body.dragging-widget { cursor: grabbing; user-select: none; }
   touch-action: none;
 }
 .widget-resize-v:hover { background: linear-gradient(to bottom, transparent, rgba(127,127,127,.14)); }
+/* Bottom-right corner: resize both dimensions at once. Sits in the notch the
+   edge handles leave (right stops 14px short, bottom is 12px tall). A faint
+   diagonal grip appears on hover so it reads as a resize corner. */
+.widget-resize-c {
+  position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;
+  cursor: nwse-resize; touch-action: none; z-index: 1;
+}
+.widget-resize-c::after {
+  content: ""; position: absolute; right: 3px; bottom: 3px; width: 7px; height: 7px;
+  border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+  opacity: 0; transition: opacity .12s ease; border-bottom-right-radius: 3px;
+}
+.widget:hover .widget-resize-c::after { opacity: .5; }
+.widget-resize-c:hover::after { opacity: .9; }
+@media (pointer: coarse) { .widget-resize-c { width: 26px; height: 26px; } }
 /* On touch devices the handles are wider and show a visible grab pill so they're
    discoverable and easy to hit with a finger. */
 @media (pointer: coarse) {

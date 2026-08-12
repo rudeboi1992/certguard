@@ -14,6 +14,7 @@ function initWidgetGrid(grid, storageKey, opts) {
   const addDialog = opts.addDialog || null;
   const addGrid = opts.addGrid || null;
   const resetBtn = opts.resetBtn || null;
+  const tidyBtn = opts.tidyBtn || null;
   const GAP = 20;   // matches the 1.25rem design gap
   const COLS = 4;
 
@@ -172,44 +173,6 @@ function initWidgetGrid(grid, storageKey, opts) {
     return Math.max(MIN_H, capped === false ? want : Math.min(maxAutoRows(), want));
   }
 
-  // Where the bottom edge should land when the card is double-clicked.
-  //
-  // Two lines are worth meeting. A card *beside* this one — its rows overlap
-  // ours but its columns do not — gives a bottom edge to level with, so the
-  // row reads as a row. A card *underneath* — its columns overlap ours and it
-  // starts below us — gives a ceiling, so the gap between can be closed
-  // exactly. Levelling wins when it does not run into the ceiling; otherwise
-  // fill to the ceiling. With neither neighbour there is no line to snap to,
-  // so fall back to fitting the content.
-  //
-  // Levelling may shrink the card as well as grow it. That is the point: "as
-  // tall as the one next to it" is an alignment, not a minimum.
-  function snapRows(card) {
-    const me = rectOf(card);
-    const colsOverlap = (a, b) => a.c < b.c + b.w && b.c < a.c + a.w;
-    const rowsOverlap = (a, b) => a.r < b.r + b.h && b.r < a.r + a.h;
-
-    let ceiling = Infinity;   // top of the nearest card below, in our columns
-    let peerBottom = 0;       // bottom of the deepest card beside us
-    for (const other of visible()) {
-      if (other === card) continue;
-      const o = rectOf(other);
-      if (colsOverlap(me, o)) {
-        if (o.r > me.r) ceiling = Math.min(ceiling, o.r);
-      } else if (rowsOverlap(me, o)) {
-        peerBottom = Math.max(peerBottom, o.r + o.h);
-      }
-    }
-
-    let bottom = 0;
-    if (peerBottom > me.r && peerBottom <= ceiling) bottom = peerBottom;
-    else if (ceiling !== Infinity) bottom = ceiling;
-
-    const rows = bottom - me.r;
-    if (!bottom || rows < MIN_H) return contentRows(card, false);
-    return rows;
-  }
-
   // --- persistence ---
   function save() {
     const pos = {};
@@ -282,6 +245,31 @@ function initWidgetGrid(grid, storageKey, opts) {
       setRect(c, { c: 0, r: bottom, w: Math.max(1, Math.min(COLS, spanOf(c))), h: contentRows(c) });
       bottom += hOf(c);
     }
+  }
+
+  // Pull every card up into the vertical gaps, keeping its column and width.
+  //
+  // This is the one action that reclaims space, and it is deliberately opt-in
+  // (the Tidy button): an ordinary drag leaves the gap you made on purpose, so
+  // the layout stays where you put it. Tidy is for when you want the holes gone.
+  //
+  // Cards are packed top-to-bottom against a per-column running bottom, so each
+  // one only rises to rest on whatever is above it in its own columns. Two cards
+  // that shared a row and had the same thing above them still share a row after,
+  // because they settle onto the same bottom — alignment survives.
+  function compact() {
+    const placed = visible().filter(isPlaced)
+      .sort((a, b) => rowOf(a) - rowOf(b) || colOf(a) - colOf(b));
+    const colBottom = new Array(COLS).fill(0);
+    for (const c of placed) {
+      const r = rectOf(c);
+      let top = 0;
+      for (let x = r.c; x < r.c + r.w; x++) top = Math.max(top, colBottom[x]);
+      setRect(c, { c: r.c, r: top, w: r.w, h: r.h });
+      for (let x = r.c; x < r.c + r.w; x++) colBottom[x] = top + r.h;
+    }
+    save();
+    layout();
   }
 
   // Give a just-shown card a position that overlaps nothing. Its stored spot is
@@ -464,6 +452,7 @@ function initWidgetGrid(grid, storageKey, opts) {
     const close = addDialog.querySelector('#addSectionClose');
     if (close) close.addEventListener('click', () => addDialog.close());
   }
+  if (tidyBtn) tidyBtn.addEventListener('click', () => compact());
   if (resetBtn) resetBtn.addEventListener('click', () => {
     try { localStorage.removeItem(storageKey); } catch (e) {}
     location.reload();
@@ -615,15 +604,16 @@ function initWidgetGrid(grid, storageKey, opts) {
     vh.title = 'Drag to resize height · double-click to fit the content';
     card.appendChild(vh);
 
-    // Double-click snaps the bottom edge to a line that means something in the
-    // layout rather than to the card's own content: level with the card beside
-    // it, or filling the gap down to whatever is underneath. Those are the two
-    // edges you actually want to meet — a row that lines up, or space closed.
-    // Fitting the content is the fallback for a card with neither neighbour.
+    // Double-click fits the card to its own content — the height where nothing
+    // scrolls inside and no space is wasted below. This is uncapped on purpose:
+    // it is an explicit "fit this", so an unusually tall card is honoured rather
+    // than clipped at the automatic ceiling. Aligning a card with its neighbours
+    // is now the Tidy button's job, which is more predictable than the old
+    // double-click that could silently shrink a card to match the one beside it.
     vh.addEventListener('dblclick', (ev) => {
       ev.preventDefault();
       const r = rectOf(card);
-      setRect(card, { c: r.c, r: r.r, w: r.w, h: snapRows(card) });
+      setRect(card, { c: r.c, r: r.r, w: r.w, h: contentRows(card, false) });
       resolve(card); layout(); save();
     });
 
@@ -647,6 +637,44 @@ function initWidgetGrid(grid, storageKey, opts) {
         layout();
       };
       const move = (ev) => { lastY = ev.clientY; edgeTrack(ev.clientY); paint(0); };
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        edgeScrollOff();
+        resolve(card); save(); layout();
+      };
+      edgeScrollOn(paint, e.clientY);
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    });
+
+    // Bottom-right corner: resize width AND height in one drag, so a card can be
+    // reshaped without two separate pulls at two separate edges. It sits in the
+    // 12×14px notch the right and bottom edge handles leave for it.
+    const cg = document.createElement('span');
+    cg.className = 'widget-resize-c';
+    cg.title = 'Drag to resize';
+    card.appendChild(cg);
+    cg.addEventListener('pointerdown', (e) => {
+      if (metrics().cols === 1) return;
+      e.preventDefault();
+      const start = rectOf(card);
+      const m = metrics();
+      const startX = e.clientX, startY = e.clientY;
+      const startWpx = start.w * m.colW + (start.w - 1) * GAP;
+      const startHpx = start.h * ROW - GAP;
+      let lastX = e.clientX, lastY = e.clientY, autoScrolled = 0;
+      const paint = (delta) => {
+        if (delta) autoScrolled += delta;
+        const wpx = startWpx + (lastX - startX);
+        const hpx = startHpx + (lastY - startY) + autoScrolled;
+        const w = Math.max(1, Math.min(COLS - start.c, Math.round((wpx + GAP) / (m.colW + GAP))));
+        const h = Math.max(MIN_H, Math.round((hpx + GAP) / ROW));
+        if (w === wOf(card) && h === hOf(card)) return;
+        setRect(card, { c: start.c, r: start.r, w: w, h: h });
+        layout();
+      };
+      const move = (ev) => { lastX = ev.clientX; lastY = ev.clientY; edgeTrack(ev.clientY); paint(0); };
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
@@ -693,6 +721,7 @@ function initWidgetGrid(grid, storageKey, opts) {
       c.classList.toggle('widget-off', !!off);
       refreshAdd();
     },
+    compact() { compact(); },
     commit() { layout(); save(); },
   };
 }

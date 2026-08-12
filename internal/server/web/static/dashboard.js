@@ -1315,6 +1315,7 @@ loadWhoami().then(() => {
     addDialog: $('addSectionDialog'),
     addGrid: $('addSectionGrid'),
     resetBtn: $('resetDashLayout'),
+    tidyBtn: $('tidyDash'),
     // Shipped arrangement, as explicit rectangles: {col, row, width, height in
     // row units}. Add and Tracked side by side, Calendar full width below.
     defaults: {
@@ -1332,7 +1333,7 @@ loadWhoami().then(() => {
   // there is one implementation of ordering, spans and persistence.
   initLayoutEditor(dashGrid, {
     dialog: 'layoutDialog', map: 'layoutMap', tray: 'layoutTray',
-    openButton: 'arrangeDash', closeButton: 'layoutClose',
+    openButton: 'arrangeDash', closeButton: 'layoutClose', tidyButton: 'layoutTidy',
   });
   if (secretsEnabled && $('secretField')) $('secretField').hidden = false;
   // Don't open the prompt on load — the button shows the state, and clicking it
