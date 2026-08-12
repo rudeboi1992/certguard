@@ -1062,22 +1062,28 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
   font-size: .74rem; font-weight: 600; line-height: 1.15;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.lm-tools { margin-top: auto; display: flex; align-items: center; gap: .12rem; }
-.lm-btn {
-  font: inherit; font-size: .68rem; line-height: 1; padding: .1rem .25rem;
-  border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
-  background: var(--bg); color: var(--ink);
+/* Hide toggle, tucked into the tile's top-right. */
+.lm-eye {
+  position: absolute; top: 1px; right: 2px; border: none; background: none;
+  font-size: .72rem; line-height: 1; padding: 1px; cursor: pointer; opacity: .55;
 }
-.lm-btn:hover:not([disabled]) { border-color: var(--primary); }
-.lm-btn[disabled] { opacity: .3; cursor: default; }
-.lm-eye { margin-left: auto; border: none; background: none; font-size: .72rem; }
-.lm-span { font-size: .66rem; color: var(--muted); min-width: .7rem; text-align: center; }
-/* Bottom grip: height, in the same row units as the grid. */
-.lm-vgrip {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 6px;
-  cursor: ns-resize; background: transparent;
+.lm-eye:hover { opacity: 1; }
+/* Bottom-right corner: drag to resize span (columns) and height (rows) at once,
+   replacing the old ‹ › column steppers and the bottom height grip. */
+.lm-corner {
+  position: absolute; right: 0; bottom: 0; width: 13px; height: 13px;
+  cursor: nwse-resize; touch-action: none; z-index: 2;
 }
-.lm-vgrip:hover { background: rgba(127,127,127,.25); }
+.lm-corner::after {
+  content: ""; position: absolute; right: 2px; bottom: 2px; width: 6px; height: 6px;
+  border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+  border-bottom-right-radius: 3px; opacity: .5;
+}
+.lm-tile:hover .lm-corner::after, .lm-corner:hover::after { opacity: .95; border-color: var(--primary); }
+/* Red alignment guides while moving a tile: an edge is level with another card's edge. */
+.lm-guide { position: absolute; z-index: 4; pointer-events: none; background: #ef4444; box-shadow: 0 0 4px rgba(239,68,68,.8); }
+.lm-guide-v { top: 0; bottom: 0; width: 2px; margin-left: -1px; }
+.lm-guide-h { left: 0; right: 0; height: 2px; margin-top: -1px; }
 /* Where the dragged tile would land. */
 .lm-drop {
   position: absolute; border: 2px dashed var(--primary); border-radius: 6px;
