@@ -42,6 +42,11 @@ type WebAuthnCredential struct {
 	// UnlocksVault reports whether this key also carries a wrapped copy of the
 	// vault data key. Derived at read time from vault_key_wrappers.
 	UnlocksVault bool `json:"unlocks_vault"`
+
+	// PRFSupported records whether the key can derive a vault secret, as the
+	// browser reported when the credential was created: -1 unknown (registered
+	// before this was asked), 0 no, 1 yes.
+	PRFSupported int `json:"prf_supported"`
 }
 
 // APIToken is a long-lived bearer credential for automation. Only its hash is

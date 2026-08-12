@@ -726,6 +726,8 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .pill { display: inline-block; padding: .1rem .55rem; border-radius: 999px;
   font-size: .8rem; font-weight: 600; }
 .pill.ok { background: rgba(22,163,74,.15); color: var(--ok); }
+/* A stated limitation, not a problem: the key works, just not for the vault. */
+.pill.muted-pill { background: var(--border); color: var(--muted); }
 .pill.notice { background: rgba(202,138,4,.15); color: var(--notice); }
 .pill.warn { background: rgba(234,88,12,.15); color: var(--warn); }
 .pill.urgent { background: rgba(220,38,38,.15); color: var(--urgent); }

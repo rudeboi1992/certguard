@@ -13,7 +13,7 @@ var ErrNoCredential = errors.New("credential not found")
 
 const credCols = `SELECT c.id, c.user_id, c.credential_id, c.public_key, c.aaguid,
 	c.sign_count, c.transports, c.name, c.backup_eligible, c.backup_state,
-	c.created_at, c.last_used_at,
+	c.created_at, c.last_used_at, c.prf_supported,
 	CASE WHEN w.credential_id IS NULL THEN 0 ELSE 1 END AS unlocks_vault
 	FROM webauthn_credentials c
 	LEFT JOIN vault_key_wrappers w ON w.credential_id = c.credential_id`
@@ -29,7 +29,7 @@ func scanCredential(r rowScanner) (*model.WebAuthnCredential, error) {
 	)
 	err := r.Scan(&c.ID, &c.UserID, &c.CredentialID, &c.PublicKey, &c.AAGUID,
 		&c.SignCount, &c.Transports, &c.Name, &backupElig, &backupSt,
-		&createdAt, &lastUsed, &unlocks)
+		&createdAt, &lastUsed, &c.PRFSupported, &unlocks)
 	if err != nil {
 		return nil, err
 	}
@@ -48,11 +48,11 @@ func scanCredential(r rowScanner) (*model.WebAuthnCredential, error) {
 func (s *Store) AddCredential(c *model.WebAuthnCredential) (int64, error) {
 	return s.insertReturningID(`INSERT INTO webauthn_credentials
 		(user_id, credential_id, public_key, aaguid, sign_count, transports, name,
-		 backup_eligible, backup_state, created_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		 backup_eligible, backup_state, created_at, prf_supported)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 		c.UserID, c.CredentialID, c.PublicKey, c.AAGUID, c.SignCount, c.Transports,
 		c.Name, boolInt(c.BackupEligible), boolInt(c.BackupState),
-		time.Now().UTC().Format(rfc3339))
+		time.Now().UTC().Format(rfc3339), c.PRFSupported)
 }
 
 // CredentialsForUser lists a user's registered keys, newest last.

@@ -128,7 +128,10 @@ async function unlockWithKey(paired, btn) {
       publicKey: {
         challenge: WebAuthnKit.randomSalt(),
         allowCredentials: [{ type: 'public-key', id: WebAuthnKit.b64uToBuf(key.credential_id) }],
-        userVerification: 'preferred',
+        // Required for the same reason as pairing: hmac-secret is only computed
+        // after the authenticator verifies the user, so anything less can
+        // silently yield no secret and no way to unwrap the data key.
+        userVerification: 'required',
         extensions: WebAuthnKit.prfExtension(WebAuthnKit.fromB64(prfSalt)),
       },
     });
