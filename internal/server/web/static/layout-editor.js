@@ -38,16 +38,9 @@ function initLayoutEditor(api, opts) {
         style="left:${(c.col * cw + 4).toFixed(1)}px; top:${c.row * SCALE + 4}px;
                width:${(c.span * cw - 4).toFixed(1)}px; height:${c.rows * SCALE - 4}px">
         <span class="lm-name">${escapeHtml(c.title)}</span>
-        <span class="lm-tools">
-          <button type="button" class="lm-btn" data-narrow="${c.id}" title="Narrower"
-            aria-label="Make ${escapeHtml(c.title)} narrower"${c.span <= 1 ? ' disabled' : ''}>‹</button>
-          <span class="lm-span">${c.span}</span>
-          <button type="button" class="lm-btn" data-wide="${c.id}" title="Wider"
-            aria-label="Make ${escapeHtml(c.title)} wider"${c.col + c.span >= api.columns ? ' disabled' : ''}>›</button>
-          <button type="button" class="lm-btn lm-eye" data-vis="${c.id}" title="Hide"
-            aria-label="Hide ${escapeHtml(c.title)}">👁</button>
-        </span>
-        <span class="lm-vgrip" data-tall="${c.id}" title="Drag to change height"></span>
+        <button type="button" class="lm-eye" data-vis="${c.id}" title="Hide"
+          aria-label="Hide ${escapeHtml(c.title)}">👁</button>
+        <span class="lm-corner" data-corner="${c.id}" title="Drag to resize" aria-hidden="true"></span>
       </div>`;
     }).join('')
       + '<div class="lm-drop" id="lmDrop" hidden></div>';
@@ -70,10 +63,6 @@ function initLayoutEditor(api, opts) {
   function wire() {
     const root = [map, document.getElementById(opts.tray)].filter(Boolean);
     root.forEach((el) => {
-      el.querySelectorAll('[data-wide]').forEach((b) =>
-        b.addEventListener('click', () => resize(b.dataset.wide, +1)));
-      el.querySelectorAll('[data-narrow]').forEach((b) =>
-        b.addEventListener('click', () => resize(b.dataset.narrow, -1)));
       el.querySelectorAll('[data-vis]').forEach((b) =>
         b.addEventListener('click', () => toggleVis(b.dataset.vis)));
     });
@@ -93,11 +82,34 @@ function initLayoutEditor(api, opts) {
     draw();
   }
 
-  function resize(id, d) {
-    const c = find(id);
-    if (!c) return;
-    c.span = Math.max(1, Math.min(api.columns - c.col, c.span + d));
-    commit(c);
+  // Red alignment guides shown while a tile is being moved: a line appears
+  // wherever one of the moving tile's four edges lines up with the same edge —
+  // or the touching edge — of another card, so rows and columns can be levelled
+  // by eye. Cleared on drop; not shown while resizing.
+  function clearGuides() { map.querySelectorAll('.lm-guide').forEach((g) => g.remove()); }
+  function addGuide(cls, prop, px) {
+    const d = document.createElement('div');
+    d.className = 'lm-guide ' + cls;
+    d.style[prop] = px + 'px';
+    map.appendChild(d);
+  }
+  function showGuides(c) {
+    clearGuides();
+    const cw = colW();
+    const others = cards.filter((o) => !o.hidden && o.id !== c.id);
+    const cL = c.col, cR = c.col + c.span, cT = c.row, cB = c.row + c.rows;
+    let L = false, R = false, T = false, B = false;
+    for (const o of others) {
+      const oL = o.col, oR = o.col + o.span, oT = o.row, oB = o.row + o.rows;
+      if (oL === cL || oR === cL) L = true;
+      if (oL === cR || oR === cR) R = true;
+      if (oT === cT || oB === cT) T = true;
+      if (oT === cB || oB === cB) B = true;
+    }
+    if (L) addGuide('lm-guide-v', 'left', cL * cw + 4);
+    if (R) addGuide('lm-guide-v', 'left', cR * cw);
+    if (T) addGuide('lm-guide-h', 'top', cT * SCALE + 4);
+    if (B) addGuide('lm-guide-h', 'top', cB * SCALE);
   }
 
   function toggleVis(id) {
@@ -128,13 +140,14 @@ function initLayoutEditor(api, opts) {
 
   function startDrag(e, tile) {
     if (e.button !== undefined && e.button !== 0) return;
-    if (e.target.closest('button')) return;
+    if (e.target.closest('button')) return;      // the eye is a click, not a drag
     const id = tile.dataset.id;
     const c = find(id);
     if (!c) return;
     e.preventDefault();
 
-    const tall = !!e.target.closest('[data-tall]');
+    // The bottom-right corner resizes; anywhere else on the tile moves it.
+    const corner = !!e.target.closest('[data-corner]');
     const box = tile.getBoundingClientRect();
     const grabX = e.clientX - box.left, grabY = e.clientY - box.top;
     const x0 = e.clientX, y0 = e.clientY;
@@ -145,27 +158,38 @@ function initLayoutEditor(api, opts) {
       if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 3) return;
       if (!moved) { moved = true; drag = { id }; tile.classList.add('dragging'); }
       const m = map.getBoundingClientRect();
-      if (tall) {
-        // Bottom grip: height only.
-        c.rows = Math.max(MIN_ROWS, Math.round(start.rows + (ev.clientY - y0) / SCALE));
+      const cw = colW();
+      if (corner) {
+        // Span from where the right edge is dragged (whole columns), height from
+        // the bottom edge (row units) — both snap to the grid, like the card's
+        // own corner handle on the page.
+        c.span = Math.max(1, Math.min(api.columns - start.col,
+          Math.round((ev.clientX - m.left) / cw) - start.col));
+        c.rows = Math.max(MIN_ROWS, Math.round((ev.clientY - m.top) / SCALE) - start.row);
       } else {
         // Position is taken from the tile's top-left corner, not the pointer,
         // so where you grabbed it does not change where it lands.
-        const left = ev.clientX - grabX - m.left - 4;
-        const top = ev.clientY - grabY - m.top - 4;
-        c.col = Math.max(0, Math.min(api.columns - c.span, Math.round(left / colW())));
-        c.row = Math.max(0, Math.round(top / SCALE));
+        c.col = Math.max(0, Math.min(api.columns - c.span,
+          Math.round((ev.clientX - grabX - m.left - 4) / cw)));
+        c.row = Math.max(0, Math.round((ev.clientY - grabY - m.top - 4) / SCALE));
       }
       const marker = document.getElementById('lmDrop');
       if (marker) {
         marker.hidden = false;
-        marker.style.left = (c.col * colW() + 4) + 'px';
+        marker.style.left = (c.col * cw + 4) + 'px';
         marker.style.top = (c.row * SCALE + 4) + 'px';
-        marker.style.width = (c.span * colW() - 4) + 'px';
+        marker.style.width = (c.span * cw - 4) + 'px';
         marker.style.height = (c.rows * SCALE - 4) + 'px';
       }
-      tile.style.transform = tall ? '' : `translate(${ev.clientX - x0}px, ${ev.clientY - y0}px)`;
-      if (tall) tile.style.height = (c.rows * SCALE - 4) + 'px';
+      if (corner) {
+        tile.style.transform = '';
+        tile.style.width = (c.span * cw - 4) + 'px';
+        tile.style.height = (c.rows * SCALE - 4) + 'px';
+        clearGuides();
+      } else {
+        tile.style.transform = `translate(${ev.clientX - x0}px, ${ev.clientY - y0}px)`;
+        showGuides(c);
+      }
     };
 
     const onUp = () => {
@@ -173,6 +197,7 @@ function initLayoutEditor(api, opts) {
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
       drag = null;
+      clearGuides();
       if (moved) commit(c); else draw();
     };
 
