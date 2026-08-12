@@ -115,8 +115,10 @@ the HTTPS choice above is what matters; pick whatever wrapper you already use:
   ```
   bash -c "$(curl -fsSL https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/proxmox-install.sh)"
   ```
-  Add `MODE=internal` for the bundled-Caddy local-CA padlock; override sizing
-  inline, e.g. `CORES=4 RAM=2048 MODE=internal bash -c "$(curl -fsSL …)"`.
+  Defaults to plain HTTP. Add `MODE=internal` for a trusted-after-install
+  self-signed cert, or `MODE=public DOMAIN=certguard.example.com` for automatic
+  Let's Encrypt (needs a public DNS record + ports 80/443 forwarded to the LXC).
+  Override sizing inline, e.g. `CORES=4 RAM=2048 bash -c "$(curl -fsSL …)"`.
 - **Plain Docker / other** — `docker run` (as in *Quick try*) or the base
   [docker-compose.yml](docker-compose.yml) (SQLite; add `--profile postgres` for Postgres).
 - **From source** — clone and `docker build .`, or `go build`.
