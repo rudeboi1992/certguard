@@ -569,6 +569,24 @@ function initWidgetGrid(grid, storageKey, opts) {
     });
   });
 
+  // A blue dashed outline (the same one the move drag uses) that previews a
+  // resize target. Resizing shows this rather than mutating the card on every
+  // pixel: reflowing the whole grid under the pointer was jumpy, and the card's
+  // final size is clearer as an outline that lands on release.
+  function makeGhost() {
+    const g = document.createElement('div');
+    g.className = 'widget-ghost';
+    grid.appendChild(g);
+    return g;
+  }
+  function placeGhost(g, r) {
+    const m = metrics();
+    g.style.left = Math.round(r.c * (m.colW + GAP)) + 'px';
+    g.style.top = (r.r * ROW) + 'px';
+    g.style.width = Math.round(r.w * m.colW + (r.w - 1) * GAP) + 'px';
+    g.style.height = (r.h * ROW - GAP) + 'px';
+  }
+
   // --- drag the right edge to resize width (1–4 columns) ---
   grid.querySelectorAll('.widget-resize').forEach((h) => {
     h.addEventListener('pointerdown', (e) => {
@@ -579,17 +597,20 @@ function initWidgetGrid(grid, storageKey, opts) {
       const start = rectOf(card);
       const m = metrics();
       const startW = start.w * m.colW + (start.w - 1) * GAP;
+      let target = start;
+      const ghost = makeGhost();
+      placeGhost(ghost, start);
       const move = (ev) => {
         const px = startW + (ev.clientX - startX);
         const w = Math.max(1, Math.min(COLS - start.c, Math.round((px + GAP) / (m.colW + GAP))));
-        if (w === wOf(card)) return;
-        setRect(card, { c: start.c, r: start.r, w: w, h: start.h });
-        layout();
+        target = { c: start.c, r: start.r, w: w, h: start.h };
+        placeGhost(ghost, target);
       };
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
-        resolve(card); save(); layout();
+        ghost.remove();
+        setRect(card, target); resolve(card); save(); layout();
       };
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
@@ -623,7 +644,9 @@ function initWidgetGrid(grid, storageKey, opts) {
       const start = rectOf(card);
       const startY = e.clientY;
       const startPx = start.h * ROW - GAP;
-      let lastY = e.clientY, autoScrolled = 0;
+      let lastY = e.clientY, autoScrolled = 0, target = start;
+      const ghost = makeGhost();
+      placeGhost(ghost, start);
       const paint = (delta) => {
         if (delta) autoScrolled += delta;
         // Height follows the pointer plus the scrolling WE did — never
@@ -632,16 +655,16 @@ function initWidgetGrid(grid, storageKey, opts) {
         // back in as more shrinking.
         const px = startPx + (lastY - startY) + autoScrolled;
         const h = Math.max(MIN_H, Math.round((px + GAP) / ROW));
-        if (h === hOf(card)) return;
-        setRect(card, { c: start.c, r: start.r, w: start.w, h: h });
-        layout();
+        target = { c: start.c, r: start.r, w: start.w, h: h };
+        placeGhost(ghost, target);
       };
       const move = (ev) => { lastY = ev.clientY; edgeTrack(ev.clientY); paint(0); };
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
         edgeScrollOff();
-        resolve(card); save(); layout();
+        ghost.remove();
+        setRect(card, target); resolve(card); save(); layout();
       };
       edgeScrollOn(paint, e.clientY);
       window.addEventListener('pointermove', move);
@@ -663,23 +686,25 @@ function initWidgetGrid(grid, storageKey, opts) {
       const startX = e.clientX, startY = e.clientY;
       const startWpx = start.w * m.colW + (start.w - 1) * GAP;
       const startHpx = start.h * ROW - GAP;
-      let lastX = e.clientX, lastY = e.clientY, autoScrolled = 0;
+      let lastX = e.clientX, lastY = e.clientY, autoScrolled = 0, target = start;
+      const ghost = makeGhost();
+      placeGhost(ghost, start);
       const paint = (delta) => {
         if (delta) autoScrolled += delta;
         const wpx = startWpx + (lastX - startX);
         const hpx = startHpx + (lastY - startY) + autoScrolled;
         const w = Math.max(1, Math.min(COLS - start.c, Math.round((wpx + GAP) / (m.colW + GAP))));
         const h = Math.max(MIN_H, Math.round((hpx + GAP) / ROW));
-        if (w === wOf(card) && h === hOf(card)) return;
-        setRect(card, { c: start.c, r: start.r, w: w, h: h });
-        layout();
+        target = { c: start.c, r: start.r, w: w, h: h };
+        placeGhost(ghost, target);
       };
       const move = (ev) => { lastX = ev.clientX; lastY = ev.clientY; edgeTrack(ev.clientY); paint(0); };
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
         edgeScrollOff();
-        resolve(card); save(); layout();
+        ghost.remove();
+        setRect(card, target); resolve(card); save(); layout();
       };
       edgeScrollOn(paint, e.clientY);
       window.addEventListener('pointermove', move);
