@@ -28,6 +28,23 @@ type Config struct {
 	// TLS-terminating reverse proxy).
 	CookieSecure bool
 
+	// TrustedProxy tells certguard it sits behind a reverse proxy that sets
+	// X-Forwarded-For, so the rate limiter should read the client IP from that
+	// header. It is OFF by default and MUST stay off when certguard is exposed
+	// directly: an untrusted client can otherwise forge the header on every
+	// request, land each attempt in a fresh rate-limit bucket, and brute-force
+	// the login unthrottled. Only turn this on when a proxy you control strips
+	// and re-sets X-Forwarded-For.
+	TrustedProxy bool
+
+	// AllowPrivateWebhooks lets notification webhooks (and Slack/Discord URLs)
+	// point at private, loopback, or link-local addresses. OFF by default: any
+	// authenticated user can add a channel, so without this the server would be
+	// a request proxy into its own network — pointing a "webhook" at
+	// 169.254.169.254 or an internal admin port and reading the outcome. Turn
+	// it on only when you deliberately notify an internal endpoint.
+	AllowPrivateWebhooks bool
+
 	// CheckInterval is how often the background scheduler re-scans endpoints and
 	// evaluates notification thresholds.
 	CheckInterval time.Duration
@@ -134,6 +151,8 @@ func Load() Config {
 		ScanTimeout:  envDuration("CERTGUARD_SCAN_TIMEOUT", 10*time.Second),
 		SessionTTL:   envDuration("CERTGUARD_SESSION_TTL", 720*time.Hour), // 30 days
 		CookieSecure: envBool("CERTGUARD_COOKIE_SECURE", false),
+		TrustedProxy:         envBool("CERTGUARD_TRUSTED_PROXY", false),
+		AllowPrivateWebhooks: envBool("CERTGUARD_ALLOW_PRIVATE_WEBHOOKS", false),
 
 		CheckInterval:    envDuration("CERTGUARD_CHECK_INTERVAL", 6*time.Hour),
 		SchedulerEnabled: envBool("CERTGUARD_SCHEDULER_ENABLED", true),

@@ -32,7 +32,7 @@ func (s *Store) CountUsers() (int, error) {
 	return n, err
 }
 
-const userCols = `SELECT id, email, password_hash, role, created_at, totp_secret, totp_enabled FROM users`
+const userCols = `SELECT id, email, password_hash, role, created_at, totp_secret, totp_enabled, totp_last_step FROM users`
 
 func (s *Store) GetUserByID(id int64) (*model.User, error) {
 	return scanUser(s.queryRow(userCols+` WHERE id=?`, id))
@@ -75,7 +75,7 @@ func scanUser(r rowScanner) (*model.User, error) {
 	var u model.User
 	var createdAt string
 	var totpEnabled int
-	err := r.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &createdAt, &u.TOTPSecret, &totpEnabled)
+	err := r.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &createdAt, &u.TOTPSecret, &totpEnabled, &u.TOTPLastStep)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -88,10 +88,27 @@ func scanUser(r rowScanner) (*model.User, error) {
 }
 
 // SetUserTOTP stores a user's TOTP secret and enabled flag (clear with "", false).
+// Enabling resets the replay floor, so a freshly configured secret accepts its
+// first code regardless of any stale value.
 func (s *Store) SetUserTOTP(userID int64, secret string, enabled bool) error {
-	_, err := s.exec(`UPDATE users SET totp_secret=?, totp_enabled=? WHERE id=?`,
+	_, err := s.exec(`UPDATE users SET totp_secret=?, totp_enabled=?, totp_last_step=0 WHERE id=?`,
 		secret, boolToInt(enabled), userID)
 	return err
+}
+
+// ConsumeTOTPStep records that a code at the given step was used, and reports
+// whether this consumption was fresh. The UPDATE is conditional on the stored
+// step being strictly smaller, so it is atomic: two concurrent logins presenting
+// the same code race on this single statement and exactly one sees a row
+// change. A false return means the code was already spent — a replay.
+func (s *Store) ConsumeTOTPStep(userID, step int64) (bool, error) {
+	res, err := s.exec(`UPDATE users SET totp_last_step=? WHERE id=? AND totp_last_step<?`,
+		step, userID, step)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 // --- API tokens ---

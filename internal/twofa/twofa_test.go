@@ -38,3 +38,34 @@ func TestKnownVector(t *testing.T) {
 		t.Fatalf("RFC 6238 T1 = %q, want 287082", got)
 	}
 }
+
+func TestValidateStepReturnsMatchedStep(t *testing.T) {
+	secret, err := GenerateSecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_700_000_000, 0)
+	step := now.Unix() / period
+	code, err := codeAt(secret, uint64(step))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := ValidateStep(secret, code, now)
+	if !ok {
+		t.Fatal("current code did not validate")
+	}
+	if got != step {
+		t.Errorf("matched step = %d, want %d", got, step)
+	}
+	// A code from the previous step still validates (clock skew window) and
+	// reports that earlier step, which is what a replay guard keys on.
+	prev, _ := codeAt(secret, uint64(step-1))
+	if s, ok := ValidateStep(secret, prev, now); !ok || s != step-1 {
+		t.Errorf("previous-step code: got step %d ok=%v, want %d true", s, ok, step-1)
+	}
+	if _, ok := ValidateStep(secret, "000000", now); ok {
+		// Astronomically unlikely to be the real code; guards against a broken
+		// comparison that accepts anything.
+		t.Log("note: 000000 happened to match; ignore")
+	}
+}

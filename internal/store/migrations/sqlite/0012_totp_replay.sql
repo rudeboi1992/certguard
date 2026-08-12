@@ -1,0 +1,11 @@
+-- Prevent a captured TOTP code from being replayed within its validity window.
+--
+-- A code is valid for a ~90-second span (the current 30s step plus one on each
+-- side). Without recording which step was last accepted, the same six digits
+-- work repeatedly across that window — enough for an attacker who observes one
+-- code to reuse it. Storing the last consumed step lets a login reject any code
+-- from that step or earlier.
+--
+-- Default 0: every real TOTP step is a large positive number (unix / 30), so a
+-- fresh account with no prior code accepts its first one.
+ALTER TABLE users ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0;
