@@ -143,6 +143,22 @@ An account can hold a **TOTP** secret, one or more **security keys**
 is accepted, certguard reports which factors the account actually has so the
 sign-in page offers exactly those.
 
+A registered key can also sign you in **on its own**, with no password and no
+address typed. The browser offers your saved passkeys — in the email field's
+autofill, or behind the "Sign in with a passkey" button — and the authenticator
+reports which account it belongs to. Because the passkey is then the only
+factor, certguard **requires user verification** for that path: the key must
+check a PIN or biometric, so it stays two factors (something you have plus
+something you know or are). A key that cannot verify a user is refused there and
+remains usable as a second factor next to the password.
+
+**Nothing on the sign-in page reveals who is registered.** certguard has no
+endpoint that answers "does this address have a key", and the passkey challenge
+is identical whatever accounts exist — no address is sent and no credential list
+comes back. That matters for an instance reachable beyond a LAN: the login page
+is an oracle for account enumeration if you let it be one. Which layout appears
+first is remembered **in your browser**, not on the server.
+
 > **Security keys require a hostname.** The WebAuthn spec forbids an IP address
 > as a Relying Party ID, and browsers refuse outright, so keys cannot be
 > registered on an instance reached as `https://192.168.0.154`. Give certguard a
@@ -168,6 +184,8 @@ currently hold.
 |--------|------------------------|--------|------------------------------------------|
 | GET    | `/healthz`             | none   | liveness                                 |
 | POST   | `/api/v1/auth/login`   | none   | `{"email","password"}` → sets session cookie |
+| POST   | `/api/v1/auth/passkey/begin` | none | usernameless passkey challenge; identical for every caller |
+| POST   | `/api/v1/auth/passkey/finish` | none | verify the passkey → sets session cookie |
 | POST   | `/api/v1/auth/logout`  | any    | invalidate the session                   |
 | GET    | `/api/v1/auth/whoami`  | any    | current principal                        |
 | GET    | `/api/v1/version`      | any    | running build: version, commit, build date, Go/OS/arch |

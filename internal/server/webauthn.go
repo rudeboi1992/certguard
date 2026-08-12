@@ -367,31 +367,98 @@ func (s *Server) handleWebAuthnLoginBegin(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, assertion)
 }
 
-// handleAuthMethods reports which sign-in methods an address can use, so the
-// page can offer a key prompt instead of a password box before anything is
-// typed.
+// --- usernameless passkey login ---------------------------------------------
+
+// handlePasskeyBegin issues a challenge for signing in with a passkey when the
+// server does not know, and is not told, who is signing in.
 //
-// This does reveal that a given address has a security key registered, which
-// the password endpoint deliberately avoids doing (it answers identically for
-// an unknown address and a wrong password). It is rate-limited like the other
-// auth routes, and an unknown address is answered exactly as an address with no
-// key would be, so the negative case still tells an attacker nothing.
-func (s *Server) handleAuthMethods(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Email string `json:"email"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+// This is the enumeration-safe way to offer passkeys. The response is
+// byte-identical no matter which accounts exist — no address is submitted, no
+// credential list is returned, and nothing is looked up. An instance exposed to
+// the internet therefore leaks nothing about its users through this route,
+// which is why it is preferred over asking "does this address have a key".
+//
+// The authenticator picks the credential and reports the user handle in its
+// response, so the account is discovered at the finish step. Verification is
+// required because the passkey is the only factor.
+func (s *Server) handlePasskeyBegin(w http.ResponseWriter, r *http.Request) {
+	wa, err := s.webAuthnFor(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	hasKey := false
-	if user, err := s.store.GetUserByEmail(req.Email); err == nil {
-		if n, err := s.store.CountCredentials(user.ID); err == nil && n > 0 {
-			hasKey = true
-		}
+	assertion, sess, err := wa.BeginDiscoverableLogin(
+		webauthn.WithUserVerification(protocol.VerificationRequired),
+	)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not begin login: "+err.Error())
+		return
+	}
+	// userID 0: nobody is claimed yet. The finish step resolves it from the
+	// handle the authenticator returns.
+	if err := s.setCeremony(w, sess, 0); err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not start ceremony")
+		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, map[string]bool{"passkey": hasKey})
+	writeJSON(w, http.StatusOK, assertion)
+}
+
+// discoverableUser resolves the account an authenticator claims to be. The
+// handle is the user ID that WebAuthnID produced at registration.
+func (s *Server) discoverableUser(rawID, userHandle []byte) (webauthn.User, error) {
+	id, err := strconv.ParseInt(string(userHandle), 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("unrecognised user handle")
+	}
+	user, err := s.store.GetUserByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("unrecognised user handle")
+	}
+	// The credential must actually belong to that account, so a valid handle
+	// cannot be paired with somebody else's credential.
+	cred, err := s.store.CredentialByID(base64.RawURLEncoding.EncodeToString(rawID))
+	if err != nil || cred.UserID != user.ID {
+		return nil, fmt.Errorf("credential does not belong to that account")
+	}
+	return s.webAuthnUserFor(user)
+}
+
+// handlePasskeyFinish verifies a usernameless assertion and starts the session.
+func (s *Server) handlePasskeyFinish(w http.ResponseWriter, r *http.Request) {
+	cer, ok := s.takeCeremony(w, r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "no sign-in in progress — start again")
+		return
+	}
+	wa, err := s.webAuthnFor(r)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	wu, cred, err := wa.FinishPasskeyLogin(s.discoverableUser, cer.session, r)
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "passkey rejected: "+protocolErr(err))
+		return
+	}
+	au, ok := wu.(*webAuthnUser)
+	if !ok {
+		writeErr(w, http.StatusInternalServerError, "could not resolve account")
+		return
+	}
+	id := base64.RawURLEncoding.EncodeToString(cred.ID)
+	if cred.Authenticator.CloneWarning {
+		s.recordAccountEvent(store.EventKeyCloneWarning, au.user.Email, au.user.Email,
+			"sign counter went backwards for a security key — possible clone")
+		writeErr(w, http.StatusUnauthorized, "passkey rejected: sign counter went backwards, which can mean the key was cloned")
+		return
+	}
+	_ = s.store.TouchCredential(id, cred.Authenticator.SignCount)
+	if err := s.startSession(w, au.user); err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not start session")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": au.user})
 }
 
 // handleWebAuthnLoginFinish verifies the assertion and starts the session.

@@ -14,7 +14,10 @@
     <h1 class="brand">certguard</h1>
     <p class="muted" id="loginSubtitle">Active TLS certificate monitor</p>
     <label>Email
-      <input type="email" name="email" id="email" required autofocus>
+      <!-- "webauthn" lets the browser offer saved passkeys in this field's own
+           autofill list, so a returning user never has to ask the server
+           whether they have one. -->
+      <input type="email" name="email" id="email" required autofocus autocomplete="username webauthn">
     </label>
     <label id="passwordField">Password
       <input type="password" name="password" id="password" required>
@@ -23,9 +26,9 @@
       <input type="text" name="code" id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code">
     </label>
     <button type="submit" class="btn primary" id="loginBtn">Sign in</button>
-    <button type="button" class="btn primary" id="keyBtn" hidden>🔐 Sign in with security key or passkey</button>
+    <button type="button" class="btn primary" id="keyBtn" hidden>🔐 Sign in with a passkey or security key</button>
     <button type="button" class="linkish" id="usePasswordLink" hidden>Use password instead</button>
-    <button type="button" class="linkish" id="useKeyLink" hidden>Use a security key or passkey instead</button>
+    <button type="button" class="linkish" id="useKeyLink" hidden>Use a passkey or security key instead</button>
     <p id="hint" class="muted small" hidden></p>
     <p id="error" class="error" hidden></p>
   </form>
