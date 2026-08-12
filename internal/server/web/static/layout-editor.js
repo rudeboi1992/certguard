@@ -132,6 +132,23 @@ function initLayoutEditor(api, opts) {
     return Math.max(0, best);
   }
 
+  // Resizing counterpart: magnetise the bottom edge (the one the corner drags)
+  // onto a nearby card's top or bottom edge, so height lines up with the cards
+  // around it. Returns the possibly-snapped row count.
+  function snapHeight(c, rows) {
+    const SNAP = 3;
+    const others = cards.filter((o) => !o.hidden && o.id !== c.id);
+    const bottom = c.row + rows;
+    let best = rows, bestDist = SNAP + 1;
+    for (const o of others) {
+      for (const ln of [o.row, o.row + o.rows]) {
+        const d = Math.abs(bottom - ln);
+        if (d < bestDist && ln - c.row >= MIN_ROWS) { bestDist = d; best = ln - c.row; }
+      }
+    }
+    return Math.max(MIN_ROWS, best);
+  }
+
   function toggleVis(id) {
     const c = find(id);
     if (!c) return;
@@ -180,12 +197,13 @@ function initLayoutEditor(api, opts) {
       const m = map.getBoundingClientRect();
       const cw = colW();
       if (corner) {
-        // Span from where the right edge is dragged (whole columns), height from
-        // the bottom edge (row units) — both snap to the grid, like the card's
-        // own corner handle on the page.
+        // Span from where the right edge is dragged (whole columns); height from
+        // the bottom edge, magnetised onto a nearby card's edge so it can be
+        // levelled while resizing, the same as while moving.
         c.span = Math.max(1, Math.min(api.columns - start.col,
           Math.round((ev.clientX - m.left) / cw) - start.col));
-        c.rows = Math.max(MIN_ROWS, Math.round((ev.clientY - m.top) / SCALE) - start.row);
+        const rawRows = Math.max(MIN_ROWS, Math.round((ev.clientY - m.top) / SCALE) - start.row);
+        c.rows = snapHeight(c, rawRows);
       } else {
         // Position is taken from the tile's top-left corner, not the pointer,
         // so where you grabbed it does not change where it lands.
@@ -206,11 +224,10 @@ function initLayoutEditor(api, opts) {
         tile.style.transform = '';
         tile.style.width = (c.span * cw - 4) + 'px';
         tile.style.height = (c.rows * SCALE - 4) + 'px';
-        clearGuides();
       } else {
         tile.style.transform = `translate(${ev.clientX - x0}px, ${ev.clientY - y0}px)`;
-        showGuides(c);
       }
+      showGuides(c);   // red lines while both moving and resizing
     };
 
     const onUp = () => {
