@@ -111,14 +111,22 @@ the HTTPS choice above is what matters; pick whatever wrapper you already use:
 - **Portainer** — App Templates → add
   `https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/portainer-template.json`,
   pick **certguard**, fill the form, Deploy. (Plain HTTP; put a proxy in front for TLS.)
-- **Proxmox** — one line builds a Debian LXC, installs Docker, and deploys:
+- **Proxmox** — one line builds a Debian LXC, installs Docker, and deploys.
+  Run it on the Proxmox host as root; pick the line for the HTTPS you want:
+
+  Plain HTTP (trusted LAN / VPN):
   ```
   bash -c "$(curl -fsSL https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/proxmox-install.sh)"
   ```
-  Defaults to plain HTTP. Add `MODE=internal` for a trusted-after-install
-  self-signed cert, or `MODE=public DOMAIN=certguard.example.com` for automatic
-  Let's Encrypt (needs a public DNS record + ports 80/443 forwarded to the LXC).
-  Override sizing inline, e.g. `CORES=4 RAM=2048 bash -c "$(curl -fsSL …)"`.
+  Self-signed, trusted after you install its CA (no domain needed):
+  ```
+  MODE=internal bash -c "$(curl -fsSL https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/proxmox-install.sh)"
+  ```
+  Automatic Let's Encrypt (public domain; needs public DNS + ports 80/443 forwarded to the LXC):
+  ```
+  MODE=public DOMAIN=certguard.example.com bash -c "$(curl -fsSL https://raw.githubusercontent.com/rudeboi1992/certguard/main/deploy/proxmox-install.sh)"
+  ```
+  Prefix more overrides the same way, e.g. `CORES=4 RAM=2048 MODE=internal bash -c "$(curl …)"`.
 - **Plain Docker / other** — `docker run` (as in *Quick try*) or the base
   [docker-compose.yml](docker-compose.yml) (SQLite; add `--profile postgres` for Postgres).
 - **From source** — clone and `docker build .`, or `go build`.
