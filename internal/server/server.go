@@ -122,6 +122,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /api/v1/webauthn/register/finish", s.authed(s.handleWebAuthnRegisterFinish))
 	s.mux.Handle("GET /api/v1/webauthn/credentials", s.authed(s.handleListCredentials))
 	s.mux.Handle("DELETE /api/v1/webauthn/credentials/{id}", s.authed(s.handleDeleteCredential))
+	s.mux.HandleFunc("POST /api/v1/auth/methods", s.limitAuth(s.handleAuthMethods))
 	s.mux.HandleFunc("POST /api/v1/auth/webauthn/begin", s.limitAuth(s.handleWebAuthnLoginBegin))
 	s.mux.HandleFunc("POST /api/v1/auth/webauthn/finish", s.limitAuth(s.handleWebAuthnLoginFinish))
 

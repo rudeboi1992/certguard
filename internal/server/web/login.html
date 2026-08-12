@@ -16,14 +16,16 @@
     <label>Email
       <input type="email" name="email" id="email" required autofocus>
     </label>
-    <label>Password
+    <label id="passwordField">Password
       <input type="password" name="password" id="password" required>
     </label>
     <label id="codeField" hidden>Authentication code
       <input type="text" name="code" id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code">
     </label>
     <button type="submit" class="btn primary" id="loginBtn">Sign in</button>
-    <button type="button" class="btn ghost" id="keyBtn" hidden>🔐 Use security key</button>
+    <button type="button" class="btn primary" id="keyBtn" hidden>🔐 Sign in with security key or passkey</button>
+    <button type="button" class="linkish" id="usePasswordLink" hidden>Use password instead</button>
+    <button type="button" class="linkish" id="useKeyLink" hidden>Use a security key or passkey instead</button>
     <p id="hint" class="muted small" hidden></p>
     <p id="error" class="error" hidden></p>
   </form>

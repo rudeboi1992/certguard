@@ -436,6 +436,16 @@ body.dragging-widget { cursor: grabbing; user-select: none; }
 
 .login-card { width: min(360px, 92vw); display: grid; gap: .8rem; }
 .login-card label { display: grid; gap: .3rem; font-size: .9rem; }
+/* A button that reads as a link — switching between the password and passkey
+   paths is a change of mind, not a second action competing with the primary
+   button. A real <button> keeps it keyboard-reachable and out of the tab order
+   of the form fields' semantics. */
+.linkish {
+  background: none; border: none; padding: 0; font: inherit; font-size: .85rem;
+  color: var(--primary); cursor: pointer; text-decoration: underline;
+  justify-self: center;
+}
+.linkish:hover { filter: brightness(1.15); }
 
 input[type=text], input[type=email], input[type=password], input[type=date] {
   width: 100%; padding: .55rem .7rem; border: 1px solid var(--border);

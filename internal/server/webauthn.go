@@ -227,10 +227,15 @@ func (s *Server) handleWebAuthnRegisterBegin(w http.ResponseWriter, r *http.Requ
 	}
 	creation, sess, err := wa.BeginRegistration(wu,
 		webauthn.WithExclusions(exclude),
-		// A second factor, not a passwordless replacement: the password is
-		// still required, so requiring a PIN/biometric on top is friction
-		// without a matching gain. Keys that do it anyway still work.
+		// Both preferred rather than required, because both are asking for a
+		// capability the key may not have. A resident key lets this act as a
+		// passkey; user verification is what makes a passwordless sign-in
+		// two-factor rather than one. A key that can do neither is still a
+		// perfectly good second factor next to the password — it just will not
+		// be offered the passwordless path, which is enforced at login by
+		// demanding verification there.
 		webauthn.WithAuthenticatorSelection(protocol.AuthenticatorSelection{
+			ResidentKey:      protocol.ResidentKeyRequirementPreferred,
 			UserVerification: protocol.VerificationPreferred,
 		}),
 	)
@@ -305,9 +310,18 @@ func (s *Server) handleWebAuthnRegisterFinish(w http.ResponseWriter, r *http.Req
 
 // --- login ------------------------------------------------------------------
 
-// handleWebAuthnLoginBegin is the second step of signing in with a security
-// key. The password has already been checked by /auth/login, which returned
-// "webauthn_required" instead of a session.
+// handleWebAuthnLoginBegin issues a challenge for signing in with a key.
+//
+// It serves two flows. With a password, the key is a second factor and the
+// password has already been proved. Without one, the key is the ONLY factor —
+// so user verification is demanded, which makes the authenticator require a PIN
+// or biometric. That keeps the passwordless path genuinely two-factor
+// (something you have plus something you know or are) rather than reducing
+// sign-in to whoever is holding the key.
+//
+// A key with no PIN or biometric simply fails the ceremony, and the page falls
+// back to the password. That is the correct outcome: such a key is one factor,
+// and one factor is not enough on its own.
 func (s *Server) handleWebAuthnLoginBegin(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -315,7 +329,12 @@ func (s *Server) handleWebAuthnLoginBegin(w http.ResponseWriter, r *http.Request
 		return
 	}
 	user, err := s.store.GetUserByEmail(req.Email)
-	if err != nil || !auth.CheckPassword(user.PasswordHash, req.Password) {
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+	passwordless := req.Password == ""
+	if !passwordless && !auth.CheckPassword(user.PasswordHash, req.Password) {
 		writeErr(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
@@ -329,16 +348,50 @@ func (s *Server) handleWebAuthnLoginBegin(w http.ResponseWriter, r *http.Request
 		writeErr(w, http.StatusBadRequest, "no security key registered for this account")
 		return
 	}
-	assertion, sess, err := wa.BeginLogin(wu)
+	var opts []webauthn.LoginOption
+	if passwordless {
+		opts = append(opts, webauthn.WithUserVerification(protocol.VerificationRequired))
+	}
+	assertion, sess, err := wa.BeginLogin(wu, opts...)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not begin login: "+err.Error())
 		return
 	}
+	// The requirement is carried in the stored session, so FinishLogin enforces
+	// it server-side. A client that edits the options it was handed cannot
+	// downgrade the check.
 	if err := s.setCeremony(w, sess, user.ID); err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not start ceremony")
 		return
 	}
 	writeJSON(w, http.StatusOK, assertion)
+}
+
+// handleAuthMethods reports which sign-in methods an address can use, so the
+// page can offer a key prompt instead of a password box before anything is
+// typed.
+//
+// This does reveal that a given address has a security key registered, which
+// the password endpoint deliberately avoids doing (it answers identically for
+// an unknown address and a wrong password). It is rate-limited like the other
+// auth routes, and an unknown address is answered exactly as an address with no
+// key would be, so the negative case still tells an attacker nothing.
+func (s *Server) handleAuthMethods(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	hasKey := false
+	if user, err := s.store.GetUserByEmail(req.Email); err == nil {
+		if n, err := s.store.CountCredentials(user.ID); err == nil && n > 0 {
+			hasKey = true
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]bool{"passkey": hasKey})
 }
 
 // handleWebAuthnLoginFinish verifies the assertion and starts the session.

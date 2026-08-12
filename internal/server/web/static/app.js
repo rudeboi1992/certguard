@@ -1,7 +1,16 @@
 // Login page. On first run (no users yet) this becomes a "create your admin
-// account" screen; otherwise it's a normal sign-in. Same form, two modes.
+// account" screen; otherwise it's a normal sign-in. Same form, several modes.
+//
+// The page is passkey-first: once an address is entered, it asks the server
+// whether that account has a security key and, if so, hides the password box
+// and offers the key instead. "Use password instead" goes back to the classic
+// password (+ TOTP) path, and nothing here removes that option — a key can
+// always be declined.
 const $ = (id) => document.getElementById(id);
 let setupMode = false;
+let mode = 'password';     // 'password' | 'passkey'
+let probedEmail = '';      // address the current passkey answer belongs to
+let userChose = false;     // the user picked a mode; stop overriding it
 
 async function initLogin() {
   try {
@@ -18,8 +27,71 @@ async function initLogin() {
 }
 initLogin();
 
+function applyMode() {
+  const passkey = mode === 'passkey';
+  $('passwordField').hidden = passkey;
+  $('password').required = !passkey;      // else the hidden box blocks submit
+  $('loginBtn').hidden = passkey;
+  $('keyBtn').hidden = !passkey;
+  $('usePasswordLink').hidden = !passkey;
+  // Only offer the way back once we know this account actually has a key.
+  $('useKeyLink').hidden = passkey || probedEmail !== $('email').value.trim().toLowerCase();
+  if (passkey) $('codeField').hidden = true;
+}
+
+// Ask whether this address can use a key. Failures leave the page on the
+// password path, which always works.
+async function probeMethods() {
+  if (setupMode || userChose) return;
+  const email = $('email').value.trim().toLowerCase();
+  if (!email || !email.includes('@') || email === probedEmail) return;
+  try {
+    const res = await fetch('/api/v1/auth/methods', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    probedEmail = email;
+    if (data.passkey && WebAuthnKit.supported()) {
+      mode = 'passkey';
+      applyMode();
+    }
+  } catch (_) { /* stay on the password path */ }
+}
+
+$('email').addEventListener('blur', probeMethods);
+// Enter in the address field should also switch, rather than submitting an
+// empty password and getting an error.
+$('email').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !setupMode) { e.preventDefault(); probeMethods(); }
+});
+// Typing a different address invalidates the previous answer.
+$('email').addEventListener('input', () => {
+  if ($('email').value.trim().toLowerCase() !== probedEmail && mode === 'passkey' && !userChose) {
+    mode = 'password';
+    applyMode();
+  }
+});
+
+$('usePasswordLink').addEventListener('click', () => {
+  userChose = true;
+  mode = 'password';
+  applyMode();
+  $('password').focus();
+});
+
+$('useKeyLink').addEventListener('click', () => {
+  userChose = true;
+  mode = 'passkey';
+  applyMode();
+});
+
 $('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  // In passkey mode the primary button is the key, not a form submit.
+  if (mode === 'passkey') { signInWithKey(); return; }
   const err = $('error');
   err.hidden = true;
   const body = { email: $('email').value, password: $('password').value, code: $('code').value };
@@ -42,18 +114,17 @@ $('loginForm').addEventListener('submit', async (e) => {
       const methods = data.methods || ['totp'];
       const wantsCode = methods.includes('totp');
       const wantsKey = methods.includes('webauthn') && WebAuthnKit.supported();
-      const wasPrompted = !$('codeField').hidden || !$('keyBtn').hidden;
+      const wasPrompted = !$('codeField').hidden;
 
       $('codeField').hidden = !wantsCode;
-      $('loginBtn').hidden = !wantsCode;
-      $('keyBtn').hidden = !wantsKey;
       if (wantsCode) {
         $('loginBtn').textContent = 'Verify';
         $('code').focus();
-      }
-      // With a key as the only factor there is nothing to type, so go straight
-      // to the prompt instead of making the user press another button.
-      if (wantsKey && !wantsCode && !wasPrompted) {
+      } else if (wantsKey) {
+        // Password accepted but a key is the only second factor: go straight
+        // to it rather than leaving the user on a form with nothing to fill in.
+        mode = 'passkey';
+        applyMode();
         signInWithKey();
         return;
       }
@@ -69,8 +140,9 @@ $('loginForm').addEventListener('submit', async (e) => {
   }
 });
 
-// Second step of signing in with a key: the password has already been accepted,
-// so the server will issue a challenge for this account's registered keys.
+// Sign in with a key. Sends the password when we have one (the key is then a
+// second factor); sends none in passkey mode, where the server demands the
+// authenticator verify the user instead.
 async function signInWithKey() {
   const err = $('error');
   err.hidden = true;
@@ -79,10 +151,12 @@ async function signInWithKey() {
   const original = btn.textContent;
   btn.textContent = 'Touch your key…';
   try {
+    const body = { email: $('email').value };
+    if (mode !== 'passkey') body.password = $('password').value;
     const begin = await fetch('/api/v1/auth/webauthn/begin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: $('email').value, password: $('password').value }),
+      body: JSON.stringify(body),
     });
     if (!begin.ok) {
       const d = await begin.json().catch(() => ({}));
@@ -103,6 +177,11 @@ async function signInWithKey() {
     throw new Error(d.error || 'Security key rejected');
   } catch (e) {
     err.textContent = WebAuthnKit.explain(e);
+    // A key that cannot verify the user cannot carry a passwordless sign-in.
+    // Say what to do about it rather than leaving a dead end.
+    if (mode === 'passkey') {
+      err.textContent += ' — you can use your password instead.';
+    }
     err.hidden = false;
   } finally {
     btn.disabled = false;
