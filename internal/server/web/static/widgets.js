@@ -284,6 +284,22 @@ function initWidgetGrid(grid, storageKey, opts) {
     }
   }
 
+  // Give a just-shown card a position that overlaps nothing. Its stored spot is
+  // kept when still free — so hiding and immediately re-adding a card leaves it
+  // where it was — but a card with no position, or one whose old spot is now
+  // taken, drops below everything, exactly where placeUnplaced puts a new one.
+  // The card must already be visible (widget-off removed) so contentRows can
+  // measure it.
+  function placeIntoFreeSpace(card) {
+    const others = visible().filter((x) => x !== card);
+    const clashes = !isPlaced(card) ||
+      others.some((x) => isPlaced(x) && overlaps(rectOf(card), rectOf(x)));
+    if (!clashes) return;
+    const bottom = others.filter(isPlaced)
+      .reduce((m, x) => Math.max(m, rowOf(x) + hOf(x)), 0);
+    setRect(card, { c: 0, r: bottom, w: Math.max(1, Math.min(COLS, spanOf(card))), h: contentRows(card) });
+  }
+
   // The picker lists every hidden card as a titled tile describing what it
   // shows, three across. It stays open after a pick so several can be added in
   // one go, and closes itself once there is nothing left to add.
@@ -317,6 +333,12 @@ function initWidgetGrid(grid, storageKey, opts) {
       tile.appendChild(meta);
       const add = () => {
         c.classList.remove('widget-off');
+        // Placing it is not optional. Hiding a card only sets widget-off and
+        // leaves its grid position behind, and a card that was never shown has
+        // none at all (rectOf then reads 0,0). Handing either straight to
+        // layout() drops it on top of whatever now sits there — the overlap
+        // this fixes — so give it a clear spot first.
+        placeIntoFreeSpace(c);
         refreshAdd(); save(); layout();
         if (!addGrid.querySelector('[data-add]') && addDialog && addDialog.open) addDialog.close();
         c.scrollIntoView({ block: 'center', behavior: 'smooth' });
