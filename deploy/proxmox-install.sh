@@ -10,6 +10,11 @@
 # Everything below has a sane default; override any of them inline, e.g.
 #   CORES=4 RAM=2048 DISK=8 STORAGE=local-zfs bash -c "$(curl -fsSL ...)"
 #
+# HTTPS is chosen with MODE:
+#   (default)                       plain HTTP on :8181 — trusted LAN/VPN
+#   MODE=internal                   self-signed cert, trusted after you install its CA
+#   MODE=public DOMAIN=cg.you.com   automatic Let's Encrypt — needs public DNS + 80/443 forwarded
+#
 set -euo pipefail
 
 # ---- settings (override via environment) -----------------------------------
@@ -21,13 +26,18 @@ DISK="${DISK:-6}"                      # GB root disk (Docker + image need room)
 BRIDGE="${BRIDGE:-vmbr0}"              # network bridge
 STORAGE="${STORAGE:-}"                 # container root disk storage (auto-detected if empty)
 TEMPLATE_STORAGE="${TEMPLATE_STORAGE:-}"  # template storage (auto-detected if empty)
-PORT="${PORT:-8181}"                   # host port certguard listens on (plain mode)
+PORT="${PORT:-8181}"                   # host port certguard listens on (plain mode only)
 IMAGE="${IMAGE:-ghcr.io/rudeboi1992/certguard:latest}"
-# MODE=plain    → HTTP on :PORT (simplest; fine on a trusted LAN)
-# MODE=internal → bundled Caddy + trusted internal cert on :443 (green padlock
-#                 after you install the CA). Uses DOMAIN if set, else the LXC IP.
+# MODE=plain    → HTTP on :PORT (simplest; fine on a trusted LAN).
+# MODE=internal → HTTPS with certguard's own self-signed cert on :443. Trusted
+#                 (green padlock) once you install its CA. Uses DOMAIN if set,
+#                 else the LXC IP. No public domain or port-forwarding needed.
+# MODE=public   → HTTPS with an automatic Let's Encrypt cert on :80+:443, for a
+#                 PUBLIC domain. Requires DOMAIN, a public DNS record pointing at
+#                 this host, and ports 80/443 forwarded to it from the internet.
 MODE="${MODE:-plain}"
 DOMAIN="${DOMAIN:-}"
+ACME_EMAIL="${ACME_EMAIL:-}"           # optional Let's Encrypt contact (public mode)
 # Optional: auto-create the first admin (else you make it in the browser).
 CG_ADMIN_EMAIL="${CG_ADMIN_EMAIL:-}"
 CG_ADMIN_PASSWORD="${CG_ADMIN_PASSWORD:-}"
@@ -42,6 +52,15 @@ die()  { echo -e " ${RD}✗ $1${CL}" >&2; exit 1; }
 # ---- preflight --------------------------------------------------------------
 [ "$(id -u)" -eq 0 ] || die "Run this as root on the Proxmox host."
 command -v pct >/dev/null 2>&1 || die "This must run on a Proxmox VE host (pct not found)."
+
+case "$MODE" in
+  plain|internal|public) ;;
+  *) die "Unknown MODE='${MODE}'. Use plain, internal, or public." ;;
+esac
+# Fail before building an LXC if a public deploy is missing its domain.
+if [ "$MODE" = "public" ] && [ -z "$DOMAIN" ]; then
+  die "MODE=public needs a public domain, e.g. DOMAIN=certguard.example.com — and that name must already resolve to this host's public IP, with ports 80 and 443 forwarded to it from the internet."
+fi
 
 echo -e "${BL}certguard — Proxmox LXC installer${CL}"
 
@@ -140,6 +159,24 @@ if [ "$MODE" = "internal" ]; then
       -v certguard-data:/data ${IMAGE} >/dev/null
   "
   URL="https://${SITE}"
+elif [ "$MODE" = "public" ]; then
+  # Public domain: certguard fetches and renews its own Let's Encrypt cert. It
+  # binds 80 (HTTP-01 challenge + redirect) and 443, so publish both and lift
+  # the unprivileged-port floor — the container runs as non-root and would
+  # otherwise be unable to bind them (the same trick docker-compose.aio.yml uses).
+  info "Deploying certguard over HTTPS (Let's Encrypt) for ${DOMAIN}…"
+  info "Let's Encrypt must reach ${DOMAIN} on 80/443 to issue — see the checklist below."
+  pct exec "$CTID" -- bash -c "
+    docker rm -f certguard certguard-caddy >/dev/null 2>&1 || true
+    docker run -d --name certguard --restart unless-stopped \
+      -p 80:80 -p 443:443 \
+      --sysctl net.ipv4.ip_unprivileged_port_start=0 \
+      -e CERTGUARD_ACME_DOMAIN=${DOMAIN} \
+      -e CERTGUARD_ACME_EMAIL=${ACME_EMAIL} \
+      ${ENV_ADMIN} \
+      -v certguard-data:/data ${IMAGE} >/dev/null
+  "
+  URL="https://${DOMAIN}"
 else
   info "Pulling and starting certguard (plain HTTP)…"
   pct exec "$CTID" -- bash -c "
@@ -169,9 +206,20 @@ if [ "$MODE" = "internal" ]; then
   warn "  1) open ${URL}/ca.crt (or Settings → Download CA certificate)"
   warn "  2) install it into 'Trusted Root Certification Authorities'"
   warn "  3) FULLY QUIT and reopen your browser (a refresh isn't enough)"
+elif [ "$MODE" = "public" ]; then
+  warn "This is INTERNET-FACING. For the certificate to issue and for the site"
+  warn "to be reachable, make sure:"
+  warn "  1) ${DOMAIN} resolves (public DNS A/AAAA record) to your public IP"
+  warn "  2) your router forwards ports 80 AND 443 to this LXC (${IP})"
+  warn "The padlock turns green within a minute of the first request once both"
+  warn "are true. certguard holds a secret vault, so before real use: enable 2FA"
+  warn "or a passkey for every admin, turn on the zero-knowledge vault, and"
+  warn "ideally front it with SSO. Prefer MODE=internal + a VPN unless you truly"
+  warn "need public reachability."
 else
   warn "This serves plain HTTP — fine on a trusted LAN/VPN. For a trusted"
-  warn "padlock, re-run with MODE=internal (bundled Caddy + local CA)."
+  warn "padlock, re-run with MODE=internal (certguard's own local CA), or"
+  warn "MODE=public DOMAIN=… for an automatic Let's Encrypt cert."
 fi
 echo
 info "Manage it:  pct enter ${CTID}   ·   docker logs -f certguard"
