@@ -3,6 +3,13 @@
 # Reload after editing:  docker exec <caddy> caddy reload --config /etc/caddy/Caddyfile
 certguard.example.com {
 	reverse_proxy certguard:8181
+
+	# Only needed if you set CERTGUARD_TRUSTED_PROXY=true, which makes login
+	# rate-limiting per-visitor instead of shared. certguard trusts the FIRST
+	# address in X-Forwarded-For, and Caddy appends to whatever the visitor
+	# sent — so without this line a visitor can forge the header and dodge the
+	# limiter. Uncomment both this and the setting, or neither.
+	# header_up X-Forwarded-For {remote_host}
 }
 
 # --- Optional: gate it behind Authentik SSO (forward-auth) ---
