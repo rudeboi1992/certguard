@@ -744,6 +744,12 @@ function initWidgetGrid(grid, storageKey, opts) {
       const c = document.getElementById(id);
       if (!c) return;
       c.classList.toggle('widget-off', !!off);
+      // Showing a card has to place it, exactly as the Add-section picker does.
+      // Hiding only sets widget-off and leaves the old position behind, and a
+      // card that was never shown has none at all (rectOf then reads 0,0) — so
+      // without this the arranger drops it straight onto the top-left card.
+      // Must run after the class is off, so contentRows can measure it.
+      if (!off) placeIntoFreeSpace(c);
       refreshAdd();
     },
     compact() { compact(); },
