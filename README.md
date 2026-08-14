@@ -103,6 +103,11 @@ Point the proxy at `certguard:8181` and set `CERTGUARD_COOKIE_SECURE=true`. A
 ready Caddy site block is in [deploy/certguard.caddy](deploy/certguard.caddy);
 full details in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
+Worth a read once you are behind a proxy:
+[two settings worth understanding](#two-settings-worth-understanding) — how
+login rate-limiting behaves, and why it needs one extra line in your proxy
+config to be worth enabling.
+
 ### Running it a different way
 
 The recipes above use Docker Compose, but the **packaging is interchangeable** —
@@ -302,6 +307,49 @@ All optional; defaults give a working SQLite-backed service with no setup.
 | `CERTGUARD_MAIL_HOST`    | _(unset)_       | SMTP host (email channels)       |
 | `CERTGUARD_MAIL_PORT`    | `587`           | SMTP port (STARTTLS)             |
 | `CERTGUARD_MAIL_USER` / `_PASS` / `_FROM` | _(unset)_ | SMTP auth + From address |
+
+### Two settings worth understanding
+
+Both default to **off**, and off is the safe choice. Turn either on deliberately.
+
+#### `CERTGUARD_TRUSTED_PROXY` — who gets rate-limited on the login page
+
+Behind a reverse proxy, every request arrives from the *proxy's* address. So by
+default everyone shares a single login rate-limit bucket, and one person
+fumbling their password can lock out the whole household. Turn this on and
+certguard reads the real visitor's address from the `X-Forwarded-For` header
+instead, so each person is limited on their own.
+
+**The catch:** certguard trusts the **first** address in that header, and most
+proxies — Caddy included — *append* to whatever the visitor already sent instead
+of replacing it. With a stock proxy config, a visitor can therefore send a
+made-up `X-Forwarded-For`, land in a fresh bucket on every attempt, and defeat
+the rate limiter completely. That is strictly worse than leaving this off.
+
+So only turn it on if your proxy **overwrites** the header. In Caddy that means
+adding one line:
+
+```
+certguard.example.com {
+	reverse_proxy certguard:8181 {
+		header_up X-Forwarded-For {remote_host}   # replace, don't append
+	}
+}
+```
+
+Nginx: `proxy_set_header X-Forwarded-For $remote_addr;` (note: `$remote_addr`,
+not `$proxy_add_x_forwarded_for`, which appends).
+
+#### `CERTGUARD_ALLOW_PRIVATE_WEBHOOKS` — whether alerts may call private addresses
+
+Notification channels are just URLs, and any signed-in user can add one. Left
+off, certguard refuses to call private, loopback, or link-local addresses — so
+nobody can use it to reach things inside your network that they could not reach
+themselves, or to read back what an internal port says.
+
+Turn it on only if you deliberately want alerts delivered to something on your
+own network, such as a self-hosted ntfy or Home Assistant. Public services like
+Slack, Discord, and ordinary SMTP work either way, so most people never need it.
 
 ## Build & run
 
