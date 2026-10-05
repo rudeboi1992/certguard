@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 )
 
 func authStore(t *testing.T) *Store {
@@ -93,5 +94,45 @@ func TestSetUserTOTPResetsReplayFloor(t *testing.T) {
 	}
 	if got.TOTPLastStep != 0 {
 		t.Errorf("TOTPLastStep = %d after re-enroll, want 0", got.TOTPLastStep)
+	}
+}
+
+func TestSetUserPasswordReplacesHashAndEndsSessions(t *testing.T) {
+	st := authStore(t)
+	u, err := st.CreateUser("d@x.com", "oldhash", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := st.CreateUser("e@x.com", "hash", "viewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	exp := time.Now().Add(time.Hour)
+	if err := st.CreateSession(u.ID, "s-mine", exp); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateSession(other.ID, "s-other", exp); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := st.SetUserPassword(u.ID, "newhash"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.GetUserByID(u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PasswordHash != "newhash" {
+		t.Errorf("PasswordHash = %q, want newhash", got.PasswordHash)
+	}
+	if _, err := st.UserBySessionHash("s-mine"); err != ErrNotFound {
+		t.Errorf("own session after reset: err = %v, want ErrNotFound", err)
+	}
+	// Only the reset user is signed out.
+	if _, err := st.UserBySessionHash("s-other"); err != nil {
+		t.Errorf("other user's session after reset: %v", err)
+	}
+	if err := st.SetUserPassword(9999, "x"); err != ErrNotFound {
+		t.Errorf("unknown user: err = %v, want ErrNotFound", err)
 	}
 }

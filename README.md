@@ -157,6 +157,7 @@ See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for Postgres, secret-vault mode
 # provision the first user (no public registration)
 certguard user add you@example.com --role admin --password '...'
 certguard token create you@example.com --name laptop   # prints a bearer token once
+certguard user passwd you@example.com   # forgot it? set a new one (signs that user out everywhere)
 
 certguard scan github.com          # scan an endpoint over TLS and store it
 certguard scan --dry host:8443     # scan without storing
