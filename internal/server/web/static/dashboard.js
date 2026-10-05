@@ -1310,20 +1310,30 @@ loadWhoami().then(() => {
   if (!isAdmin) {
     document.querySelectorAll('#dashGrid .widget[data-admin]').forEach((w) => w.remove());
   }
-  const dashGrid = initWidgetGrid($('dashGrid'), 'certguard-dash-layout', {
+  // Shipped arrangement, as explicit rectangles: {col, row, width, height in
+  // row units}. Add and Tracked side by side, Calendar full width below. A
+  // viewer has no Add card, so Tracked takes the full width instead of leaving
+  // the left half empty.
+  const defaultPos = isAdmin
+    ? {
+      'w-add': { c: 0, r: 0, w: 2, h: 24 },
+      'w-tracked': { c: 2, r: 0, w: 2, h: 24 },
+      'w-calendar': { c: 0, r: 24, w: 4, h: 22 },
+    }
+    : {
+      'w-tracked': { c: 0, r: 0, w: 4, h: 24 },
+      'w-calendar': { c: 0, r: 24, w: 4, h: 22 },
+    };
+  // Viewers keep their own saved layout: one shared with an admin on the same
+  // browser would lose the Add card's place, or keep a hole where it was.
+  const dashGrid = initWidgetGrid($('dashGrid'), isAdmin ? 'certguard-dash-layout' : 'certguard-dash-layout-viewer', {
     addButton: $('addSectionDash'),
     addDialog: $('addSectionDialog'),
     addGrid: $('addSectionGrid'),
     resetBtn: $('resetDashLayout'),
     tidyBtn: $('tidyDash'),
-    // Shipped arrangement, as explicit rectangles: {col, row, width, height in
-    // row units}. Add and Tracked side by side, Calendar full width below.
     defaults: {
-      pos: {
-        'w-add': { c: 0, r: 0, w: 2, h: 24 },
-        'w-tracked': { c: 2, r: 0, w: 2, h: 24 },
-        'w-calendar': { c: 0, r: 24, w: 4, h: 22 },
-      },
+      pos: defaultPos,
       // The optional insight cards ship hidden — add them via "＋ Add section".
       hidden: ['w-soon', 'w-problems', 'w-nextup', 'w-issuers', 'w-audit',
         'w-scanhealth', 'w-renewals', 'w-alerts', 'w-scheduler', 'w-notes'],
