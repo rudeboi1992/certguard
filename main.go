@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -97,6 +98,7 @@ Commands:
   scan --dry <target>            scan without storing
   user add <email> [--role admin|viewer] [--password PW]
   user list
+  user passwd <email> [--password PW]   set a new password and sign the user out everywhere
   token create <email> [--name NAME]
   token list <email>
   channel add <email> --type email|slack|discord|webhook --target VAL [--thresholds 30,7,3]
@@ -339,7 +341,7 @@ func readPassword(flagValue string) string {
 
 func cmdUser(args []string) int {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: certguard user <add|list> ...")
+		fmt.Fprintln(os.Stderr, "usage: certguard user <add|list|passwd> ...")
 		return 2
 	}
 	st, err := openStore()
@@ -393,6 +395,43 @@ func cmdUser(args []string) int {
 		fmt.Printf("created user %s (role=%s, id=%d)\n", u.Email, u.Role, u.ID)
 		return 0
 
+	case "passwd":
+		rest := args[1:]
+		password := ""
+		var email string
+		for i := 0; i < len(rest); i++ {
+			if rest[i] == "--password" && i+1 < len(rest) {
+				i++
+				password = rest[i]
+			} else {
+				email = rest[i]
+			}
+		}
+		if email == "" {
+			fmt.Fprintln(os.Stderr, "usage: certguard user passwd <email> [--password PW]")
+			return 2
+		}
+		u, err := st.GetUserByEmail(email)
+		if errors.Is(err, store.ErrNotFound) {
+			fmt.Fprintf(os.Stderr, "no user %q (see: certguard user list)\n", email)
+			return 1
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		hash, err := auth.HashPassword(readPassword(password))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		if err := st.SetUserPassword(u.ID, hash); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			return 1
+		}
+		fmt.Printf("password updated for %s; existing sessions signed out\n", u.Email)
+		return 0
+
 	case "list":
 		users, err := st.ListUsers()
 		if err != nil {
@@ -409,7 +448,7 @@ func cmdUser(args []string) int {
 		return 0
 
 	default:
-		fmt.Fprintln(os.Stderr, "usage: certguard user <add|list> ...")
+		fmt.Fprintln(os.Stderr, "usage: certguard user <add|list|passwd> ...")
 		return 2
 	}
 }

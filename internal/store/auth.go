@@ -71,6 +71,21 @@ func (s *Store) DeleteUser(id int64) error {
 	return nil
 }
 
+// SetUserPassword replaces a user's password hash (already bcrypt-hashed) and
+// signs them out everywhere: a reset is often done because the old password
+// leaked, so a session opened with it must not outlive it.
+func (s *Store) SetUserPassword(id int64, passwordHash string) error {
+	res, err := s.exec(`UPDATE users SET password_hash=? WHERE id=?`, passwordHash, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	_, err = s.exec(`DELETE FROM sessions WHERE user_id=?`, id)
+	return err
+}
+
 func scanUser(r rowScanner) (*model.User, error) {
 	var u model.User
 	var createdAt string
